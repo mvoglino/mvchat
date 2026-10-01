@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MvChat.Web</RootNamespace>
+    <AssemblyName>MvChat.Web</AssemblyName>
+    <Version>0.1.0</Version>
+    <!-- Aruba Windows hosting: IIS in-process, framework-dependent -->
+    <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
+  </PropertyGroup>
+
+  <!--
+    OfflineBuild=true compila senza scaricare pacchetti NuGet (solo per controlli
+    rapidi in ambienti senza rete). La build vera (GitHub Actions) include MySqlConnector.
+  -->
+  <PropertyGroup Condition="'$(OfflineBuild)' != 'true'">
+    <DefineConstants>$(DefineConstants);HAS_MYSQL</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(OfflineBuild)' != 'true'">
+    <PackageReference Include="MySqlConnector" Version="2.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Data\Schema\*.sql" />
+    <Content Update="App_Data\**" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+</Project>

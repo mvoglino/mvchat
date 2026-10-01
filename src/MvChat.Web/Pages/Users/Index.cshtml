@@ -1,0 +1,23 @@
+@page
+@model MvChat.Web.Pages.Users.IndexModel
+@{ ViewData["Title"] = "Utenti"; }
+@section Actions { <a class="btn primary" href="/Users/Edit">Nuovo utente</a> }
+@if (TempData["TempPassword"] is string tmp)
+{
+    <div class="note warn" role="status"><b>Password provvisoria per @TempData["TempFor"]:</b> <code>@tmp</code><br>Comunicala alla persona: al primo accesso dovrà sceglierne una sua. Non verrà più mostrata.</div>
+}
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Nome</th><th>Ruolo</th>@if (Model.Me.IsSuperAdmin) {<th>Catena</th>}<th>Palestra</th><th>Ultimo accesso</th><th>Stato</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var u in Model.Items)
+    {
+        <tr><td><b>@u.FullName</b><div class="muted">@u.Email</div></td>
+            <td>@Roles.Label(u.Role)</td>
+            @if (Model.Me.IsSuperAdmin) {<td>@(u.OrganizationName ?? "—")</td>}
+            <td>@(u.GymName ?? (u.Role == Roles.OrgAdmin ? "Tutte" : "—"))</td>
+            <td class="muted">@(u.LastLoginAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "mai")</td>
+            <td>@(u.IsActive ? Html.Raw("<span class=\"chip good\">Attivo</span>") : Html.Raw("<span class=\"chip\">Disattivato</span>"))</td>
+            <td>@if (Roles.Assignable(Model.Me.Role).Contains(u.Role) || u.Id == Model.Me.UserId) {<a class="btn sm" href="/Users/Edit/@u.Id">Modifica</a>}</td></tr>
+    }
+    </tbody>
+</table></div></section>

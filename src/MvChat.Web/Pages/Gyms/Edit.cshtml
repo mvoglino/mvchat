@@ -1,0 +1,28 @@
+@page "{id:int?}"
+@model MvChat.Web.Pages.Gyms.EditModel
+@{ ViewData["Title"] = Model.IsNew ? "Nuova palestra" : "Modifica palestra"; }
+@if (Model.Orgs.Count == 0)
+{
+    <div class="note warn">Prima di creare una palestra serve una catena. <a href="/Orgs/Edit">Crea la catena</a>.</div>
+}
+else
+{
+<form method="post" class="panel">
+    <input type="hidden" asp-for="Input.Id">
+    <div class="panel-b form">
+        @if (Model.Me.IsSuperAdmin)
+        {
+            <div class="field full"><label asp-for="Input.OrganizationId">Catena</label>
+                <select asp-for="Input.OrganizationId" asp-items="@(new SelectList(Model.Orgs, "Id", "Name"))" disabled="@(!Model.IsNew)"></select>
+                @if (!Model.IsNew) { <input type="hidden" asp-for="Input.OrganizationId"> }
+                <span asp-validation-for="Input.OrganizationId" class="field-error"></span></div>
+        }
+        <div class="field"><label asp-for="Input.Name">Nome palestra</label><input asp-for="Input.Name" placeholder="es. FitActive Alba"><span asp-validation-for="Input.Name" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.City">Città</label><input asp-for="Input.City"></div>
+        <div class="field"><label asp-for="Input.Address">Indirizzo</label><input asp-for="Input.Address"></div>
+        <div class="field"><label asp-for="Input.Phone">Telefono reception</label><input asp-for="Input.Phone" type="tel"></div>
+        <div class="field full"><label class="check"><input asp-for="Input.IsActive"> Palestra attiva</label></div>
+    </div>
+    <div class="actions"><a class="btn" href="/Gyms">Annulla</a><button class="btn primary" type="submit">Salva</button></div>
+</form>
+}

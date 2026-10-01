@@ -1,0 +1,41 @@
+@page "{id:int?}"
+@model MvChat.Web.Pages.Users.EditModel
+@{ ViewData["Title"] = Model.IsNew ? "Nuovo utente" : "Modifica utente"; }
+<form method="post" class="panel">
+    <input type="hidden" asp-for="Input.Id">
+    <div class="panel-b form">
+        <div class="field"><label asp-for="Input.FullName">Nome e cognome</label><input asp-for="Input.FullName"><span asp-validation-for="Input.FullName" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.Email">Email (serve per accedere)</label><input asp-for="Input.Email" type="email"><span asp-validation-for="Input.Email" class="field-error"></span></div>
+        @if (Model.IsSelf)
+        {
+            <div class="field full"><small>Stai modificando il tuo profilo: ruolo e palestra possono cambiarli solo i tuoi amministratori.</small></div>
+        }
+        else
+        {
+            <div class="field"><label asp-for="Input.Role">Ruolo</label>
+                <select asp-for="Input.Role">
+                    @foreach (var r in Model.AssignableRoles) { <option value="@r">@Roles.Label(r)</option> }
+                </select><span asp-validation-for="Input.Role" class="field-error"></span>
+                <small>La direzione catena vede tutte le palestre della catena. Responsabile e operatore solo la propria.</small></div>
+            @if (Model.Me.IsSuperAdmin)
+            {
+                <div class="field"><label asp-for="Input.OrganizationId">Catena (per la direzione)</label>
+                    <select asp-for="Input.OrganizationId" asp-items="@(new SelectList(Model.Orgs, "Id", "Name"))"><option value="">—</option></select>
+                    <span asp-validation-for="Input.OrganizationId" class="field-error"></span></div>
+            }
+            <div class="field"><label asp-for="Input.GymId">Palestra (per responsabile e operatore)</label>
+                <select asp-for="Input.GymId" asp-items="@(new SelectList(Model.Gyms.Select(g => new { g.Id, Name = Model.Me.IsSuperAdmin ? g.OrganizationName + " · " + g.Name : g.Name }), "Id", "Name"))"><option value="">—</option></select>
+                <span asp-validation-for="Input.GymId" class="field-error"></span></div>
+            <div class="field full"><label class="check"><input asp-for="Input.IsActive"> Accesso attivo</label></div>
+        }
+        @if (!Model.IsNew && !Model.IsSelf)
+        {
+            <div class="field full"><label class="check"><input asp-for="ResetPassword"> Genera una nuova password provvisoria</label></div>
+        }
+        @if (Model.IsNew)
+        {
+            <div class="field full"><small>Al salvataggio viene creata una password provvisoria da comunicare alla persona.</small></div>
+        }
+    </div>
+    <div class="actions"><a class="btn" href="/Users">Annulla</a><button class="btn primary" type="submit">Salva</button></div>
+</form>

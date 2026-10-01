@@ -1,0 +1,31 @@
+@page
+@model IndexModel
+@{ ViewData["Title"] = "Panoramica"; }
+<p class="muted" style="margin:0">Ciao @Model.Me.Name. Questa è la base di mvchat: accessi, ruoli e palestre separate. Liste, campagne e conversazioni arrivano nei prossimi passi.</p>
+<div class="kpis">
+    @if (Model.Me.IsSuperAdmin)
+    {
+        <div class="kpi"><span>Catene</span><b>@Model.Counts.Orgs</b></div>
+    }
+    <div class="kpi"><span>Palestre</span><b>@Model.Counts.Gyms</b></div>
+    @if (Model.Me.CanManageUsers)
+    {
+        <div class="kpi"><span>Utenti</span><b>@Model.Counts.Users</b></div>
+    }
+</div>
+<section class="panel">
+    <div class="panel-h"><h2>@(Model.Me.IsSuperAdmin ? "Tutte le palestre" : Model.Me.IsOrgAdmin ? "Le palestre della catena" : "La tua palestra")</h2></div>
+    <div class="tbl"><table>
+        <thead><tr>@if (Model.Me.IsSuperAdmin) {<th>Catena</th>}<th>Palestra</th><th>Città</th><th>Utenti</th><th>Stato</th></tr></thead>
+        <tbody>
+        @foreach (var g in Model.Gyms)
+        {
+            <tr>@if (Model.Me.IsSuperAdmin) {<td>@g.OrganizationName</td>}<td><b>@g.Name</b></td><td>@g.City</td><td>@g.Users</td><td>@(g.IsActive ? Html.Raw("<span class=\"chip good\">Attiva</span>") : Html.Raw("<span class=\"chip\">Disattivata</span>"))</td></tr>
+        }
+        @if (Model.Gyms.Count == 0)
+        {
+            <tr><td colspan="5" class="muted">Nessuna palestra ancora. @(Model.Me.IsSuperAdmin ? "Crea prima una catena, poi le sue palestre." : "")</td></tr>
+        }
+        </tbody>
+    </table></div>
+</section>

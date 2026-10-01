@@ -1,0 +1,51 @@
+@page
+@model InstallModel
+@{ ViewData["Title"] = "Installazione"; ViewData["Bare"] = true; }
+
+@if (Model.Done)
+{
+    <h1>Installazione completata</h1>
+    <p>Il database è pronto e l'amministratore è stato creato.</p>
+    <div class="note">
+        <b>Ultimo passo nel pannello Aruba:</b> crea un'operazione pianificata che richiami ogni 5 minuti (o meno, se il pannello lo permette) questo indirizzo:
+        <br><code>@Model.TickUrl</code>
+        <br>Conservalo: contiene una chiave segreta. Servirà dal Passo 6 per far partire gli invii in coda.
+    </div>
+    @if (Model.Applied.Count > 0)
+    {
+        <p class="muted">Aggiornamenti del database applicati: @string.Join(", ", Model.Applied)</p>
+    }
+    <a class="btn primary" href="/Login">Vai all'accesso</a>
+}
+else
+{
+    <h1>Installazione guidata</h1>
+    <p class="muted">Inserisci i dati del database MySQL o MariaDB creato nel pannello dell'hosting e scegli l'accesso dell'amministratore principale.</p>
+
+    @if (Model.WriteError is not null)
+    {
+        <div class="note warn"><b>La cartella App_Data non è scrivibile.</b> Nel pannello Aruba dai il permesso di scrittura alla cartella <code>App_Data</code>, poi ricarica la pagina.<br><small>@Model.WriteError</small></div>
+    }
+    @if (Model.DbError is not null)
+    {
+        <div class="note warn">@Model.DbError</div>
+    }
+
+    <form method="post" class="form">
+        <div asp-validation-summary="ModelOnly" class="field full"></div>
+        <div class="field full"><label>Database</label></div>
+        <div class="field"><label asp-for="Input.DbHost">Server (host)</label><input asp-for="Input.DbHost" placeholder="es. 89.46.xxx.xxx"><span asp-validation-for="Input.DbHost" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.DbPort">Porta</label><input asp-for="Input.DbPort" inputmode="numeric"></div>
+        <div class="field"><label asp-for="Input.DbName">Nome database</label><input asp-for="Input.DbName"><span asp-validation-for="Input.DbName" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.DbUser">Utente</label><input asp-for="Input.DbUser" autocomplete="off"><span asp-validation-for="Input.DbUser" class="field-error"></span></div>
+        <div class="field full"><label asp-for="Input.DbPassword">Password database</label><input asp-for="Input.DbPassword" type="password" autocomplete="off"></div>
+
+        <div class="field full"><label>Prodotto e amministratore</label></div>
+        <div class="field full"><label asp-for="Input.ProductName">Nome del prodotto</label><input asp-for="Input.ProductName"></div>
+        <div class="field"><label asp-for="Input.AdminName">Nome e cognome</label><input asp-for="Input.AdminName"><span asp-validation-for="Input.AdminName" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.AdminEmail">Email</label><input asp-for="Input.AdminEmail" type="email"><span asp-validation-for="Input.AdminEmail" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.AdminPassword">Password</label><input asp-for="Input.AdminPassword" type="password" autocomplete="new-password"><small>Almeno 10 caratteri, con lettere e numeri.</small><span asp-validation-for="Input.AdminPassword" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.AdminPassword2">Ripeti password</label><input asp-for="Input.AdminPassword2" type="password" autocomplete="new-password"><span asp-validation-for="Input.AdminPassword2" class="field-error"></span></div>
+        <div class="field full"><button class="btn primary" type="submit">Installa</button></div>
+    </form>
+}

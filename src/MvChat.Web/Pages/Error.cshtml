@@ -1,0 +1,14 @@
+@page "/Error/{code:int?}"
+@model ErrorModel
+@{
+    ViewData["Title"] = "Errore"; ViewData["Bare"] = true;
+    var (title, text) = Model.Code switch
+    {
+        403 => ("Non hai accesso a questa pagina", "Il tuo ruolo non permette di aprirla. Se ti serve, chiedi al tuo amministratore."),
+        404 => ("Pagina non trovata", "L'indirizzo non esiste o non è più disponibile."),
+        _ => ("Qualcosa è andato storto", "L'errore è stato registrato. Riprova tra poco.")
+    };
+}
+<h1>@title</h1>
+<p class="muted">@text</p>
+<a class="btn" href="/">Torna alla panoramica</a>

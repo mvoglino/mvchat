@@ -1,0 +1,15 @@
+@page
+@model LoginModel
+@{ ViewData["Title"] = "Accesso"; ViewData["Bare"] = true; }
+<h1>Accedi</h1>
+@if (Model.Error is not null)
+{
+    <div class="note warn" role="alert">@Model.Error</div>
+}
+<form method="post" class="form" style="grid-template-columns:1fr">
+    <input type="hidden" asp-for="ReturnUrl">
+    <div class="field"><label asp-for="Email">Email</label><input asp-for="Email" type="email" autocomplete="username" autofocus><span asp-validation-for="Email" class="field-error"></span></div>
+    <div class="field"><label asp-for="Password">Password</label><input asp-for="Password" type="password" autocomplete="current-password"><span asp-validation-for="Password" class="field-error"></span></div>
+    <div class="field"><button class="btn primary" type="submit">Accedi</button></div>
+</form>
+<p class="muted" style="margin:0;font-size:13px">Password dimenticata? Chiedi al tuo amministratore di impostarne una nuova.</p>

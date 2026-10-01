@@ -1,0 +1,93 @@
+@inject MvChat.Web.Infrastructure.AppConfigStore Config
+@inject Repos Repos
+@{
+    var product = Config.Current.ProductName;
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var scope = signedIn ? User.Scope() : null;
+    Branding? brand = null;
+    if (scope?.OrganizationId is int orgId && Config.Current.Installed)
+    {
+        try { brand = await Repos.BrandingAsync(orgId); } catch { brand = null; }
+    }
+    var accent = brand?.PrimaryColor ?? "#F6931E";
+    var bare = ViewData["Bare"] as bool? == true;
+    string Cur(string prefix) => (ViewContext.RouteData.Values["page"] as string ?? "").StartsWith(prefix) ? "page" : "false";
+}
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@(ViewData["Title"] is string t ? t + " · " : "")@product</title>
+    <link rel="stylesheet" href="~/css/app.css" asp-append-version="true">
+    <style>:root{--accent:@accent}</style>
+</head>
+<body>
+@if (bare || !signedIn)
+{
+    <main class="bare">
+        <div class="bare-card">
+            <div class="brand"><span class="brand-mark">@product[..1].ToUpper()</span><b>@product</b></div>
+            @RenderBody()
+        </div>
+    </main>
+}
+else
+{
+    <div class="app">
+        <aside class="rail">
+            <div class="brand">
+                @if (!string.IsNullOrEmpty(brand?.LogoUrl))
+                {
+                    <img src="@brand.LogoUrl" alt="@brand.Name" class="brand-logo">
+                }
+                else
+                {
+                    <span class="brand-mark">@((brand?.Name ?? product)[..1].ToUpper())</span>
+                }
+                <div><b>@(brand?.Name ?? product)</b><small>@Roles.Label(scope!.Role)</small></div>
+            </div>
+            <nav class="nav" aria-label="Sezioni">
+                <a href="/" aria-current="@(Cur("/Index"))">Panoramica</a>
+                @if (scope.IsSuperAdmin)
+                {
+                    <a href="/Orgs" aria-current="@(Cur("/Orgs"))">Catene</a>
+                }
+                @if (scope.CanManageGyms)
+                {
+                    <a href="/Gyms" aria-current="@(Cur("/Gyms"))">Palestre</a>
+                }
+                @if (scope.CanManageUsers)
+                {
+                    <a href="/Users" aria-current="@(Cur("/Users"))">Utenti</a>
+                }
+                <span class="nav-soon" title="In arrivo nei prossimi passi">Liste contatti</span>
+                <span class="nav-soon" title="In arrivo nei prossimi passi">Campagne</span>
+                <span class="nav-soon" title="In arrivo nei prossimi passi">Conversazioni</span>
+            </nav>
+            <div class="rail-foot">
+                <span>@scope.Name</span>
+                <a href="/Account/Password">Cambia password</a>
+                <form method="post" action="/Logout"><button type="submit" class="linklike">Esci</button></form>
+                <small>@product · v@(typeof(Program).Assembly.GetName().Version?.ToString(3))</small>
+            </div>
+        </aside>
+        <main class="main">
+            <header class="top">
+                <h1>@ViewData["Title"]</h1>
+                @RenderSection("Actions", required: false)
+            </header>
+            @if (TempData["Ok"] is string ok)
+            {
+                <div class="flash ok" role="status">@ok</div>
+            }
+            @if (TempData["Err"] is string err)
+            {
+                <div class="flash err" role="alert">@err</div>
+            }
+            <div class="content">@RenderBody()</div>
+        </main>
+    </div>
+}
+</body>
+</html>

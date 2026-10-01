@@ -1,0 +1,55 @@
+name: Compila e prova
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: mvchat
+          MARIADB_USER: mv
+          MARIADB_PASSWORD: Pwd12345!
+        ports: [ "3306:3306" ]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Compila
+        run: dotnet build src/MvChat.Web/MvChat.Web.csproj -c Release
+
+      - name: Crea il pacchetto per Aruba
+        run: dotnet publish src/MvChat.Web/MvChat.Web.csproj -c Release -o publish --no-build
+
+      - name: Prove automatiche (installazione, accessi, separazione tra catene e palestre)
+        run: |
+          mkdir -p run && cp -r publish/* run/
+          cd run
+          ASPNETCORE_URLS=http://127.0.0.1:5078 ASPNETCORE_ENVIRONMENT=Production nohup dotnet MvChat.Web.dll > ../app.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:5078/health && break; sleep 1; done
+          cd ..
+          python3 tests/e2e/e2e.py
+
+      - name: Log dell'applicazione (solo se qualcosa fallisce)
+        if: failure()
+        run: cat app.log || true
+
+      - name: Pubblica il pacchetto da scaricare
+        uses: actions/upload-artifact@v4
+        with:
+          name: mvchat-aruba-${{ github.sha }}
+          path: publish/
+          retention-days: 30
