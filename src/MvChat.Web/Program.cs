@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using MvChat.Web.Contacts;
 using MvChat.Web.Data;
 using MvChat.Web.Infrastructure;
 using MvChat.Web.Security;
@@ -9,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<AppConfigStore>();
 builder.Services.AddSingleton<Db>();
 builder.Services.AddScoped<Repos>();
+builder.Services.AddScoped<ContactsRepo>();
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddScoped<LoginService>();
 
@@ -39,6 +41,7 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy("SuperAdmin", p => p.RequireRole(Roles.SuperAdmin));
     o.AddPolicy("ManageGyms", p => p.RequireRole(Roles.SuperAdmin, Roles.OrgAdmin));
     o.AddPolicy("ManageUsers", p => p.RequireRole(Roles.SuperAdmin, Roles.OrgAdmin, Roles.Manager));
+    o.AddPolicy("ManageLists", p => p.RequireRole(Roles.SuperAdmin, Roles.OrgAdmin, Roles.Manager));
 });
 
 builder.Services.AddRazorPages(o =>
@@ -50,6 +53,8 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizeFolder("/Orgs", "SuperAdmin");
     o.Conventions.AuthorizeFolder("/Gyms", "ManageGyms");
     o.Conventions.AuthorizeFolder("/Users", "ManageUsers");
+    o.Conventions.AuthorizeFolder("/Lists", "ManageLists");
+    o.Conventions.AuthorizeFolder("/OptOuts", "ManageLists");
 }).AddMvcOptions(o =>
 {
     // I campi obbligatori sono solo quelli marcati [Required], con messaggi in italiano.
@@ -58,7 +63,9 @@ builder.Services.AddRazorPages(o =>
     o.ModelBindingMessageProvider.SetAttemptedValueIsInvalidAccessor((v, f) => $"Il valore «{v}» non è valido.");
     o.ModelBindingMessageProvider.SetValueMustBeANumberAccessor(f => "Inserisci un numero.");
 });
-builder.Services.AddAntiforgery(o => o.Cookie.Name = "mvchat.af");
+// Lettere accentate scritte così come sono nell'HTML, non come codici.
+builder.Services.AddWebEncoders(o => o.TextEncoderSettings = new System.Text.Encodings.Web.TextEncoderSettings(System.Text.Unicode.UnicodeRanges.All));
+builder.Services.AddAntiforgery(o => { o.Cookie.Name = "mvchat.af"; o.HeaderName = "RequestVerificationToken"; });
 
 var app = builder.Build();
 

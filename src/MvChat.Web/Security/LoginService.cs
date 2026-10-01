@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using MvChat.Web.Data;
+using MvChat.Web.Infrastructure;
 
 namespace MvChat.Web.Security;
 
@@ -48,7 +49,7 @@ public sealed class LoginService
         var u = await _repos.UserForLoginAsync(email.Trim());
         if (u is null) return (false, generic, null);
         if (u.LockedUntil is { } until && until > DateTime.UtcNow)
-            return (false, $"Troppi tentativi sbagliati. Riprova dopo le {until.ToLocalTime():HH:mm}.", null);
+            return (false, $"Troppi tentativi sbagliati. Riprova dopo le {until.ToRome():HH:mm}.", null);
         if (!_pwd.Verify(u.PasswordHash, password))
         {
             var failed = u.FailedLogins + 1;

@@ -1,0 +1,33 @@
+@page
+@model MvChat.Web.Pages.OptOuts.IndexModel
+@{ ViewData["Title"] = "Lista STOP"; var canRemove = Model.Me.IsSuperAdmin || Model.Me.IsOrgAdmin; }
+<p class="muted" style="margin:0">Chi è in questa lista non riceve più messaggi da nessuna palestra della catena, anche se compare in un nuovo file Excel. Dal Passo 5 ci entrerà da solo chi scrive STOP su WhatsApp.</p>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<form method="post" asp-page-handler="Add" class="panel">
+    <div class="panel-b inline-form">
+        @if (Model.Me.IsSuperAdmin)
+        {
+            <div class="field"><label for="OrgId">Catena</label><select asp-for="OrgId" asp-items="@(new SelectList(Model.Orgs, "Id", "Name"))"></select></div>
+        }
+        <div class="field"><label asp-for="Phone">Cellulare</label><input asp-for="Phone" placeholder="es. 333 123 4567" required></div>
+        <div class="field"><label asp-for="Reason">Motivo (facoltativo)</label><input asp-for="Reason" placeholder="es. richiesta in reception"></div>
+        <button class="btn primary" type="submit">Aggiungi alla lista STOP</button>
+    </div>
+</form>
+<section class="panel">
+    <div class="panel-h"><h2>Numeri esclusi</h2><span style="flex:1"></span>
+        <form method="get" class="inline-form"><input name="q" value="@Model.Q" placeholder="Cerca numero" aria-label="Cerca numero" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--surface)"><button class="btn sm">Cerca</button></form></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Numero</th>@if (Model.Me.IsSuperAdmin) {<th>Catena</th>}<th>Palestra</th><th>Motivo</th><th>Come</th><th>Quando</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var o in Model.Items)
+        {
+            <tr><td><code>@o.Phone</code></td>@if (Model.Me.IsSuperAdmin) {<td>@o.OrganizationName</td>}<td>@(o.GymName ?? "—")</td><td>@o.Reason</td>
+                <td>@(o.Source == "manuale" ? "Inserito a mano" : o.Source == "whatsapp" ? "Ha scritto STOP" : o.Source)</td>
+                <td class="muted">@o.CreatedAt.ToRome().ToString("dd/MM/yyyy")</td>
+                <td>@if (canRemove) {<form method="post" asp-page-handler="Remove" asp-route-id="@o.Id"><button class="btn sm" type="submit">Togli</button></form>}</td></tr>
+        }
+        @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessun numero escluso.</td></tr> }
+        </tbody>
+    </table></div>
+</section>

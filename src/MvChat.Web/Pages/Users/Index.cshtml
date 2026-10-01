@@ -15,7 +15,7 @@
             <td>@Roles.Label(u.Role)</td>
             @if (Model.Me.IsSuperAdmin) {<td>@(u.OrganizationName ?? "—")</td>}
             <td>@(u.GymName ?? (u.Role == Roles.OrgAdmin ? "Tutte" : "—"))</td>
-            <td class="muted">@(u.LastLoginAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "mai")</td>
+            <td class="muted">@(u.LastLoginAt?.ToRome().ToString("dd/MM/yyyy HH:mm") ?? "mai")</td>
             <td>@(u.IsActive ? Html.Raw("<span class=\"chip good\">Attivo</span>") : Html.Raw("<span class=\"chip\">Disattivato</span>"))</td>
             <td>@if (Roles.Assignable(Model.Me.Role).Contains(u.Role) || u.Id == Model.Me.UserId) {<a class="btn sm" href="/Users/Edit/@u.Id">Modifica</a>}</td></tr>
     }

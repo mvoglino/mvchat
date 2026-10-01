@@ -61,7 +61,11 @@ else
                 {
                     <a href="/Users" aria-current="@(Cur("/Users"))">Utenti</a>
                 }
-                <span class="nav-soon" title="In arrivo nei prossimi passi">Liste contatti</span>
+                @if (scope.CanManageUsers)
+                {
+                    <a href="/Lists" aria-current="@(Cur("/Lists"))">Liste contatti</a>
+                    <a href="/OptOuts" aria-current="@(Cur("/OptOuts"))">Lista STOP</a>
+                }
                 <span class="nav-soon" title="In arrivo nei prossimi passi">Campagne</span>
                 <span class="nav-soon" title="In arrivo nei prossimi passi">Conversazioni</span>
             </nav>

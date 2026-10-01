@@ -1,4 +1,4 @@
-import re, urllib.request, urllib.parse, http.cookiejar, sys
+import re, urllib.request, urllib.parse, http.cookiejar, sys, html as html_lib
 import os
 BASE = os.environ.get("MVCHAT_URL", "http://127.0.0.1:5078")
 results = []
@@ -16,13 +16,23 @@ class Client:
         body = urllib.parse.urlencode(data).encode() if data is not None else None
         try:
             r = self.op.open(urllib.request.Request(BASE + path, data=body))
-            return r.status, r.read().decode(), r.headers.get("Location")
+            return r.status, html_lib.unescape(r.read().decode()), r.headers.get("Location")
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode(errors="ignore"), e.headers.get("Location")
     def token(self, path):
         s, html, _ = self.req(path)
         m = re.search(r'name="__RequestVerificationToken" type="hidden" value="([^"]+)"', html)
         return m.group(1) if m else ""
+    def post_json(self, path, obj, form_path):
+        import json
+        tok = self.token(form_path)
+        req = urllib.request.Request(BASE + path, data=json.dumps(obj).encode(), headers={"Content-Type": "application/json", "RequestVerificationToken": tok})
+        try:
+            r = self.op.open(req); return r.status, json.loads(r.read().decode() or "{}")
+        except urllib.error.HTTPError as e:
+            body = e.read().decode(errors="ignore")
+            try: return e.code, json.loads(body)
+            except Exception: return e.code, {"raw": body[:300]}
     def post(self, path, data, form_path=None):
         data = dict(data); data["__RequestVerificationToken"] = self.token(form_path or path)
         return self.req(path, data)
@@ -103,6 +113,50 @@ check("responsabile vede solo utenti della sua palestra", "direzione@fitactive.t
 # 5. Operatore
 o = Client(); o.post("/Login", {"Email":"opalba@x.test","Password":pw_op}); o.post("/Account/Password", {"Current":pw_op,"New":"Operatore2026","New2":"Operatore2026"})
 s,_,_ = o.req("/Users"); check("operatore non gestisce utenti", s in (302,403), str(s))
+
+
+# 5b. Passo 2: liste contatti
+s,_,_ = o.req("/Lists"); check("operatore non vede le liste", s in (302,403), str(s))
+s,_,loc = m.post("/OptOuts?handler=Add", {"Phone":"347 000 1111","Reason":"chiesto in reception"}, form_path="/OptOuts")
+check("responsabile aggiunge numero alla lista STOP", s == 302, str(s))
+header = ["NOME","COGNOME","Cell.","E-mail","Abbonamento","Data scadenza","Consenso Marketing","Note"]
+rows = [
+  ["GIULIA","ROSSI","333 123 4567","g@x.it","Annuale","2026-10-18","SI",""],     # valida
+  ["Marco","Bianchi","+39 345 765 4321","","Mensile","09/10/2026","sì",""],       # valida
+  ["anna","verdi","0039 328 111 2233","","","","X",""],                            # valida
+  ["Paolo","Neri","347 999 0001","","","","NO",""],                                 # senza consenso
+  ["Luca","Gialli","0173 123456","","","","SI",""],                                 # fisso
+  ["Sara","Blu","12345","","","","SI",""],                                          # non valido
+  ["Giulia","Rossi","3331234567","","","","1",""],                                  # doppione
+  ["","Senza","3401112233","","","","SI",""],                                       # senza nome
+  ["Piero","Stop","3470001111","","","","SI",""],                                   # in lista STOP
+  ["John","Smith","+44 7700 900123","","","","yes",""],                             # valida estera
+  ["","","","","","","",""],                                                        # vuota, ignorata
+]
+mp = {"FirstName":0,"LastName":1,"Phone":2,"Email":3,"Membership":4,"ExpiresOn":5,"Consent":6,"ConsentDate":-1,"ConsentSource":-1,"Headers":{"FirstName":"NOME","Phone":"Cell.","Consent":"Consenso Marketing"}}
+s, res = m.post_json("/Lists/New?handler=Import", {"GymId":gym["FitActive Alba"],"Name":"Scadenze ottobre","FileName":"scadenze.xlsx","Map":mp,"Rows":rows}, "/Lists/New")
+check("import lista riuscito", s == 200 and "listId" in res, str(res))
+exp = {"rowsRead":10,"valid":4,"noConsent":1,"badPhone":2,"duplicates":1,"optedOut":1,"noName":1}
+check("conteggi import corretti", all(res.get(k) == v for k, v in exp.items()), str(res))
+lid = res.get("listId")
+s,html,_ = m.req(f"/Lists/Detail/{lid}")
+check("numeri salvati in formato internazionale", all(x in html for x in ["+393331234567","+393457654321","+393281112233","+447700900123"]), str(re.findall(r"<code>([^<]+)</code>", html)))
+check("nomi sistemati (GIULIA ROSSI -> Giulia Rossi)", "Giulia Rossi" in html and "Anna Verdi" in html)
+check("scarti con motivo e riga Excel", all(x in html for x in ["Numero fisso","Manca il consenso","Ha chiesto di non essere contattato","Numero ripetuto","Manca il nome","<td>6</td>"]))
+s,res2 = m.post_json("/Lists/New?handler=Import", {"GymId":gym["FitActive Bra"],"Name":"x","Map":mp,"Rows":rows}, "/Lists/New")
+check("responsabile non importa in un'altra palestra", s == 400, str(s))
+s,res3 = m.post_json("/Lists/New?handler=Import", {"GymId":gym["FitActive Alba"],"Name":"x","Map":dict(mp, Consent=-1),"Rows":rows}, "/Lists/New")
+check("import rifiutato senza colonna del consenso", s == 400 and "consenso" in res3.get("error",""), str(res3))
+s,html,_ = m.req("/Lists/New"); check("abbinamento colonne ricordato per la palestra", "Consenso Marketing" in html and "Cell." in html)
+s,html,_ = d.req("/Lists"); check("direzione vede la lista della palestra", "Scadenze ottobre" in html)
+s,html,_ = d.req("/OptOuts"); check("direzione vede la lista STOP della catena", "+393470001111" in html, str(s) + " " + str(re.findall(r"<code>([^<]+)</code>", html)) + html[html.find("<tbody>"):html.find("<tbody>")+300])
+optid = re.search(r'handler=Remove&id=(\d+)', html) or re.search(r'id=(\d+)&handler=Remove', html)
+s,_,loc = m.post(f"/OptOuts?handler=Remove&id={optid.group(1) if optid else 0}", {}, form_path="/OptOuts")
+check("responsabile non toglie numeri dalla lista STOP", s == 403 or (s == 302 and "/Error/403" in (loc or "")), f"{s} {loc}")
+s,_,_ = d.post(f"/OptOuts?handler=Remove&id={optid.group(1) if optid else 0}", {}, form_path="/OptOuts")
+_,html,_ = d.req("/OptOuts"); check("direzione toglie un numero dalla lista STOP", s == 302 and "+393470001111" not in html, str(s))
+s,_,_ = m.post(f"/Lists/Detail/{lid}?handler=Delete", {}, form_path=f"/Lists/Detail/{lid}")
+s2,_,_ = m.req(f"/Lists/Detail/{lid}"); check("lista eliminata", s == 302 and s2 == 404, f"{s} {s2}")
 
 # 6. Blocco dopo 5 tentativi sbagliati
 x = Client()

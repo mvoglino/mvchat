@@ -99,3 +99,16 @@ code{font-family:Consolas,ui-monospace,monospace;font-size:12.5px;background:var
   .flash{margin-left:16px;margin-right:16px}
   .form,.bare-card .form{grid-template-columns:minmax(0,1fr)}
 }
+
+/* Passo 2: caricamento liste */
+.drop{border:1.5px dashed var(--ink-3);border-radius:10px;padding:26px;text-align:center;display:grid;gap:6px;place-items:center;background:var(--surface-2);cursor:pointer}
+.drop.over{border-color:var(--accent)}
+.drop b{font-size:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface)}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12.5px;color:var(--ink-2)}
+.stat.ok{border-color:var(--good)} .stat.ok b{color:var(--good)}
+.stat.ko b{color:var(--bad)}
+.inline-form{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.inline-form .field{min-width:180px;flex:1}

@@ -1,0 +1,20 @@
+@page
+@model MvChat.Web.Pages.Lists.IndexModel
+@{ ViewData["Title"] = "Liste contatti"; var many = !Model.Me.IsManager; }
+@section Actions { <a class="btn primary" href="/Lists/New">Carica una lista</a> }
+<p class="muted" style="margin:0">Ogni lista nasce da un file Excel. Entrano solo le persone con il consenso, un cellulare valido e che non hanno chiesto di essere escluse.</p>
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Lista</th>@if (many) {<th>Palestra</th>}<th>Caricata</th><th>Righe lette</th><th>Contattabili</th><th>Scartate</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var l in Model.Items)
+    {
+        var scartate = l.NoConsent + l.BadPhone + l.Duplicates + l.OptedOut;
+        <tr><td><b>@l.Name</b><div class="muted">@l.FileName</div></td>
+            @if (many) {<td>@l.GymName</td>}
+            <td class="muted">@l.CreatedAt.ToRome().ToString("dd/MM/yyyy HH:mm")<div>@l.CreatedByName</div></td>
+            <td>@l.RowsRead</td><td><b>@l.ValidCount</b></td><td>@scartate</td>
+            <td><a class="btn sm" href="/Lists/Detail/@l.Id">Apri</a></td></tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna lista ancora. Carica il primo file Excel.</td></tr> }
+    </tbody>
+</table></div></section>

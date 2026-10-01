@@ -1,0 +1,57 @@
+@page "{id:int}"
+@model MvChat.Web.Pages.Lists.DetailModel
+@{ ViewData["Title"] = Model.List.Name; var l = Model.List; }
+@if (Model.Nuova)
+{
+    <div class="note" role="status"><b>Lista importata.</b> @l.ValidCount persone su @l.RowsRead potranno ricevere la comunicazione.</div>
+}
+<p class="muted" style="margin:0">@l.GymName · file @(l.FileName ?? "—") · caricata il @l.CreatedAt.ToRome().ToString("dd/MM/yyyy 'alle' HH:mm")@(l.CreatedByName is null ? "" : " da " + l.CreatedByName)</p>
+<div class="stats">
+    <div class="stat ok"><b>@l.ValidCount</b><span>contattabili</span></div>
+    <div class="stat ko"><b>@l.NoConsent</b><span>senza consenso</span></div>
+    <div class="stat ko"><b>@l.BadPhone</b><span>numero non valido, fisso o senza nome</span></div>
+    <div class="stat ko"><b>@l.Duplicates</b><span>numeri ripetuti</span></div>
+    <div class="stat ko"><b>@l.OptedOut</b><span>nella lista STOP</span></div>
+</div>
+
+<section class="panel">
+    <div class="panel-h"><h2>Contatti</h2><span style="flex:1"></span>
+        <form method="get" class="inline-form"><input name="q" value="@Model.Q" placeholder="Cerca nome o numero" aria-label="Cerca" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--surface)"><button class="btn sm">Cerca</button></form></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Nome</th><th>WhatsApp</th><th>Abbonamento</th><th>Scadenza</th><th>Consenso</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var c in Model.Contacts)
+        {
+            <tr><td><b>@c.FirstName @c.LastName</b><div class="muted">@c.Email</div></td><td><code>@c.Phone</code></td>
+                <td>@c.Membership</td><td>@c.ExpiresOn?.ToString("dd/MM/yyyy")</td>
+                <td class="muted">@c.ConsentDate?.ToString("dd/MM/yyyy") @c.ConsentSource</td>
+                <td>@if (c.OptedOut) {<span class="chip bad">STOP</span>}</td></tr>
+        }
+        @if (Model.Contacts.Count == 0) { <tr><td colspan="6" class="muted">Nessun contatto@(string.IsNullOrEmpty(Model.Q) ? "" : " trovato").</td></tr> }
+        </tbody>
+    </table></div>
+    @if (Model.Contacts.Count == MvChat.Web.Pages.Lists.DetailModel.PageSize) { <div class="panel-b muted">Sono mostrati i primi @MvChat.Web.Pages.Lists.DetailModel.PageSize: usa la ricerca per trovare gli altri.</div> }
+</section>
+
+@if (Model.Rejects.Count > 0)
+{
+<section class="panel">
+    <div class="panel-h"><h2>Righe scartate</h2><span class="muted">non riceveranno messaggi · il numero di riga è quello del file Excel</span></div>
+    <div class="tbl" style="max-height:420px;overflow:auto"><table>
+        <thead><tr><th>Riga</th><th>Nome</th><th>Numero nel file</th><th>Motivo</th></tr></thead>
+        <tbody>
+        @foreach (var r in Model.Rejects)
+        {
+            <tr><td>@r.RowNumber</td><td>@r.Name</td><td><code>@r.Phone</code></td><td>@ImportRules.ReasonLabel(r.Reason)</td></tr>
+        }
+        </tbody>
+    </table></div>
+</section>
+}
+
+<form method="post" asp-page-handler="Delete" asp-route-id="@l.Id" class="panel">
+    <div class="panel-b inline-form">
+        <div class="field"><label class="check"><input type="checkbox" id="confirmDel" required> Confermo: elimina questa lista e i suoi @l.ValidCount contatti</label></div>
+        <button class="btn" type="submit">Elimina la lista</button>
+    </div>
+</form>

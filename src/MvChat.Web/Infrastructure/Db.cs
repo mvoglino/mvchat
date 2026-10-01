@@ -25,6 +25,12 @@ public sealed class Db
         var cn = Factory.CreateConnection()!;
         cn.ConnectionString = connectionString;
         await cn.OpenAsync();
+        // Tutte le date in UTC, qualunque sia il fuso del server MySQL.
+        await using (var tz = cn.CreateCommand())
+        {
+            tz.CommandText = "SET time_zone = '+00:00'";
+            await tz.ExecuteNonQueryAsync();
+        }
         return cn;
     }
 
