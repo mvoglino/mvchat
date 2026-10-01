@@ -1,0 +1,17 @@
+@page "{id:int}"
+@model MvChat.Web.Pages.Sedi.EditModel
+@{ ViewData["Title"] = "Scheda di " + Model.Gym.Name; }
+<p class="muted" style="margin:0">Scrivi come lo diresti a un cliente al bancone. L'assistente userà solo queste informazioni: quello che manca, non lo dirà.</p>
+<form method="post" class="panel">
+    <div class="panel-b form">
+        <div class="field full"><label asp-for="Input.OpeningHours">Orari di apertura</label><textarea asp-for="Input.OpeningHours" rows="3" placeholder="es. Lun–Ven 7:00–22:30, Sab 9:00–19:00, Dom 9:00–13:00. Chiusi a Natale e Capodanno."></textarea></div>
+        <div class="field full"><label asp-for="Input.Services">Servizi</label><textarea asp-for="Input.Services" rows="3" placeholder="es. sala pesi, area cardio, functional, personal trainer, sauna, app QR-COACH"></textarea></div>
+        <div class="field full"><label asp-for="Input.Classes">Corsi</label><textarea asp-for="Input.Classes" rows="3" placeholder="es. Pilates mar e gio 18:30, Spinning lun-mer-ven 19:00, Yoga sab 10:00"></textarea></div>
+        <div class="field full"><label asp-for="Input.HowToReach">Come arrivare e parcheggio</label><textarea asp-for="Input.HowToReach" rows="2"></textarea></div>
+        <div class="field full"><label asp-for="Input.ExtraInfo">Altre informazioni e domande frequenti</label><textarea asp-for="Input.ExtraInfo" rows="6" placeholder="es. Serve il certificato medico non agonistico. Asciugamano obbligatorio. Armadietti con lucchetto proprio."></textarea><small>Niente prezzi qui: si scrivono nelle offerte.</small></div>
+        <div class="field"><label asp-for="Input.AssistantName">Come si presenta l'assistente</label><input asp-for="Input.AssistantName" placeholder="assistente virtuale"><small>Es. «assistente virtuale», «Fit, l'assistente digitale». Deve far capire che non è una persona.</small></div>
+        <div class="field"><label asp-for="Input.Formality">Come si rivolge ai clienti</label>
+            <select asp-for="Input.Formality"><option value="tu">Dando del tu</option><option value="lei">Dando del lei</option></select></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Salva la scheda</button></div>
+</form>

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using MvChat.Web.Catalog;
 using MvChat.Web.Contacts;
 using MvChat.Web.Data;
 using MvChat.Web.Infrastructure;
@@ -11,6 +12,7 @@ builder.Services.AddSingleton<AppConfigStore>();
 builder.Services.AddSingleton<Db>();
 builder.Services.AddScoped<Repos>();
 builder.Services.AddScoped<ContactsRepo>();
+builder.Services.AddScoped<CatalogRepo>();
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddScoped<LoginService>();
 
@@ -55,6 +57,9 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizeFolder("/Users", "ManageUsers");
     o.Conventions.AuthorizeFolder("/Lists", "ManageLists");
     o.Conventions.AuthorizeFolder("/OptOuts", "ManageLists");
+    o.Conventions.AuthorizeFolder("/Sedi", "ManageLists");
+    o.Conventions.AuthorizeFolder("/Offerte", "ManageLists");
+    o.Conventions.AuthorizeFolder("/Modelli", "ManageLists");
 }).AddMvcOptions(o =>
 {
     // I campi obbligatori sono solo quelli marcati [Required], con messaggi in italiano.

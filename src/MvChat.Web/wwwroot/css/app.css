@@ -112,3 +112,12 @@ code{font-family:Consolas,ui-monospace,monospace;font-size:12.5px;background:var
 .stat.ko b{color:var(--bad)}
 .inline-form{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
 .inline-form .field{min-width:180px;flex:1}
+
+/* Passo 3 */
+.field textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;resize:vertical;font:inherit;color:inherit}
+.bar{height:6px;background:var(--surface-2);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.prompt{white-space:pre-wrap;font:12.5px/1.55 Consolas,ui-monospace,monospace;background:var(--surface-2);border-radius:8px;padding:14px;max-height:560px;overflow:auto}
+.bubble{max-width:460px;background:#fde6c8;color:#1a1209;border:1px dashed var(--accent);border-radius:12px;border-top-right-radius:4px;padding:10px 12px;margin-left:auto;white-space:pre-wrap}
+.price{font-variant-numeric:tabular-nums;font-weight:700}
+.price s{color:var(--ink-3);font-weight:400;margin-left:6px}

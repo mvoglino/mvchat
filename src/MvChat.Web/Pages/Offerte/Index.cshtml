@@ -1,0 +1,26 @@
+@page
+@model MvChat.Web.Pages.Offerte.IndexModel
+@{ ViewData["Title"] = "Offerte"; var many = Model.Gyms.Count > 1; }
+@section Actions { <a class="btn primary" href="/Offerte/Edit@(Model.GymFilter is int g ? "?gym=" + g : "")">Nuova offerta</a> }
+<p class="muted" style="margin:0">L'offerta è l'oggetto della promo: cosa si propone, a che prezzo e fino a quando. Ogni palestra decide le sue. Nelle campagne l'assistente userà solo questi prezzi.</p>
+@if (many)
+{
+    <form method="get" class="inline-form"><div class="field" style="max-width:320px"><label for="gym">Palestra</label>
+        <select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.GymFilter)">@g.Name</option> }</select></div></form>
+}
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Offerta</th>@if (many) {<th>Palestra</th>}<th>Prezzo</th><th>Validità</th><th>Sconto extra</th><th>Stato</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var o in Model.Items)
+    {
+        <tr><td><b>@o.Title</b><div class="muted">@o.Description</div></td>
+            @if (many) {<td>@o.GymName</td>}
+            <td class="price">@(o.Price is decimal p ? PromptBuilder.Money(p) : "—") @if (o.FullPrice is decimal f && o.Price is decimal pp && f > pp) {<s>@PromptBuilder.Money(f)</s>} <div class="muted" style="font-weight:400">@o.PriceNote</div></td>
+            <td class="muted">@(o.ValidFrom?.ToString("dd/MM/yyyy") ?? "subito") → @(o.ValidTo?.ToString("dd/MM/yyyy") ?? "senza scadenza")</td>
+            <td>@(o.MaxExtraDiscountPct > 0 ? $"fino al {o.MaxExtraDiscountPct}%" : "nessuno")</td>
+            <td><span class="chip @(o.Status == "Attiva" ? "good" : "")">@o.Status</span></td>
+            <td><a class="btn sm" href="/Offerte/Edit/@o.Id">Modifica</a></td></tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna offerta ancora.</td></tr> }
+    </tbody>
+</table></div></section>

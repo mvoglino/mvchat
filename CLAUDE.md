@@ -12,6 +12,7 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per catene di palestre, con un a
 - Hosting: Aruba Windows condiviso (IIS in-process). Niente processi sempre attivi: il lavoro in coda parte da `/jobs/tick?token=…`, richiamato dall'operazione pianificata di Aruba.
 - Configurazione in `App_Data/mvchat.json`, scritta dall'installazione guidata (`/Install`). Mai segreti nel repository.
 - Modifiche al database solo con nuovi script `Data/Schema/NNN_nome.sql` (numerati, mai modificare quelli già rilasciati). Separatore tra istruzioni: riga `GO`. Usare `IF NOT EXISTS` dove possibile: in MySQL le istruzioni DDL non sono transazionali.
+- Prezzi solo nelle offerte, definiti da ogni palestra: la scheda sede non contiene prezzi e l'assistente può citare solo il prezzo dell'offerta collegata.
 - Nessun collegamento al gestionale delle palestre: l'esito di una campagna è quello rilevato nella conversazione.
 - Date e ore salvate in UTC (la connessione imposta time_zone='+00:00'); in pagina si mostrano con `.ToRome()`.
 - Messaggi Meta fatturati direttamente alla palestra; uso dell'AI misurato per palestra e rifatturato a consumo da MVitalia, separato dall'abbonamento.
@@ -29,7 +30,7 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per catene di palestre, con un a
 ## Piano di lavoro (10 passi)
 1. Fondamenta: installazione, accessi, ruoli, catene/palestre/utenti ✅
 2. Liste contatti: import Excel nel browser con abbinamento colonne ricordato per palestra, consensi, normalizzazione numeri, lista STOP per catena ✅
-3. Scheda sede e modelli di obiettivo
+3. Scheda sede (senza prezzi), offerte con prezzo per palestra, modelli di obiettivo (standard MVitalia + della catena), anteprima istruzioni AI (`Catalog/PromptBuilder.cs`) ✅
 4. Collegamento WhatsApp Cloud API (MVitalia Tech Provider, Embedded Signup)
 5. Assistente AI con esiti e passaggio all'operatore
 6. Campagne con coda e limiti Meta

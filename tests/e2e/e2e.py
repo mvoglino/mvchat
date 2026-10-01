@@ -158,10 +158,43 @@ _,html,_ = d.req("/OptOuts"); check("direzione toglie un numero dalla lista STOP
 s,_,_ = m.post(f"/Lists/Detail/{lid}?handler=Delete", {}, form_path=f"/Lists/Detail/{lid}")
 s2,_,_ = m.req(f"/Lists/Detail/{lid}"); check("lista eliminata", s == 302 and s2 == 404, f"{s} {s2}")
 
+
+# 5c. Passo 3: scheda sede, offerte, modelli di obiettivo
+s,_,loc = m.req("/Sedi"); check("responsabile va dritto alla scheda della sua sede", s == 302 and loc == f"/Sedi/Edit/{gym['FitActive Alba']}", f"{s} {loc}")
+s,_,loc = m.post(f"/Sedi/Edit/{gym['FitActive Alba']}", {"Input.OpeningHours":"Lun-Ven 7-22, Sab 9-19","Input.Services":"Sala pesi, corsi, sauna","Input.Classes":"Pilates mar 18:30","Input.HowToReach":"Parcheggio gratuito","Input.ExtraInfo":"Serve il certificato medico","Input.AssistantName":"assistente virtuale","Input.Formality":"tu"})
+check("responsabile salva la scheda", s == 302, str(s))
+s,_,_ = m.req(f"/Sedi/Edit/{gym['FitActive Bra']}"); check("responsabile non apre la scheda di un'altra sede", s == 404, str(s))
+s,_,_ = m.post("/Offerte/Edit", {"Input.GymId":gym["FitActive Alba"],"Input.Title":"Rinnovo con 2 mesi omaggio","Input.Description":"14 mesi al prezzo di 12","Input.Price":"399","Input.FullPrice":"465","Input.PriceNote":"una tantum","Input.MaxExtraDiscountPct":"10","Input.ValidTo":"2099-10-31","Input.IsActive":"true"})
+check("responsabile crea un'offerta con prezzo", s == 302, str(s))
+s,html,_ = m.post("/Offerte/Edit", {"Input.GymId":gym["FitActive Alba"],"Input.Title":"x","Input.Price":"abc","Input.ValidFrom":"2026-12-01","Input.ValidTo":"2026-11-01","Input.IsActive":"true"})
+check("offerta con prezzo e date sbagliati rifiutata", s == 200 and "Scrivi un importo" in html and "prima dell'inizio" in html)
+s,html,_ = m.post("/Offerte/Edit", {"Input.GymId":gym["FitActive Bra"],"Input.Title":"Intrusa","Input.Price":"1","Input.IsActive":"true"})
+check("responsabile non crea offerte per un'altra sede", s == 200 and "Scegli la palestra" in html)
+s,_,_ = d.post("/Offerte/Edit", {"Input.GymId":gym["FitActive Bra"],"Input.Title":"Annuale Bra","Input.Price":"1.200","Input.IsActive":"true"})
+_,html,_ = d.req("/Offerte"); check("direzione crea offerta per Bra (1.200 = milleduecento)", s == 302 and "1.200 €" in html and "399 €" in html, str(s))
+_,html,_ = m.req("/Offerte"); check("responsabile vede solo le offerte della sua sede", "399 €" in html and "Annuale Bra" not in html)
+offer_alba = re.search(r'/Offerte/Edit/(\d+)', html).group(1)
+s,html,_ = m.req("/Modelli"); rinnovo = re.search(r'/Modelli/Anteprima\?model=(\d+)', html).group(1)
+check("modelli standard presenti", all(x in html for x in ["Rinnovo abbonamento","Adesione a una promo","Recupero inattivi","Porta un amico","Sondaggio soddisfazione"]))
+s,html,_ = m.req(f"/Modelli/Anteprima?model={rinnovo}&gym={gym['FitActive Alba']}&offer={offer_alba}&nome=Giulia&abbonamento=Annuale&scadenza=2026-10-18")
+pr = html[html.find('id="prompt"'):]
+check("istruzioni AI con prezzo dell'offerta e scheda sede", all(x in pr for x in ["399 €","invece di 465 €","Lun-Ven 7-22","al massimo il 10%","Rinnovo abbonamento","18 ottobre 2026"]), pr[:400])
+check("istruzioni AI senza dati di altre sedi", "1.200" not in pr and "Annuale Bra" not in html)
+check("primo messaggio personalizzato", "Ciao Giulia, il tuo abbonamento Annuale in FitActive Alba scade il 18/10/2026" in html)
+s,html,_ = m.req(f"/Modelli/Anteprima?model={rinnovo}&gym={gym['FitActive Bra']}")
+check("anteprima non usa sedi fuori dal perimetro", "FitActive Bra" not in html[html.find('id="prompt"'):] if 'id="prompt"' in html else True)
+s,_,loc = m.req("/Modelli/Edit"); check("responsabile non crea modelli", s == 403 or "/Error/403" in (loc or ""), f"{s} {loc}")
+s,_,_ = d.post("/Modelli/Edit", {"Input.Name":"Prova corso Pilates","Input.Success":"Il cliente prenota una lezione di prova","Input.Instructions":"Proponi una lezione di prova gratuita di Pilates.","Input.MaxAiMessages":"6","Input.NeedsOffer":"false","Input.IsActive":"true"})
+_,html,_ = m.req("/Modelli"); check("modello della catena creato dalla direzione e visibile in catena", s == 302 and "Prova corso Pilates" in html, str(s))
+oth = Client(); oth.post("/Login", {"Email":"altra@altra.test","Password":pw_oth}); oth.post("/Account/Password", {"Current":pw_oth,"New":"Altra2026xyz1","New2":"Altra2026xyz1"})
+_,html,_ = oth.req("/Modelli"); check("modello di una catena invisibile alle altre", "Prova corso Pilates" not in html and "Rinnovo abbonamento" in html)
+s,_,_ = d.req(f"/Modelli/Edit/{rinnovo}"); check("direzione non modifica i modelli standard", s == 404, str(s))
+s,_,_ = sa.req(f"/Modelli/Edit/{rinnovo}"); check("MVitalia modifica i modelli standard", s == 200, str(s))
+
 # 6. Blocco dopo 5 tentativi sbagliati
 x = Client()
 for i in range(5): x.post("/Login", {"Email":"altra@altra.test","Password":"sbagliata123"})
-s,html,_ = x.post("/Login", {"Email":"altra@altra.test","Password":pw_oth})
+s,html,_ = x.post("/Login", {"Email":"altra@altra.test","Password":"Altra2026xyz1"})
 check("blocco dopo 5 tentativi sbagliati", "Troppi tentativi" in html)
 
 # 7. Catena sospesa: i suoi utenti non entrano

@@ -1,0 +1,17 @@
+@page
+@model MvChat.Web.Pages.Sedi.IndexModel
+@{ ViewData["Title"] = "Scheda sede"; }
+<p class="muted" style="margin:0">La scheda contiene le informazioni con cui l'assistente risponde alle domande dei clienti: orari, servizi, corsi, come arrivare. I prezzi non stanno qui: si scrivono nelle offerte.</p>
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Palestra</th><th>Completezza</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var g in Model.Gyms)
+    {
+        var c = Model.Completeness.GetValueOrDefault(g.Id);
+        <tr><td><b>@g.Name</b><div class="muted">@g.OrganizationName</div></td>
+            <td><div class="bar" style="max-width:220px"><i style="width:@(c)%"></i></div><span class="muted">@c%</span></td>
+            <td><a class="btn sm" href="/Sedi/Edit/@g.Id">@(c == 0 ? "Compila" : "Modifica")</a></td></tr>
+    }
+    @if (Model.Gyms.Count == 0) { <tr><td colspan="3" class="muted">Nessuna palestra attiva.</td></tr> }
+    </tbody>
+</table></div></section>

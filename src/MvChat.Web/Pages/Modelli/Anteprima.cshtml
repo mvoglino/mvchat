@@ -1,0 +1,27 @@
+@page
+@model MvChat.Web.Pages.Modelli.AnteprimaModel
+@{ ViewData["Title"] = "Prova le istruzioni dell'assistente"; }
+<p class="muted" style="margin:0">Scegli modello, palestra e offerta: vedi il primo messaggio che riceverebbe il cliente e le istruzioni complete che riceverà l'assistente. Dal Passo 5 da qui si potrà anche chattare con l'assistente.</p>
+<form method="get" class="panel">
+    <div class="panel-b form">
+        <div class="field"><label for="Model">Modello di obiettivo</label><select id="Model" name="model" onchange="this.form.submit()">@foreach (var m in Model.Models) { <option value="@m.Id" selected="@(m.Id == Model.Model)">@m.Name</option> }</select></div>
+        <div class="field"><label for="Gym">Palestra</label><select id="Gym" name="gym" onchange="this.form.submit()">@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div>
+        <div class="field"><label for="Offer">Offerta</label><select id="Offer" name="offer" onchange="this.form.submit()"><option value="">Nessuna</option>@foreach (var o in Model.Offers) { <option value="@o.Id" selected="@(o.Id == Model.Offer)">@o.Title@(o.Status == "Attiva" ? "" : " (" + o.Status.ToLower() + ")")</option> }</select></div>
+        <div class="field"><label for="Nome">Cliente di prova</label><input id="Nome" name="nome" value="@Model.Nome"></div>
+        <div class="field"><label for="Abbonamento">Abbonamento</label><input id="Abbonamento" name="abbonamento" value="@Model.Abbonamento"></div>
+        <div class="field"><label for="Scadenza">Scadenza</label><input id="Scadenza" name="scadenza" type="date" value="@Model.Scadenza?.ToString("yyyy-MM-dd")"></div>
+    </div>
+    <div class="actions"><button class="btn" type="submit">Aggiorna</button></div>
+</form>
+@foreach (var w in Model.Warnings) { <div class="note warn">@w</div> }
+@if (Model.Prompt is null)
+{
+    <div class="note warn">Servono almeno un modello attivo e una palestra attiva.</div>
+}
+else
+{
+    <section class="panel"><div class="panel-h"><h2>Primo messaggio al cliente</h2><span class="muted">testo suggerito dal modello</span></div>
+        <div class="panel-b"><div class="bubble">@(string.IsNullOrWhiteSpace(Model.FirstMessage) ? "Il modello non ha un testo suggerito." : Model.FirstMessage)</div></div></section>
+    <section class="panel"><div class="panel-h"><h2>Istruzioni che riceve l'assistente</h2></div>
+        <div class="panel-b"><div class="prompt" id="prompt">@Model.Prompt</div></div></section>
+}
