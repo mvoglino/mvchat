@@ -191,6 +191,78 @@ _,html,_ = oth.req("/Modelli"); check("modello di una catena invisibile alle alt
 s,_,_ = d.req(f"/Modelli/Edit/{rinnovo}"); check("direzione non modifica i modelli standard", s == 404, str(s))
 s,_,_ = sa.req(f"/Modelli/Edit/{rinnovo}"); check("MVitalia modifica i modelli standard", s == 200, str(s))
 
+
+# 5d. Passo 4: WhatsApp (numero simulato e numero "Meta" verso un finto server)
+import hmac, hashlib, json as _json, sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import fake_meta
+fake = fake_meta.start(5079)
+s,_,_ = sa.post("/Impostazioni/WhatsApp", {"AppId":"123456","AppSecret":"testsecret","GraphVersion":"v23.0","GraphBaseUrl":"http://127.0.0.1:5079"})
+_,html,_ = sa.req("/Impostazioni/WhatsApp"); vt = re.search(r'id="verifyToken">([a-f0-9]+)<', html)
+check("impostazioni Meta salvate e token di verifica mostrato", s == 302 and vt is not None and "testsecret" not in html, str(s))
+s,body,_ = Client().req(f"/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token={vt.group(1)}&hub.challenge=ok123")
+s2,_,_ = Client().req("/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=sbagliato&hub.challenge=ok123")
+check("verifica webhook di Meta", s == 200 and body == "ok123" and s2 == 403, f"{s} {body} {s2}")
+s,_,loc = m.post(f"/WhatsApp/Numero/{gym['FitActive Alba']}?handler=Save", {"Mode":"simulato","DisplayPhone":"0173 123456"}, form_path=f"/WhatsApp/Numero/{gym['FitActive Alba']}")
+check("il responsabile non collega numeri", s in (400, 403) or "/Error/403" in (loc or ""), f"{s} {loc}")
+alba_wa = f"/WhatsApp/Numero/{gym['FitActive Alba']}"
+s,_,_ = d.post(alba_wa + "?handler=Save", {"Mode":"simulato","DisplayPhone":"0173 123456","DisplayName":"FitActive Alba"}, form_path=alba_wa)
+_,html,_ = m.req(alba_wa); check("numero simulato collegato dalla direzione", s == 302 and "0173 123456" in html and "Simulato" in html, str(s))
+tpl_a = f"/WhatsApp/Template/{gym['FitActive Alba']}"
+s,html,_ = m.post(tpl_a + "?handler=Create", {"Name":"x","Category":"MARKETING","Body":"{{nome}} ciao, scade il {{scadenza}}"}, form_path=tpl_a)
+check("template con errori rifiutato con spiegazione", s == 200 and "non può iniziare con un segnaposto" in html and "almeno 3 lettere" in html)
+body_tpl = "Ciao {{nome}}, il tuo abbonamento {{abbonamento}} in {{palestra}} scade il {{scadenza}}. Vuoi conoscere l'offerta?"
+s,_,_ = m.post(tpl_a + "?handler=Create", {"Name":"Rinnovo Ottobre","Category":"MARKETING","Body":body_tpl}, form_path=tpl_a)
+_,html,_ = m.req(tpl_a); check("template creato e approvato (simulato)", s == 302 and "rinnovo_ottobre" in html and "approvato" in html, str(s))
+tid = re.search(r'<option value="(\d+)">rinnovo_ottobre</option>', m.req(alba_wa)[1]).group(1)
+s,_,_ = m.post(alba_wa + "?handler=Test", {"TemplateId":tid,"To":"333 999 8877","Nome":"Luca"}, form_path=alba_wa)
+_,html,_ = m.req(alba_wa); check("messaggio di prova inviato (simulato)", s == 302 and "Ciao Luca, il tuo abbonamento Annuale in FitActive Alba" in html and "+393339998877" in html, str(s))
+s,_,_ = m.post(alba_wa + "?handler=Simulate", {"To":"333 999 8877","Text":"Stop!"}, form_path=alba_wa)
+_,html,_ = m.req(alba_wa); _,stop,_ = d.req("/OptOuts")
+check("chi scrive STOP finisce nella lista STOP e riceve conferma", "+393339998877" in stop and "Ha scritto STOP" in stop and "non riceverai più messaggi" in html)
+s,html,_ = m.post(alba_wa + "?handler=Test", {"TemplateId":tid,"To":"333 999 8877"}, form_path=alba_wa)
+check("nessun invio a chi è nella lista STOP", s == 200 and "lista STOP" in html)
+bra_wa = f"/WhatsApp/Numero/{gym['FitActive Bra']}"
+s,_,_ = d.post(bra_wa + "?handler=Save", {"Mode":"meta","DisplayPhone":"0172 000000","DisplayName":"FitActive Bra","PhoneNumberId":"111","WabaId":"222","AccessToken":"good-token"}, form_path=bra_wa)
+_,html,_ = d.req(bra_wa)
+check("numero Meta collegato e controllato (qualità letta da Meta)", s == 302 and "GREEN" in html and "TIER_1K" in html, str(s))
+check("chiave di accesso mai mostrata in pagina", "good-token" not in html)
+tpl_b = f"/WhatsApp/Template/{gym['FitActive Bra']}"
+s,_,_ = d.post(tpl_b + "?handler=Create", {"Name":"rinnovo_bra","Category":"MARKETING","Body":body_tpl}, form_path=tpl_b)
+sent = [r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/222/message_templates")]
+comp = sent[-1]["body"]["components"][0] if sent else {}
+check("template inviato a Meta con {{1}} e esempi", bool(sent) and comp.get("text","").startswith("Ciao {{1}}, il tuo abbonamento {{2}} in {{3}} scade il {{4}}") and comp.get("example",{}).get("body_text",[[None]])[0][0] == "Giulia", str(comp)[:300])
+_,html,_ = d.req(tpl_b); check("template in revisione dopo l'invio", "in revisione" in html)
+s,_,_ = d.post(tpl_b + "?handler=Refresh", {}, form_path=tpl_b)
+_,html,_ = d.req(tpl_b); check("stato aggiornato da Meta: approvato", "approvato" in html)
+tidb = re.search(r'<option value="(\d+)">rinnovo_bra</option>', d.req(bra_wa)[1]).group(1)
+s,_,_ = d.post(bra_wa + "?handler=Test", {"TemplateId":tidb,"To":"+39 347 555 1212","Nome":"Anna"}, form_path=bra_wa)
+msg = [r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/111/messages")]
+b = msg[-1]["body"] if msg else {}
+check("template inviato a Meta nel formato giusto", b.get("to") == "393475551212" and b.get("template",{}).get("name") == "rinnovo_bra" and b["template"]["components"][0]["parameters"][0]["text"] == "Anna", str(b)[:300])
+wamid = None
+_,html,_ = d.req(bra_wa); check("messaggio registrato come inviato", "Inviato" in html)
+wamid = f"wamid.TEST{fake_meta.REQUESTS.index(msg[-1]) + 1}"
+payload = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"111"},
+  "statuses":[{"id":wamid,"status":"read","timestamp":"1","recipient_id":"393475551212"}],
+  "messages":[{"from":"393475551212","id":"wamid.IN1","timestamp":"1","type":"text","text":{"body":"Quanto costa?"}}]}}]}]}
+raw = _json.dumps(payload).encode()
+sig = "sha256=" + hmac.new(b"testsecret", raw, hashlib.sha256).hexdigest()
+def post_raw(sig_header):
+    req = urllib.request.Request(BASE + "/webhooks/whatsapp", data=raw, headers={"Content-Type":"application/json","X-Hub-Signature-256":sig_header})
+    try: return urllib.request.urlopen(req).status
+    except urllib.error.HTTPError as e: return e.code
+check("webhook con firma sbagliata rifiutato", post_raw("sha256=" + "0"*64) == 401)
+check("webhook con firma giusta accettato", post_raw(sig) == 200)
+post_raw(sig)  # Meta a volte ripete: non deve duplicare
+_,html,_ = d.req(bra_wa)
+check("stato 'letto' e messaggio del cliente registrati una volta sola", "Letto" in html and html.count("Quanto costa?") == 1)
+tev = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[{"field":"message_template_status_update","value":{"event":"REJECTED","message_template_id":"tpl123","message_template_name":"rinnovo_bra","reason":"INVALID_FORMAT"}}]}]}
+raw = _json.dumps(tev).encode(); sig = "sha256=" + hmac.new(b"testsecret", raw, hashlib.sha256).hexdigest(); post_raw(sig)
+_,html,_ = d.req(tpl_b); check("avviso di Meta sul template registrato", "rifiutato" in html and "INVALID_FORMAT" in html)
+s,_,_ = oth.req(alba_wa); check("un'altra catena non vede il WhatsApp della palestra", s == 404, str(s))
+fake.shutdown()
+
 # 6. Blocco dopo 5 tentativi sbagliati
 x = Client()
 for i in range(5): x.post("/Login", {"Email":"altra@altra.test","Password":"sbagliata123"})

@@ -16,6 +16,20 @@ public sealed class AppConfig
     /// <summary>Chiave segreta per l'indirizzo richiamato dall'operazione pianificata di Aruba.</summary>
     public string JobToken { get; set; } = "";
     public DateTime? InstalledAt { get; set; }
+    public MetaSettings Meta { get; set; } = new();
+}
+
+/// <summary>Dati dell'app Meta di MVitalia. Si inseriscono dalla pagina Impostazioni WhatsApp.</summary>
+public sealed class MetaSettings
+{
+    public string AppId { get; set; } = "";
+    /// <summary>Chiave segreta dell'app: serve a controllare che i messaggi in arrivo vengano davvero da Meta.</summary>
+    public string AppSecret { get; set; } = "";
+    /// <summary>Parola d'ordine che Meta usa una sola volta per confermare l'indirizzo del webhook.</summary>
+    public string WebhookVerifyToken { get; set; } = "";
+    public string GraphVersion { get; set; } = "v23.0";
+    /// <summary>Cambia solo nelle prove automatiche, dove Meta è sostituita da un finto server.</summary>
+    public string GraphBaseUrl { get; set; } = "https://graph.facebook.com";
 }
 
 public sealed class AppConfigStore

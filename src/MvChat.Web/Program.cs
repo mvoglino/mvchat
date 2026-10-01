@@ -5,6 +5,7 @@ using MvChat.Web.Contacts;
 using MvChat.Web.Data;
 using MvChat.Web.Infrastructure;
 using MvChat.Web.Security;
+using MvChat.Web.WhatsApp;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +14,10 @@ builder.Services.AddSingleton<Db>();
 builder.Services.AddScoped<Repos>();
 builder.Services.AddScoped<ContactsRepo>();
 builder.Services.AddScoped<CatalogRepo>();
+builder.Services.AddHttpClient<CloudApi>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<WaRepo>();
+builder.Services.AddScoped<WaService>();
+builder.Services.AddScoped<WebhookHandler>();
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddScoped<LoginService>();
 
@@ -60,6 +65,8 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizeFolder("/Sedi", "ManageLists");
     o.Conventions.AuthorizeFolder("/Offerte", "ManageLists");
     o.Conventions.AuthorizeFolder("/Modelli", "ManageLists");
+    o.Conventions.AuthorizeFolder("/WhatsApp", "ManageLists");
+    o.Conventions.AuthorizeFolder("/Impostazioni", "SuperAdmin");
 }).AddMvcOptions(o =>
 {
     // I campi obbligatori sono solo quelli marcati [Required], con messaggi in italiano.
@@ -74,12 +81,25 @@ builder.Services.AddAntiforgery(o => { o.Cookie.Name = "mvchat.af"; o.HeaderName
 
 var app = builder.Build();
 
+// Installazioni fatte prima del Passo 4: crea la parola d'ordine del webhook se manca.
+{
+    var store = app.Services.GetRequiredService<AppConfigStore>();
+    if (store.Current.Installed && string.IsNullOrEmpty(store.Current.Meta.WebhookVerifyToken))
+    {
+        var c = store.Current;
+        c.Meta.WebhookVerifyToken = AppConfigStore.NewToken();
+        store.Save(c);
+    }
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
-app.UseStatusCodePagesWithReExecute("/Error/{0}");
+// Le pagine d'errore servono alle persone: webhook e indirizzi tecnici rispondono col solo codice.
+app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/webhooks") && !ctx.Request.Path.StartsWithSegments("/jobs"),
+    b => b.UseStatusCodePagesWithReExecute("/Error/{0}"));
 app.UseStaticFiles();
 
 // Finché l'installazione guidata non è completata, ogni pagina porta all'installazione.
@@ -127,6 +147,22 @@ app.MapGet("/jobs/tick", async (string? token, AppConfigStore cfg, Db db) =>
     if (!c.Installed || string.IsNullOrEmpty(token) || token != c.JobToken) return Results.NotFound();
     await db.ExecuteAsync("INSERT INTO AuditLog (Action, Detail) VALUES ('jobs.tick', NULL)");
     return Results.Json(new { ok = true, at = DateTime.UtcNow });
+});
+
+// Webhook WhatsApp: Meta chiama questo indirizzo per consegnare messaggi e aggiornamenti di stato.
+app.MapGet("/webhooks/whatsapp", (HttpRequest req, WebhookHandler h) =>
+{
+    var challenge = h.Verify(req.Query["hub.mode"], req.Query["hub.verify_token"], req.Query["hub.challenge"]);
+    return challenge is null ? Results.StatusCode(403) : Results.Text(challenge);
+});
+app.MapPost("/webhooks/whatsapp", async (HttpRequest req, WebhookHandler h) =>
+{
+    using var ms = new MemoryStream();
+    await req.Body.CopyToAsync(ms);
+    var body = ms.ToArray();
+    if (!h.SignatureOk(body, req.Headers["X-Hub-Signature-256"])) return Results.StatusCode(401);
+    await h.ProcessAsync(System.Text.Encoding.UTF8.GetString(body));
+    return Results.Ok();
 });
 
 app.Run();

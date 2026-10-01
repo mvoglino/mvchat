@@ -1,0 +1,20 @@
+@page
+@model MvChat.Web.Pages.WhatsApp.IndexModel
+@{ ViewData["Title"] = "WhatsApp"; }
+<p class="muted" style="margin:0">Ogni palestra ha il suo numero WhatsApp. Finché l'account Meta non è pronto si può usare un numero <b>simulato</b>: mvchat funziona uguale, ma nessun messaggio esce davvero.</p>
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Palestra</th><th>Numero</th><th>Tipo</th><th>Stato</th><th>Qualità</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var g in Model.Gyms)
+    {
+        var n = Model.Numbers.GetValueOrDefault(g.Id);
+        <tr><td><b>@g.Name</b></td>
+            <td>@(n?.DisplayPhone ?? "—")<div class="muted">@n?.DisplayName</div></td>
+            <td>@(n is null ? "—" : n.IsSimulated ? "Simulato" : "Meta")</td>
+            <td>@if (n is null) {<span class="chip">Da collegare</span>} else {<span class="chip @(n.Status == "attivo" ? "good" : "bad")">@n.Status</span>}</td>
+            <td>@n?.QualityRating</td>
+            <td><a class="btn sm" href="/WhatsApp/Numero/@g.Id">Apri</a></td></tr>
+    }
+    @if (Model.Gyms.Count == 0) { <tr><td colspan="6" class="muted">Nessuna palestra attiva.</td></tr> }
+    </tbody>
+</table></div></section>

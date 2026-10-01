@@ -82,7 +82,8 @@ public class InstallModel : PageModel
             ProductName = string.IsNullOrWhiteSpace(Input.ProductName) ? "mvchat" : Input.ProductName.Trim(),
             ConnectionString = cs,
             JobToken = token,
-            InstalledAt = DateTime.UtcNow
+            InstalledAt = DateTime.UtcNow,
+            Meta = new MetaSettings { WebhookVerifyToken = AppConfigStore.NewToken() }
         });
         TickUrl = $"{Request.Scheme}://{Request.Host}/jobs/tick?token={token}";
         Done = true;

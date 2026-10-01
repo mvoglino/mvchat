@@ -1,0 +1,88 @@
+@page "{id:int}"
+@model MvChat.Web.Pages.WhatsApp.NumeroModel
+@{ ViewData["Title"] = "WhatsApp · " + Model.Gym.Name; var n = Model.Number; }
+@section Actions { @if (n is not null) {<a class="btn" href="/WhatsApp/Template/@Model.Gym.Id">Template</a>} }
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+
+@if (n is not null)
+{
+    <div class="stats">
+        <div class="stat"><b style="font-size:17px">@n.DisplayPhone</b><span>@(n.DisplayName ?? "")</span></div>
+        <div class="stat"><b style="font-size:17px">@(n.IsSimulated ? "Simulato" : "Meta")</b><span>tipo di collegamento</span></div>
+        <div class="stat @(n.Status == "attivo" ? "ok" : "ko")"><b style="font-size:17px">@n.Status</b><span>@(n.LastCheckAt is DateTime c ? "controllato il " + c.ToRome().ToString("dd/MM HH:mm") : "mai controllato")</span></div>
+        <div class="stat"><b style="font-size:17px">@(n.QualityRating ?? "—")</b><span>qualità per Meta · limite @(n.MessagingLimit ?? "—")</span></div>
+    </div>
+    @if (!string.IsNullOrEmpty(n.LastError)) { <div class="note warn">Ultimo problema segnalato: @n.LastError</div> }
+}
+
+@if (Model.CanConfigure)
+{
+<form method="post" asp-page-handler="Save" class="panel">
+    <div class="panel-h"><h2>@(n is null ? "Collega il numero" : "Collegamento")</h2>@if (n is not null) {<span style="flex:1"></span><button class="btn sm" type="submit" form="checkForm">Controlla collegamento</button>}</div>
+    <div class="panel-b form">
+        <div class="field full"><label>Tipo</label>
+            <label class="check"><input type="radio" name="Mode" value="simulato" checked="@(Model.Mode != "meta")"> Simulato: nessun messaggio esce davvero, per prove e dimostrazioni</label>
+            <label class="check"><input type="radio" name="Mode" value="meta" checked="@(Model.Mode == "meta")"> Meta: numero vero collegato alla WhatsApp Cloud API</label></div>
+        <div class="field"><label asp-for="DisplayPhone">Numero di telefono</label><input asp-for="DisplayPhone" placeholder="es. 0173 123456 o 333 1234567"></div>
+        <div class="field"><label asp-for="DisplayName">Nome visualizzato</label><input asp-for="DisplayName"><small>Su Meta va approvato: di solito il nome della palestra.</small></div>
+        <div class="field"><label asp-for="PhoneNumberId">Phone number ID (solo Meta)</label><input asp-for="PhoneNumberId" inputmode="numeric" autocomplete="off"></div>
+        <div class="field"><label asp-for="WabaId">WhatsApp Business Account ID (solo Meta)</label><input asp-for="WabaId" inputmode="numeric" autocomplete="off"></div>
+        <div class="field full"><label asp-for="AccessToken">Chiave di accesso (solo Meta)</label><input asp-for="AccessToken" type="password" autocomplete="off" placeholder="@(n?.HasToken == true ? "già inserita · lascia vuoto per non cambiarla" : "")"><small>Viene salvata cifrata e non si rivede più.</small></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
+</form>
+<form method="post" asp-page-handler="Check" id="checkForm"></form>
+}
+else if (n is null)
+{
+    <div class="note">Il numero WhatsApp di questa palestra non è ancora collegato. Lo collega la direzione della catena o MVitalia.</div>
+}
+
+@if (n is not null)
+{
+<section class="panel">
+    <div class="panel-h"><h2>Messaggio di prova</h2><span class="muted">usa un template approvato</span></div>
+    @if (Model.Approved.Count == 0)
+    {
+        <div class="panel-b muted">Nessun template approvato. <a href="/WhatsApp/Template/@Model.Gym.Id">Crea il primo template</a>.</div>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="Test" class="panel-b inline-form">
+            <div class="field"><label for="TemplateId">Template</label><select id="TemplateId" name="TemplateId">@foreach (var t in Model.Approved) { <option value="@t.Id">@t.Name</option> }</select></div>
+            <div class="field"><label for="To">Cellulare</label><input id="To" name="To" placeholder="333 1234567" required></div>
+            <div class="field"><label for="Nome">Nome da usare</label><input id="Nome" name="Nome" placeholder="Giulia"></div>
+            <button class="btn primary" type="submit">Invia</button>
+        </form>
+    }
+</section>
+
+@if (n.IsSimulated)
+{
+<section class="panel">
+    <div class="panel-h"><h2>Simula la risposta di un cliente</h2><span class="muted">solo per i numeri simulati · prova anche a scrivere STOP</span></div>
+    <form method="post" asp-page-handler="Simulate" class="panel-b inline-form">
+        <div class="field"><label for="SimTo">Dal cellulare</label><input id="SimTo" name="To" placeholder="333 1234567" required></div>
+        <div class="field" style="flex:2"><label for="SimText">Testo</label><input id="SimText" name="Text" placeholder="es. Sì, mi interessa" required></div>
+        <button class="btn" type="submit">Ricevi</button>
+    </form>
+</section>
+}
+
+<section class="panel">
+    <div class="panel-h"><h2>Ultimi messaggi</h2></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Quando</th><th>Cliente</th><th></th><th>Testo</th><th>Stato</th></tr></thead>
+        <tbody>
+        @foreach (var m in Model.Messages)
+        {
+            <tr><td class="muted" style="white-space:nowrap">@m.CreatedAt.ToRome().ToString("dd/MM HH:mm")</td><td><code>@m.ContactPhone</code></td>
+                <td>@(m.Direction == "in" ? "← ricevuto" : "→ inviato")</td>
+                <td>@if (m.TemplateName is not null) {<span class="chip">@m.TemplateName</span>} @m.Body</td>
+                <td><span class="chip @(m.Status is "delivered" or "read" or "received" ? "good" : m.Status == "failed" ? "bad" : "")">@WaService.StatusLabel(m.Status)</span>@if (m.Error is not null) {<div class="muted">@m.Error</div>}</td></tr>
+        }
+        @if (Model.Messages.Count == 0) { <tr><td colspan="5" class="muted">Nessun messaggio ancora.</td></tr> }
+        </tbody>
+    </table></div>
+</section>
+}

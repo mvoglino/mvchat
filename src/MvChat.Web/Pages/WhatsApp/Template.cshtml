@@ -1,0 +1,48 @@
+@page "{id:int}"
+@model MvChat.Web.Pages.WhatsApp.TemplateModel
+@{ ViewData["Title"] = "Template · " + Model.Gym.Name; }
+@section Actions { <a class="btn" href="/WhatsApp/Numero/@Model.Gym.Id">Numero</a> }
+<p class="muted" style="margin:0">Il template è il primo messaggio di una campagna: è l'unico che si può mandare a chi non ha scritto per primo, e Meta lo deve approvare. Le risposte successive dell'assistente sono libere.</p>
+@if (Model.Number is null)
+{
+    <div class="note warn">Prima collega il numero WhatsApp della palestra.</div>
+}
+else
+{
+<section class="panel"><div class="panel-h"><h2>Template</h2><span style="flex:1"></span>@if (!Model.Number.IsSimulated) {<form method="post" asp-page-handler="Refresh"><button class="btn sm" type="submit">Aggiorna stati da Meta</button></form>}</div>
+<div class="tbl"><table>
+    <thead><tr><th>Nome</th><th>Testo</th><th>Tipo</th><th>Stato</th></tr></thead>
+    <tbody>
+    @foreach (var t in Model.Items)
+    {
+        <tr><td><code>@t.Name</code></td><td style="white-space:pre-wrap;max-width:460px">@t.Body</td><td>@(t.Category == "UTILITY" ? "Servizio" : "Marketing")</td>
+            <td><span class="chip @(t.IsApproved ? "good" : t.Status is "rifiutato" or "errore" ? "bad" : "")">@t.Status</span>@if (t.RejectReason is not null) {<div class="muted">@t.RejectReason</div>}</td></tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="4" class="muted">Nessun template ancora.</td></tr> }
+    </tbody>
+</table></div></section>
+
+<form method="post" asp-page-handler="Create" class="panel">
+    <div class="panel-h"><h2>Nuovo template</h2><span style="flex:1"></span>
+        <span class="muted">Parti da un modello:</span> @foreach (var m in Model.Models.Where(x => !string.IsNullOrEmpty(x.TemplateSuggestion))) { <a class="btn sm" href="?model=@m.Id">@m.Name</a> }</div>
+    @if (Model.Problems.Count > 0) { <div class="panel-b"><div class="note warn" role="alert">@foreach (var p in Model.Problems) {<div>@p</div>}</div></div> }
+    <div class="panel-b form">
+        <input type="hidden" name="Model" value="@Model.Model">
+        <div class="field"><label asp-for="Name">Nome (minuscole e trattini bassi)</label><input asp-for="Name" placeholder="rinnovo_ottobre_alba"></div>
+        <div class="field"><label asp-for="Category">Tipo</label><select asp-for="Category"><option value="MARKETING">Marketing (promozioni, rinnovi, offerte)</option><option value="UTILITY">Servizio (avvisi senza promozioni)</option></select>
+            <small>Rinnovi e promo sono sempre marketing: se un messaggio promozionale viene inviato come servizio, Meta lo rifiuta.</small></div>
+        <div class="field full"><label asp-for="Body">Testo</label><textarea asp-for="Body" rows="5" id="tplBody"></textarea>
+            <small>Segnaposto: @string.Join(" ", TemplateText.Placeholders.Keys.Select(k => "{{" + k + "}}")). Non iniziare né finire con un segnaposto. Meglio chiudere con una domanda, così il cliente risponde.</small></div>
+        <div class="field full"><label>Anteprima con dati di esempio</label><div class="bubble" id="tplPreview"></div></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">@(Model.Number.IsSimulated ? "Crea (approvazione simulata)" : "Invia a Meta per l'approvazione")</button></div>
+</form>
+<script>
+(function () {
+  const ex = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(TemplateText.Placeholders));
+  const body = document.getElementById("tplBody"), out = document.getElementById("tplPreview");
+  const render = () => { out.textContent = body.value.replace(/\{\{\s*([a-zA-Z_àèéìòù]+)\s*\}\}/g, (m, k) => ex[k.toLowerCase()] ?? m) || "…"; };
+  body.addEventListener("input", render); render();
+})();
+</script>
+}

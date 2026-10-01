@@ -208,6 +208,9 @@ public sealed class ContactsRepo
           ON DUPLICATE KEY UPDATE Reason=COALESCE(@reason, Reason)",
         new { orgId, gymId, phone, reason, source, userId });
 
+    public async Task<bool> IsOptedOutAsync(int orgId, string phone) =>
+        await _db.ScalarAsync<long>("SELECT COUNT(*) FROM OptOuts WHERE OrganizationId=@orgId AND Phone=@phone", new { orgId, phone }) > 0;
+
     public Task<int> RemoveOptOutAsync(Scope s, long id) => _db.ExecuteAsync(
         "DELETE FROM OptOuts WHERE Id=@id AND (@All=1 OR OrganizationId=@Org)",
         new { id, All = s.IsSuperAdmin ? 1 : 0, Org = s.OrganizationId ?? -1 });

@@ -31,7 +31,7 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per catene di palestre, con un a
 1. Fondamenta: installazione, accessi, ruoli, catene/palestre/utenti ✅
 2. Liste contatti: import Excel nel browser con abbinamento colonne ricordato per palestra, consensi, normalizzazione numeri, lista STOP per catena ✅
 3. Scheda sede (senza prezzi), offerte con prezzo per palestra, modelli di obiettivo (standard MVitalia + della catena), anteprima istruzioni AI (`Catalog/PromptBuilder.cs`) ✅
-4. Collegamento WhatsApp Cloud API (MVitalia Tech Provider, Embedded Signup)
+4. Collegamento WhatsApp Cloud API: numeri per palestra simulati o Meta (inserimento manuale ID + chiave cifrata), template con approvazione, invio, webhook firmato, STOP automatico, finto server Meta nelle prove ✅ · da fare quando MVitalia sarà Tech Provider: Embedded Signup
 5. Assistente AI con esiti e passaggio all'operatore
 6. Campagne con coda e limiti Meta
 7. Conversazioni operatori

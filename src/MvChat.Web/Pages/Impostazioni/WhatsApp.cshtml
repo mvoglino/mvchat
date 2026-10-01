@@ -1,0 +1,24 @@
+@page
+@model MvChat.Web.Pages.Impostazioni.WhatsAppModel
+@{ ViewData["Title"] = "Impostazioni Meta"; }
+<p class="muted" style="margin:0">Dati dell'app Meta di MVitalia, uguali per tutte le catene. I numeri delle singole palestre si collegano dalla pagina WhatsApp.</p>
+<section class="panel">
+    <div class="panel-h"><h2>Da copiare su Meta</h2><span class="muted">developers.facebook.com → la tua app → WhatsApp → Configurazione → Webhook</span></div>
+    <div class="panel-b form">
+        <div class="field full"><label>URL di callback</label><code id="hookUrl">@Model.WebhookUrl</code></div>
+        <div class="field full"><label>Token di verifica</label><code id="verifyToken">@Model.VerifyToken</code>
+            <small>Dopo averli inseriti su Meta, iscriviti ai campi <b>messages</b> e <b>message_template_status_update</b>.</small></div>
+    </div>
+    <form method="post" asp-page-handler="NewToken" class="actions"><button class="btn sm" type="submit">Crea un nuovo token di verifica</button></form>
+</section>
+<form method="post" class="panel">
+    <div class="panel-h"><h2>Dati dell'app Meta</h2><span class="muted">developers.facebook.com → la tua app → Impostazioni dell'app → Di base</span></div>
+    <div class="panel-b form">
+        <div class="field"><label asp-for="AppId">ID app</label><input asp-for="AppId" inputmode="numeric"></div>
+        <div class="field"><label asp-for="AppSecret">Chiave segreta dell'app</label><input asp-for="AppSecret" type="password" autocomplete="off" placeholder="@(Model.HasSecret ? "già inserita · lascia vuoto per non cambiarla" : "non ancora inserita")">
+            <small>Serve a controllare che i messaggi in arrivo vengano davvero da Meta. Senza, mvchat li rifiuta.</small></div>
+        <div class="field"><label asp-for="GraphVersion">Versione API di Meta</label><input asp-for="GraphVersion"><small>Formato vNN.N. Si aggiorna quando Meta ritira le versioni vecchie.</small></div>
+        <div class="field"><label asp-for="GraphBaseUrl">Indirizzo API</label><input asp-for="GraphBaseUrl"><small>Da non toccare: https://graph.facebook.com</small></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
+</form>
