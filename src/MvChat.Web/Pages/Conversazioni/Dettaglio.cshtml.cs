@@ -16,8 +16,13 @@ public class DettaglioModel : PageModel
 {
     private readonly ConversationRepo _convs; private readonly WaRepo _wa; private readonly WaService _send;
     private readonly WebhookHandler _hook; private readonly ContactsRepo _contacts; private readonly AiQueue _queue; private readonly Repos _repos;
-    public DettaglioModel(ConversationRepo convs, WaRepo wa, WaService send, WebhookHandler hook, ContactsRepo contacts, AiQueue queue, Repos repos)
-    { _convs = convs; _wa = wa; _send = send; _hook = hook; _contacts = contacts; _queue = queue; _repos = repos; }
+    private readonly QuickReplyRepo _quick;
+    public DettaglioModel(ConversationRepo convs, WaRepo wa, WaService send, WebhookHandler hook, ContactsRepo contacts, AiQueue queue, Repos repos, QuickReplyRepo quick)
+    { _convs = convs; _wa = wa; _send = send; _hook = hook; _contacts = contacts; _queue = queue; _repos = repos; _quick = quick; }
+
+    public List<QuickReply> QuickReplies { get; private set; } = new();
+    public List<UserRow> Colleagues { get; private set; } = new();
+    [BindProperty] public int? AssignTo { get; set; }
 
     public Conversation Conv { get; private set; } = null!;
     public WaNumber? Number { get; private set; }
@@ -41,6 +46,9 @@ public class DettaglioModel : PageModel
         Conv = c;
         Number = await _wa.NumberAsync(c.WaNumberId);
         Messages = await _convs.MessagesAsync(id);
+        QuickReplies = await _quick.ForGymAsync(c.OrganizationId, c.GymId);
+        if (Me.CanManageUsers)
+            Colleagues = (await _repos.UsersAsync(Me)).Where(u => u.IsActive && u.GymId == c.GymId).OrderBy(u => u.FullName).ToList();
         return true;
     }
 
@@ -64,7 +72,31 @@ public class DettaglioModel : PageModel
         if (!await LoadAsync(id)) return NotFound();
         await _convs.SetStateAsync(id, "operatore", Conv.Outcome is Outcomes.InCorso ? Outcomes.Operatore : Conv.Outcome, $"presa in carico da {Me.Name}", Me.UserId);
         await _repos.AuditAsync(Me, "conversation.take", $"#{id} {Conv.ContactPhone}", Ip, Conv.OrganizationId, Conv.GymId);
-        TempData["Ok"] = "Ora la conversazione è tua: l'assistente non risponde più.";
+        TempData["Ok"] = Conv.Status == "ai" ? "Ora la conversazione è tua: l'assistente non risponde più." : "Conversazione presa in carico.";
+        return Back();
+    }
+
+    /// <summary>La lascio libera: torna tra quelle «da gestire» per tutti i colleghi.</summary>
+    public async Task<IActionResult> OnPostReleaseAsync(long id)
+    {
+        if (!await LoadAsync(id)) return NotFound();
+        await _convs.AssignAsync(id, null);
+        await _repos.AuditAsync(Me, "conversation.release", $"#{id} {Conv.ContactPhone}", Ip, Conv.OrganizationId, Conv.GymId);
+        TempData["Ok"] = "Conversazione lasciata libera per i colleghi.";
+        return Back();
+    }
+
+    /// <summary>Il responsabile assegna la conversazione a un collega della palestra.</summary>
+    public async Task<IActionResult> OnPostAssignAsync(long id)
+    {
+        if (!await LoadAsync(id)) return NotFound();
+        if (!Me.CanManageUsers) return Forbid();
+        var who = Colleagues.FirstOrDefault(u => u.Id == AssignTo);
+        if (who is null) { Error = "Scegli un collega della palestra."; return Page(); }
+        await _convs.SetStateAsync(id, "operatore", Conv.Outcome is Outcomes.InCorso ? Outcomes.Operatore : Conv.Outcome, $"assegnata a {who.FullName}", who.Id);
+        await _convs.AssignAsync(id, who.Id);
+        await _repos.AuditAsync(Me, "conversation.assign", $"#{id} → {who.FullName}", Ip, Conv.OrganizationId, Conv.GymId);
+        TempData["Ok"] = $"Conversazione assegnata a {who.FullName}.";
         return Back();
     }
 
@@ -92,6 +124,7 @@ public class DettaglioModel : PageModel
         if (!r.Ok) { Error = "Invio non riuscito: " + r.Error; return Page(); }
         // Chi risponde a mano prende in carico la conversazione, così l'assistente non si sovrappone.
         if (Conv.Status != "operatore") await _convs.SetStateAsync(id, "operatore", Conv.Outcome is Outcomes.InCorso ? Outcomes.Operatore : Conv.Outcome, null, Me.UserId);
+        else if (Conv.AssignedUserId is null) await _convs.AssignAsync(id, Me.UserId);
         await _convs.TouchAsync(id);
         return Back();
     }

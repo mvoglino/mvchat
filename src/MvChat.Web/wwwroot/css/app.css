@@ -57,7 +57,7 @@ th{text-align:left;font-size:11.5px;letter-spacing:.06em;text-transform:uppercas
 td{padding:11px 14px;border-bottom:1px solid var(--line)}
 tr:last-child td{border-bottom:0}
 .muted{color:var(--ink-3)}
-.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
+.chip{display:inline-block;white-space:nowrap;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
 .chip.good{background:var(--good-soft);color:var(--good)}
 .chip.bad{background:var(--bad-soft);color:var(--bad)}
 .swatch{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:middle;border:1px solid var(--line)}
@@ -140,3 +140,14 @@ a.stat{text-decoration:none;color:inherit}
 .bench-row td{vertical-align:top}
 .transcript{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .transcript .msg{max-width:100%}
+
+/* Passo 7 · postazione reception */
+.badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--accent);color:#111;font-size:12px;font-weight:800;vertical-align:1px}
+.badge[hidden]{display:none}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.tabs a{padding:8px 12px;border-radius:8px 8px 0 0;text-decoration:none;color:var(--ink-2);font-weight:600;border:1px solid transparent;border-bottom:none;margin-bottom:-1px}
+.tabs a[aria-current=page]{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.toast{position:fixed;right:16px;bottom:16px;z-index:50;display:flex;gap:10px;align-items:center;max-width:min(420px,calc(100vw - 32px));background:var(--ink);color:var(--bg);padding:12px 14px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.toast[hidden]{display:none}
+.toast a{color:inherit;font-weight:700}
+.toast button{background:none;border:0;color:inherit;font-size:20px;cursor:pointer;line-height:1}

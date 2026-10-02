@@ -26,6 +26,8 @@ builder.Services.AddScoped<AssistantService>();
 builder.Services.AddSingleton<AiQueue>();
 builder.Services.AddHostedService<AiWorker>();
 builder.Services.AddScoped<CampaignRepo>();
+builder.Services.AddScoped<ArchiveRepo>();
+builder.Services.AddScoped<QuickReplyRepo>();
 builder.Services.AddScoped<CampaignSender>();
 builder.Services.AddHostedService<CampaignWorker>();
 builder.Services.AddSingleton<PasswordService>();
@@ -79,6 +81,7 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizeFolder("/Impostazioni", "SuperAdmin");
     o.Conventions.AuthorizeFolder("/Assistente", "ManageLists");
     o.Conventions.AuthorizeFolder("/Campagne", "ManageLists");
+    o.Conventions.AuthorizeFolder("/RisposteRapide", "ManageLists");
 }).AddMvcOptions(o =>
 {
     // I campi obbligatori sono solo quelli marcati [Required], con messaggi in italiano.

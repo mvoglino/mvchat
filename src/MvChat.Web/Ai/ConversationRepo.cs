@@ -27,6 +27,10 @@ public sealed class Conversation
     public bool NeedsReply { get; set; }
     public DateTime? ProcessingSince { get; set; }
     public int? AssignedUserId { get; set; }
+    public string? AssignedName { get; set; }
+    public bool HumanInvolved { get; set; }
+    /// <summary>L'ultimo messaggio è del cliente: aspetta una risposta.</summary>
+    public bool Awaiting => LastInboundAt is DateTime i && (LastMessageAt is null || i >= LastMessageAt.Value);
     /// <summary>L'assistente ha un messaggio a cui rispondere (o lo sta già scrivendo).</summary>
     public bool AiWriting => Status == "ai" && (NeedsReply || ProcessingSince is not null);
     public DateTime? LastInboundAt { get; set; }
@@ -56,8 +60,8 @@ public sealed class ConversationRepo
     public ConversationRepo(Db db) => _db = db;
 
     private const string Select =
-        @"SELECT c.*, g.Name AS GymName, m.Name AS GoalName FROM Conversations c
-          JOIN Gyms g ON g.Id=c.GymId JOIN GoalModels m ON m.Id=c.GoalModelId";
+        @"SELECT c.*, g.Name AS GymName, m.Name AS GoalName, au.FullName AS AssignedName FROM Conversations c
+          JOIN Gyms g ON g.Id=c.GymId JOIN GoalModels m ON m.Id=c.GoalModelId LEFT JOIN Users au ON au.Id=c.AssignedUserId";
 
     private static Conversation Map(DbDataReader r) => new()
     {
@@ -66,7 +70,8 @@ public sealed class ConversationRepo
         ExpiresOn = r.Date("ExpiresOn"), GoalModelId = r.Int("GoalModelId"), GoalName = r.Str("GoalName")!, OfferId = r.IntN("OfferId"),
         CampaignId = r.IntN("CampaignId"), IsTest = r.Bool("IsTest"), Status = r.Str("Status")!, Outcome = r.Str("Outcome")!,
         OutcomeNote = r.Str("OutcomeNote"), AiReplies = r.Int("AiReplies"), NeedsReply = r.Bool("NeedsReply"),
-        ProcessingSince = r.Date("ProcessingSince"), AssignedUserId = r.IntN("AssignedUserId"), LastInboundAt = r.Date("LastInboundAt"),
+        ProcessingSince = r.Date("ProcessingSince"), AssignedUserId = r.IntN("AssignedUserId"),
+        AssignedName = r.Str("AssignedName"), HumanInvolved = r.Bool("HumanInvolved"), LastInboundAt = r.Date("LastInboundAt"),
         LastMessageAt = r.Date("LastMessageAt"), CreatedAt = r.Date("CreatedAt")!.Value
     };
 
@@ -89,6 +94,39 @@ public sealed class ConversationRepo
         new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
               FGym = gymId ?? -1, FStatus = status ?? "", FId = id ?? -1, limit }, Map);
 
+    private const string ScopeWhere = "(@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR c.GymId=@Gym)";
+    private static object ScopeArgs(Scope s) => new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1 };
+
+    /// <summary>
+    /// La postazione della reception. Viste: da_gestire (passate a una persona, libere o mie) · mie · ai · chiuse · tutte.
+    /// Prima chi aspetta da più tempo.
+    /// </summary>
+    public Task<List<Conversation>> InboxAsync(Scope s, int? gymId, string view, int limit) => _db.QueryAsync(
+        Select + $@" WHERE {ScopeWhere} AND (@FGym=-1 OR c.GymId=@FGym) AND (
+            (@view='da_gestire' AND c.Status='operatore' AND (c.AssignedUserId IS NULL OR c.AssignedUserId=@Me)) OR
+            (@view='mie' AND c.AssignedUserId=@Me AND c.Status<>'chiusa') OR
+            (@view='ai' AND c.Status='ai') OR (@view='chiuse' AND c.Status='chiusa') OR @view='tutte')
+          ORDER BY (c.Status='operatore' AND c.LastInboundAt >= c.LastMessageAt) DESC,
+                   CASE WHEN c.Status='operatore' THEN c.LastInboundAt END ASC, c.LastMessageAt DESC LIMIT @limit",
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+              FGym = gymId ?? -1, view, Me = s.UserId, limit }, Map);
+
+    /// <summary>Per l'avviso nel menu: conversazioni che aspettano una persona (libere, oppure mie con il cliente in attesa).</summary>
+    public async Task<(int Count, long? LatestId, string? LatestName)> BadgeAsync(Scope s)
+    {
+        var rows = await _db.QueryAsync(
+            $@"SELECT c.Id, c.ContactName FROM Conversations c WHERE {ScopeWhere} AND c.Status='operatore'
+                 AND (c.AssignedUserId IS NULL OR (c.AssignedUserId=@Me AND c.LastInboundAt >= c.LastMessageAt))
+               ORDER BY c.LastMessageAt DESC LIMIT 100",
+            new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Me = s.UserId },
+            r => (r.GetInt64(0), r.GetString(1)));
+        return rows.Count == 0 ? (0, null, null) : (rows.Count, rows[0].Item1, rows[0].Item2);
+    }
+
+    public Task<int> AssignAsync(long id, int? userId) => _db.ExecuteAsync(
+        "UPDATE Conversations SET AssignedUserId=@userId, HumanInvolved=CASE WHEN @userId IS NULL THEN HumanInvolved ELSE 1 END WHERE Id=@id",
+        new { id, userId });
+
     /// <summary>La conversazione a cui appartiene un messaggio in arrivo: la più recente con quel cliente su quel numero, negli ultimi 30 giorni.</summary>
     public Task<Conversation?> FindForInboundAsync(int waNumberId, string phone) => _db.FirstAsync(
         Select + " WHERE c.WaNumberId=@waNumberId AND c.ContactPhone=@phone AND c.CreatedAt > UTC_TIMESTAMP() - INTERVAL 30 DAY ORDER BY c.CreatedAt DESC LIMIT 1",
@@ -104,7 +142,7 @@ public sealed class ConversationRepo
     public Task InboundAsync(long id, bool needsReply, string? reopenAs) => _db.ExecuteAsync(
         @"UPDATE Conversations SET LastInboundAt=UTC_TIMESTAMP(), LastMessageAt=UTC_TIMESTAMP(),
             NeedsReply=CASE WHEN @needsReply=1 THEN 1 ELSE NeedsReply END,
-            Status=COALESCE(@reopenAs, Status) WHERE Id=@id",
+            Status=COALESCE(@reopenAs, Status), HumanInvolved=CASE WHEN @reopenAs='operatore' THEN 1 ELSE HumanInvolved END WHERE Id=@id",
         new { id, needsReply = needsReply ? 1 : 0, reopenAs });
 
     /// <summary>Prende in carico la risposta: solo un processo alla volta per conversazione.</summary>
@@ -120,11 +158,13 @@ public sealed class ConversationRepo
 
     public Task AfterAiReplyAsync(long id, string status, string outcome, string? note) => _db.ExecuteAsync(
         @"UPDATE Conversations SET AiReplies=AiReplies+1, Status=@status, Outcome=@outcome, OutcomeNote=COALESCE(@note, OutcomeNote),
+            HumanInvolved=CASE WHEN @status='operatore' THEN 1 ELSE HumanInvolved END,
             LastMessageAt=UTC_TIMESTAMP() WHERE Id=@id",
         new { id, status, outcome, note });
 
     public Task SetStateAsync(long id, string status, string outcome, string? note, int? assignedUserId = null) => _db.ExecuteAsync(
         @"UPDATE Conversations SET Status=@status, Outcome=@outcome, OutcomeNote=COALESCE(@note, OutcomeNote),
+            HumanInvolved=CASE WHEN @status='operatore' THEN 1 ELSE HumanInvolved END,
             AssignedUserId=COALESCE(@assignedUserId, AssignedUserId), NeedsReply=CASE WHEN @status='ai' THEN NeedsReply ELSE 0 END WHERE Id=@id",
         new { id, status, outcome, note, assignedUserId });
 

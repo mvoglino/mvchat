@@ -1,0 +1,26 @@
+@page
+@model MvChat.Web.Pages.RisposteRapide.IndexModel
+@{ ViewData["Title"] = "Risposte rapide"; var me = User.Scope(); }
+@section Actions { <a class="btn" href="/Conversazioni">Conversazioni</a> }
+<p class="muted" style="margin:0">Testi pronti che la reception inserisce con un clic nella risposta al cliente. Puoi usare <code>{{nome}}</code> e <code>{{palestra}}</code>: vengono sostituiti da soli.</p>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<form method="post" asp-page-handler="Add" class="panel">
+    <div class="panel-h"><h2>Nuova risposta rapida</h2></div>
+    <div class="panel-b form">
+        <div class="field"><label for="Title">Titolo</label><input id="Title" name="Title" value="@Model.Title" maxlength="80" placeholder="es. Orari reception" required></div>
+        <div class="field"><label for="Target">Dove usarla</label><select id="Target" name="Target">@foreach (var (v, l) in Model.Targets) { <option value="@v" selected="@(v == Model.Target)">@l</option> }</select></div>
+        <div class="field full"><label for="Body">Testo</label><textarea id="Body" name="Body" rows="3" maxlength="1000" required placeholder="es. Ciao {{nome}}, ti aspettiamo in reception da lunedì a venerdì dalle 9 alle 21 per completare l'iscrizione.">@Model.Body</textarea></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Aggiungi</button></div>
+</form>
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Titolo</th><th>Dove</th><th>Testo</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var q in Model.Items)
+    {
+        <tr><td><b>@q.Title</b></td><td>@(q.GymName ?? "Tutta la catena")</td><td class="muted" style="white-space:pre-wrap">@q.Body</td>
+            <td>@if (q.GymId is not null || me.CanManageGyms) {<form method="post" asp-page-handler="Delete" asp-route-id="@q.Id"><button class="btn sm" type="submit">Elimina</button></form>}</td></tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="4" class="muted">Nessuna risposta rapida ancora.</td></tr> }
+    </tbody>
+</table></div></section>

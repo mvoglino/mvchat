@@ -1,5 +1,6 @@
 @inject MvChat.Web.Infrastructure.AppConfigStore Config
 @inject Repos Repos
+@inject MvChat.Web.Ai.ConversationRepo Convs
 @{
     var product = Config.Current.ProductName;
     var signedIn = User.Identity?.IsAuthenticated == true;
@@ -10,6 +11,12 @@
         try { brand = await Repos.BrandingAsync(orgId); } catch { brand = null; }
     }
     var accent = brand?.PrimaryColor ?? "#F6931E";
+    // Avviso nel menu: conversazioni che aspettano una persona (solo dentro mvchat, nessuna email).
+    var waiting = 0;
+    if (scope is not null && Config.Current.Installed)
+    {
+        try { waiting = (await Convs.BadgeAsync(scope)).Count; } catch { waiting = 0; }
+    }
     var bare = ViewData["Bare"] as bool? == true;
     string Cur(string prefix) => (ViewContext.RouteData.Values["page"] as string ?? "").StartsWith(prefix) ? "page" : "false";
 }
@@ -18,7 +25,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@(ViewData["Title"] is string t ? t + " · " : "")@product</title>
+    <title>@(waiting > 0 ? $"({waiting}) " : "")@(ViewData["Title"] is string t ? t + " · " : "")@product</title>
     <link rel="stylesheet" href="~/css/app.css" asp-append-version="true">
     <style>:root{--accent:@accent}</style>
 </head>
@@ -77,7 +84,7 @@ else
                 {
                     <a href="/Campagne" aria-current="@(Cur("/Campagne"))">Campagne</a>
                 }
-                <a href="/Conversazioni" aria-current="@(Cur("/Conversazioni"))">Conversazioni</a>
+                <a href="/Conversazioni" aria-current="@(Cur("/Conversazioni"))">Conversazioni <span class="badge" id="waitBadge" aria-label="conversazioni che aspettano una persona" hidden="@(waiting == 0)">@waiting</span></a>
             </nav>
             <div class="rail-foot">
                 <span>@scope.Name</span>
@@ -102,6 +109,34 @@ else
             <div class="content">@RenderBody()</div>
         </main>
     </div>
+}
+@if (signedIn && !bare)
+{
+    <div class="toast" id="waitToast" role="status" aria-live="polite" hidden></div>
+    <script>
+    (function () {
+        // Ogni 30 secondi controlla se ci sono conversazioni che aspettano una persona.
+        var badge = document.getElementById('waitBadge'), toast = document.getElementById('waitToast');
+        var last = @waiting, baseTitle = document.title.replace(/^\(\d+\) /, '');
+        function show(s) {
+            badge.textContent = s.count; badge.hidden = s.count === 0;
+            document.title = (s.count > 0 ? '(' + s.count + ') ' : '') + baseTitle;
+            if (s.count > last && s.id) {
+                toast.innerHTML = '';
+                var a = document.createElement('a'); a.href = '/Conversazioni/' + s.id;
+                a.textContent = (s.name || 'Un cliente') + ' aspetta una risposta dalla reception';
+                var x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Chiudi');
+                x.onclick = function () { toast.hidden = true; };
+                toast.appendChild(a); toast.appendChild(x); toast.hidden = false;
+            }
+            last = s.count;
+        }
+        setInterval(function () {
+            fetch('/Conversazioni?handler=Badge', { headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.ok ? r.json() : null; }).then(function (s) { if (s) show(s); }).catch(function () { });
+        }, 30000);
+    })();
+    </script>
 }
 </body>
 </html>

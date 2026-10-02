@@ -1,0 +1,52 @@
+@page
+@model MvChat.Web.Pages.Conversazioni.ArchivioModel
+@{
+    ViewData["Title"] = "Archivio dialoghi";
+    var f = Model.F; var st = Model.Stats; var many = Model.Gyms.Count > 1;
+}
+@section Actions { <a class="btn" href="/Conversazioni">Postazione reception</a><a class="btn" href="@Model.Url(f.Kind)&handler=Csv">Scarica per Excel</a> }
+<p class="muted" style="margin:0">Tutti i dialoghi con i clienti. <b>Solo assistente AI</b>: nessuna persona della palestra è intervenuta. <b>Con operatore</b>: la conversazione è passata alla reception o un operatore ha scritto almeno un messaggio.</p>
+<div class="stats">
+    <a class="stat" href="@Model.Url("")"><b>@st.Total</b><span>dialoghi · @st.Replied con risposta del cliente</span></a>
+    <a class="stat" href="@Model.Url("ai")"><b>@st.AiOnly <small class="muted" style="font-size:14px">@ArchivioModel.Pct(st.AiOnly, st.Total)%</small></b><span>solo assistente AI · @st.AiReached obiettivi raggiunti</span></a>
+    <a class="stat" href="@Model.Url("operatore")"><b>@st.WithOperator <small class="muted" style="font-size:14px">@ArchivioModel.Pct(st.WithOperator, st.Total)%</small></b><span>con operatore · @st.OperatorReached obiettivi raggiunti</span></a>
+</div>
+<nav class="tabs" aria-label="Tipo di dialogo">
+    <a href="@Model.Url("")" aria-current="@(f.Kind == "" ? "page" : "false")">Tutti (@st.Total)</a>
+    <a href="@Model.Url("ai")" aria-current="@(f.Kind == "ai" ? "page" : "false")">Solo assistente AI (@st.AiOnly)</a>
+    <a href="@Model.Url("operatore")" aria-current="@(f.Kind == "operatore" ? "page" : "false")">Con operatore (@st.WithOperator)</a>
+</nav>
+<form method="get" class="panel">
+    <input type="hidden" name="tipo" value="@f.Kind">
+    <div class="panel-b form">
+        @if (many) { <div class="field"><label for="gym">Palestra</label><select id="gym" name="gym"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == f.GymId)">@g.Name</option> }</select></div> }
+        <div class="field"><label for="campagna">Campagna</label><select id="campagna" name="campagna"><option value="">Tutte</option>@foreach (var k in Model.Campaigns) { <option value="@k.Id" selected="@(k.Id == f.CampaignId)">@k.Name</option> }</select></div>
+        <div class="field"><label for="esito">Esito</label><select id="esito" name="esito"><option value="">Tutti</option>@foreach (var o in Outcomes.All) { <option value="@o" selected="@(o == f.Outcome)">@Outcomes.Label(o)</option> }</select></div>
+        <div class="field"><label for="dal">Dal</label><input id="dal" name="dal" type="date" value="@f.From?.ToString("yyyy-MM-dd")"></div>
+        <div class="field"><label for="al">Al</label><input id="al" name="al" type="date" value="@f.To?.ToString("yyyy-MM-dd")"></div>
+        <div class="field"><label for="q">Cliente</label><input id="q" name="q" value="@f.Search" placeholder="nome o cellulare"></div>
+        <div class="field"><label class="check"><input type="checkbox" name="prove" value="true" checked="@f.IncludeTests"> Includi le conversazioni di prova</label></div>
+    </div>
+    <div class="actions"><a class="btn" href="?tipo=@f.Kind">Azzera filtri</a><button class="btn primary" type="submit">Filtra</button></div>
+</form>
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Data</th><th>Cliente</th>@if (many) {<th>Palestra</th>}<th>Obiettivo · campagna</th><th>Gestione</th><th>Messaggi</th><th>Esito</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var r in Model.Items)
+    {
+        <tr>
+            <td class="muted">@r.CreatedAt.ToRome().ToString("dd/MM/yy HH:mm")</td>
+            <td><b>@r.ContactName</b>@if (r.IsTest) {<span class="chip" style="margin-left:6px">prova</span>}<div class="muted">@r.ContactPhone</div></td>
+            @if (many) {<td>@r.GymName</td>}
+            <td>@r.GoalName<div class="muted">@(r.CampaignName ?? "")</div></td>
+            <td>@if (r.HumanInvolved) {<span class="chip warn">Con operatore</span><div class="muted">@(r.Operators ?? "passata alla reception")</div>} else {<span class="chip">Solo assistente AI</span>}</td>
+            <td class="muted">@r.CustomerMsgs cliente · @r.AiMsgs AI@(r.HumanMsgs > 0 ? $" · {r.HumanMsgs} operatore" : "")</td>
+            <td><span class="chip @Outcomes.Css(r.Outcome)">@Outcomes.Label(r.Outcome)</span></td>
+            <td><a class="btn sm" href="/Conversazioni/@r.Id">Leggi</a></td>
+        </tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="8" class="muted">Nessun dialogo con questi filtri.</td></tr> }
+    </tbody>
+</table></div>
+@if (Model.Items.Count == ArchivioModel.PageSize) { <div class="panel-b muted">Mostrati i @ArchivioModel.PageSize più recenti: restringi i filtri o scarica il file per Excel.</div> }
+</section>
