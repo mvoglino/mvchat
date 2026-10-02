@@ -6,7 +6,7 @@ namespace MvChat.Web.Catalog;
 
 /// <summary>I dati dell'attività (gruppo) che l'assistente può usare: tipo di attività e presentazione.</summary>
 public sealed record OrgInfo(int Id, string Name, string SectorKey, string? Description, string? Website, string? Phone,
-    string? GroupName = null, string? GroupDescription = null)
+    string? GroupName = null, string? GroupDescription = null, string? PrivacyUrl = null)
 {
     public Sector Sector => Sectors.Get(SectorKey);
 }
@@ -110,6 +110,9 @@ public static class PromptBuilder
         sb.AppendLine("7. Salute, infortuni, reclami, sospensioni, disdette, problemi di pagamento, richieste fuori da queste informazioni: proponi di farlo ricontattare da una persona dello staff.");
         sb.AppendLine($"8. Al massimo {model.MaxAiMessages} messaggi tuoi in questa conversazione; poi chiudi o passa a una persona.");
         sb.AppendLine("9. Al primo segnale di fastidio, scusati e chiudi.");
+        sb.AppendLine(org?.PrivacyUrl is { Length: > 0 } privacy
+            ? $"10. Se il cliente chiede come vengono usati i suoi dati o della privacy, indica l'informativa: {privacy}. Se chiede di vedere o cancellare i suoi dati, passa a una persona dello staff."
+            : "10. Se il cliente chiede della privacy o dei suoi dati, passa a una persona dello staff.");
         return sb.ToString();
     }
 }

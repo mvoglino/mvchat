@@ -21,6 +21,7 @@ public sealed class OrgProfile
     public string? ContactEmail { get; set; }
     public string? Website { get; set; }
     public string? Description { get; set; }
+    public string? PrivacyUrl { get; set; }
     public bool HasLogo { get; set; }
     public string? LogoUrl { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -48,6 +49,8 @@ public sealed class ActivityProfile
     public string? ContactEmail { get; set; }
     public string? Website { get; set; }
     public string? Description { get; set; }
+    public string? PrivacyUrl { get; set; }
+    public string? GroupPrivacyUrl { get; set; }
     public bool HasLogo { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public string EffectiveSector => Sector ?? GroupSector;
@@ -93,22 +96,22 @@ public sealed class Repos
     public async Task<bool> IsGroupAsync(int orgId) => await _db.ScalarAsync<int>("SELECT IsGroup FROM Organizations WHERE Id=@orgId", new { orgId }) == 1;
 
     public Task<OrgProfile?> OrgProfileAsync(int orgId) => _db.FirstAsync(
-        @"SELECT Id, Name, Sector, PrimaryColor, LegalName, VatNumber, Address, City, Phone, ContactEmail, Website, Description, LogoUrl, UpdatedAt,
+        @"SELECT Id, Name, Sector, PrimaryColor, LegalName, VatNumber, Address, City, Phone, ContactEmail, Website, Description, PrivacyUrl, LogoUrl, UpdatedAt,
                  LogoData IS NOT NULL AS HasLogo FROM Organizations WHERE Id=@orgId", new { orgId },
         r => new OrgProfile
         {
             Id = r.Int("Id"), Name = r.Str("Name")!, Sector = r.Str("Sector") ?? "palestra", PrimaryColor = r.Str("PrimaryColor")!,
             LegalName = r.Str("LegalName"), VatNumber = r.Str("VatNumber"), Address = r.Str("Address"), City = r.Str("City"), Phone = r.Str("Phone"),
-            ContactEmail = r.Str("ContactEmail"), Website = r.Str("Website"), Description = r.Str("Description"), LogoUrl = r.Str("LogoUrl"),
+            ContactEmail = r.Str("ContactEmail"), Website = r.Str("Website"), Description = r.Str("Description"), PrivacyUrl = r.Str("PrivacyUrl"), LogoUrl = r.Str("LogoUrl"),
             UpdatedAt = r.Date("UpdatedAt"), HasLogo = Convert.ToInt32(r.GetValue(r.GetOrdinal("HasLogo"))) == 1
         });
 
     /// <summary>Dati dell'attività e aspetto: li cura MVitalia o la direzione del gruppo. Il tipo di attività lo cambia solo MVitalia.</summary>
     public Task SaveOrgProfileAsync(OrgProfile p, bool canChangeSector) => _db.ExecuteAsync(
         @"UPDATE Organizations SET Name=@Name, PrimaryColor=@PrimaryColor, LegalName=@LegalName, VatNumber=@VatNumber, Address=@Address, City=@City,
-            Phone=@Phone, ContactEmail=@ContactEmail, Website=@Website, Description=@Description,
+            Phone=@Phone, ContactEmail=@ContactEmail, Website=@Website, Description=@Description, PrivacyUrl=@PrivacyUrl,
             Sector=CASE WHEN @canChangeSector=1 THEN @Sector ELSE Sector END, UpdatedAt=UTC_TIMESTAMP() WHERE Id=@Id",
-        new { p.Id, p.Name, p.PrimaryColor, p.LegalName, p.VatNumber, p.Address, p.City, p.Phone, p.ContactEmail, p.Website, p.Description, p.Sector,
+        new { p.Id, p.Name, p.PrimaryColor, p.LegalName, p.VatNumber, p.Address, p.City, p.Phone, p.ContactEmail, p.Website, p.Description, p.PrivacyUrl, p.Sector,
               canChangeSector = canChangeSector ? 1 : 0 });
 
     public Task SaveLogoAsync(int orgId, byte[]? data, string? type) => _db.ExecuteAsync(
@@ -181,14 +184,15 @@ public sealed class Repos
 
     public Task<ActivityProfile?> ActivityProfileAsync(int gymId) => _db.FirstAsync(
         @"SELECT g.Id, g.OrganizationId, o.Name AS GroupName, o.IsGroup, o.Sector AS GroupSector, g.Name, g.Sector, g.PrimaryColor, g.LegalName, g.VatNumber,
-                 g.Address, g.City, g.Phone, g.ContactEmail, g.Website, g.Description, g.UpdatedAt, g.LogoData IS NOT NULL AS HasLogo
+                 g.Address, g.City, g.Phone, g.ContactEmail, g.Website, g.Description, g.PrivacyUrl, o.PrivacyUrl AS GroupPrivacyUrl, g.UpdatedAt, g.LogoData IS NOT NULL AS HasLogo
           FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId WHERE g.Id=@gymId", new { gymId },
         r => new ActivityProfile
         {
             Id = r.Int("Id"), OrganizationId = r.Int("OrganizationId"), GroupName = r.Str("GroupName")!, InGroup = r.Bool("IsGroup"),
             GroupSector = r.Str("GroupSector") ?? "palestra", Name = r.Str("Name")!, Sector = r.Str("Sector"), PrimaryColor = r.Str("PrimaryColor"),
             LegalName = r.Str("LegalName"), VatNumber = r.Str("VatNumber"), Address = r.Str("Address"), City = r.Str("City"), Phone = r.Str("Phone"),
-            ContactEmail = r.Str("ContactEmail"), Website = r.Str("Website"), Description = r.Str("Description"), UpdatedAt = r.Date("UpdatedAt"),
+            ContactEmail = r.Str("ContactEmail"), Website = r.Str("Website"), Description = r.Str("Description"), PrivacyUrl = r.Str("PrivacyUrl"),
+            GroupPrivacyUrl = r.Str("GroupPrivacyUrl"), UpdatedAt = r.Date("UpdatedAt"),
             HasLogo = Convert.ToInt32(r.GetValue(r.GetOrdinal("HasLogo"))) == 1
         });
 
@@ -197,9 +201,9 @@ public sealed class Repos
     {
         await _db.ExecuteAsync(
             @"UPDATE Gyms SET Name=@Name, PrimaryColor=@PrimaryColor, LegalName=@LegalName, VatNumber=@VatNumber, Address=@Address, City=@City, Phone=@Phone,
-                ContactEmail=@ContactEmail, Website=@Website, Description=@Description,
+                ContactEmail=@ContactEmail, Website=@Website, Description=@Description, PrivacyUrl=@PrivacyUrl,
                 Sector=CASE WHEN @canChangeSector=1 AND @InGroup=1 THEN @Sector ELSE Sector END, UpdatedAt=UTC_TIMESTAMP() WHERE Id=@Id",
-            new { p.Id, p.Name, p.PrimaryColor, p.LegalName, p.VatNumber, p.Address, p.City, p.Phone, p.ContactEmail, p.Website, p.Description, p.Sector,
+            new { p.Id, p.Name, p.PrimaryColor, p.LegalName, p.VatNumber, p.Address, p.City, p.Phone, p.ContactEmail, p.Website, p.Description, p.PrivacyUrl, p.Sector,
                   InGroup = p.InGroup ? 1 : 0, canChangeSector = canChangeSector ? 1 : 0 });
         if (!p.InGroup)
             await _db.ExecuteAsync("UPDATE Organizations SET Name=@Name, Sector=CASE WHEN @can=1 AND @Sector IS NOT NULL THEN @Sector ELSE Sector END WHERE Id=@OrganizationId AND IsGroup=0",
@@ -282,8 +286,11 @@ public sealed class Repos
         r.Str("Role")!, r.Bool("IsActive"), r.Int("FailedLogins"), r.Date("LockedUntil"), r.Bool("MustChangePassword"),
         Convert.ToInt32(r["OrgActive"]) == 1);
 
-    public Task LoginFailedAsync(int id, int failed, DateTime? lockUntil) => _db.ExecuteAsync(
-        "UPDATE Users SET FailedLogins=@failed, LockedUntil=@lockUntil WHERE Id=@id", new { id, failed, lockUntil });
+    /// <summary>Conta il tentativo sbagliato nel database stesso: anche con molti tentativi in parallelo il blocco scatta.</summary>
+    public Task LoginFailedAsync(int id, int maxAttempts, DateTime lockUntil) => _db.ExecuteAsync(
+        @"UPDATE Users SET FailedLogins=FailedLogins+1,
+            LockedUntil=CASE WHEN FailedLogins >= @maxAttempts THEN @lockUntil ELSE LockedUntil END WHERE Id=@id",
+        new { id, maxAttempts, lockUntil });
 
     public Task LoginOkAsync(int id) => _db.ExecuteAsync(
         "UPDATE Users SET FailedLogins=0, LockedUntil=NULL, LastLoginAt=UTC_TIMESTAMP() WHERE Id=@id", new { id });

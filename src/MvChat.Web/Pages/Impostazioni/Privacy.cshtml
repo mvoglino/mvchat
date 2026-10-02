@@ -1,0 +1,14 @@
+@page
+@model MvChat.Web.Pages.Impostazioni.PrivacyModel
+@{ ViewData["Title"] = "Privacy e conservazione dei dati"; }
+@section Actions { <a class="btn" href="/Privacy">Richieste dei clienti</a> }
+<p class="muted" style="margin:0">mvchat cancella da solo, una volta al giorno, i dati dei clienti più vecchi del periodo scelto: conversazioni e messaggi, liste contatti caricate, destinatari delle campagne, registro attività. La lista STOP non si cancella mai: serve a non ricontattare chi lo ha chiesto. I consumi AI restano (senza dati personali) per la fatturazione.</p>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<form method="post" class="panel">
+    <div class="panel-b form">
+        <div class="field"><label asp-for="RetentionMonths">Conservazione dei dati dei clienti (mesi)</label><input asp-for="RetentionMonths" type="number" min="1" max="120"><small>Deciso: 12 mesi dall'ultimo messaggio.</small></div>
+        <div class="field"><label asp-for="WebhookDays">Copie grezze degli avvisi di Meta (giorni)</label><input asp-for="WebhookDays" type="number" min="1" max="365"><small>Servono solo a indagare problemi recenti.</small></div>
+    </div>
+    <div class="actions"><span class="muted" style="flex:1">Ultima pulizia: @(Model.LastRun is DateTime d ? d.ToRome().ToString("dd/MM/yyyy HH:mm") + " · " + Model.LastDetail : "non ancora fatta")</span><button class="btn" type="submit" form="runForm">Esegui la pulizia adesso</button><button class="btn primary" type="submit">Salva</button></div>
+</form>
+<form method="post" asp-page-handler="Run" id="runForm"></form>

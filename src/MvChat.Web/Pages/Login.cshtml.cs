@@ -24,12 +24,12 @@ public class LoginModel : PageModel
     public async Task<IActionResult> OnPostAsync()
     {
         if (!ModelState.IsValid) return Page();
-        var (ok, error, user) = await _login.CheckAsync(Email, Password);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var (ok, error, user) = await _login.CheckAsync(Email, Password, ip);
         if (!ok || user is null)
         {
             Error = error;
-            await _repos.AuditAsync(null, "login.failed", Email.Trim(), ip);
+            await _repos.AuditAsync(null, "login.failed", Email.Trim() is { Length: > 120 } e ? e[..120] : Email.Trim(), ip);
             return Page();
         }
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, LoginService.Principal(user),

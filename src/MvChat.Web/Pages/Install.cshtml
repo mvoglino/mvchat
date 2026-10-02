@@ -32,6 +32,7 @@ else
     }
 
     <form method="post" class="form">
+        <div class="field full"><label asp-for="Input.InstallCode">Codice di installazione</label><input asp-for="Input.InstallCode" autocomplete="off"><small>Per sicurezza: lo trovi via FTP nel file <code>App_Data/codice-installazione.txt</code>.</small><span asp-validation-for="Input.InstallCode" class="field-error"></span></div>
         <div asp-validation-summary="ModelOnly" class="field full"></div>
         <div class="field full"><label>Database</label></div>
         <div class="field"><label asp-for="Input.DbHost">Server (host)</label><input asp-for="Input.DbHost" placeholder="es. 89.46.xxx.xxx"><span asp-validation-for="Input.DbHost" class="field-error"></span></div>

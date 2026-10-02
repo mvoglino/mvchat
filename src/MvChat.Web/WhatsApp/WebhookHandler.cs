@@ -98,6 +98,8 @@ public sealed class WebhookHandler
         if (phoneNumberId is null) return;
         var number = await _repo.NumberByPhoneNumberIdAsync(phoneNumberId);
         if (number is null) { _log.LogWarning("Messaggio per un numero sconosciuto: {Id}", phoneNumberId); return; }
+        // Un numero Meta riceve i messaggi solo dopo che Meta ha confermato la chiave: nessuno può "prenotare" il numero di un altro.
+        if (!number.IsSimulated && number.Status != "attivo") { _log.LogWarning("Messaggio per un numero non verificato: {Id}", phoneNumberId); return; }
 
         foreach (var st in value["statuses"]?.AsArray() ?? new())
         {

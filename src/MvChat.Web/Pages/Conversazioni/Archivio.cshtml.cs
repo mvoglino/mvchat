@@ -51,7 +51,7 @@ public class ArchivioModel : PageModel
         await LoadAsync(gym, tipo, esito, dal, al, campagna, q, prove);
         var rows = await _archive.ListAsync(User.Scope(), F, 50000);
         var sb = new StringBuilder();
-        static string C(string? v) => "\"" + (v ?? "").Replace("\"", "\"\"") + "\"";
+        static string C(string? v) => Csv.Cell(v);
         sb.AppendLine("Data;Attività;Cliente;Cellulare;Obiettivo;Campagna;Gestione;Operatori;Messaggi cliente;Risposte assistente;Risposte operatori;Esito;Stato");
         foreach (var r in rows)
             sb.AppendLine(string.Join(";", C(r.CreatedAt.ToRome().ToString("dd/MM/yyyy HH:mm")), C(r.GymName), C(r.ContactName), C(r.ContactPhone), C(r.GoalName),

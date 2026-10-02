@@ -99,7 +99,7 @@ public class IndexModel : PageModel
     {
         if (!await LoadAsync(dal, al, gruppo, attivita)) return NotFound();
         var it = CultureInfo.GetCultureInfo("it-IT");
-        static string C(string? v) => "\"" + (v ?? "").Replace("\"", "\"\"") + "\"";
+        static string C(string? v) => Csv.Cell(v);
         var sb = new StringBuilder();
         sb.AppendLine("Nome;Tipo;Primi messaggi;Consegnati;Letti;Conversazioni;Con risposta;Obiettivo raggiunto;Rifiuti;Non contattare più;Solo assistente AI;Con operatore;Costo Meta stimato (€);Costo AI ($)");
         foreach (var r in Rows.Append(new ReportRow { Name = "Totale", Kind = "" }.Also(t => t.Add(Total))))

@@ -197,9 +197,10 @@ public sealed class ContactsRepo
     public Task<List<OptOut>> OptOutsAsync(Scope s, string? search) => _db.QueryAsync(
         @"SELECT o.*, org.Name AS OrgName, g.Name AS GymName FROM OptOuts o
           JOIN Organizations org ON org.Id=o.OrganizationId LEFT JOIN Gyms g ON g.Id=o.GymId
-          WHERE (@All=1 OR o.OrganizationId=@Org) AND (@q='' OR o.Phone LIKE @like)
+          WHERE (@All=1 OR o.OrganizationId=@Org) AND (@Mgr=0 OR o.GymId=@Gym) AND (@q='' OR o.Phone LIKE @like)
           ORDER BY o.CreatedAt DESC LIMIT 1000",
-        new { All = s.IsSuperAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, q = search ?? "", like = "%" + (search ?? "") + "%" },
+        // L'amministratore di un'attività vede solo i numeri bloccati dalla sua attività, non quelli delle altre del gruppo.
+        new { All = s.IsSuperAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Mgr = s.IsManager ? 1 : 0, Gym = s.GymId ?? -1, q = search ?? "", like = "%" + (search ?? "") + "%" },
         r => new OptOut(r.GetInt64(r.GetOrdinal("Id")), r.Int("OrganizationId"), r.Str("OrgName")!, r.Str("GymName"), r.Str("Phone")!,
             r.Str("Reason"), r.Str("Source")!, r.Date("CreatedAt")!.Value));
 

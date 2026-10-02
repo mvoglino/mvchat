@@ -1,0 +1,32 @@
+@page
+@model MvChat.Web.Pages.Privacy.IndexModel
+@using MvChat.Web.Privacy
+@{ ViewData["Title"] = "Richieste privacy dei clienti"; var me = User.Scope(); }
+<p class="muted" style="margin:0">Quando un cliente chiede quali dati avete su di lui o di cancellarli, cerca qui il suo cellulare. Vedi e cancelli solo i dati @(me.IsSuperAdmin ? "di tutto il servizio" : me.IsOrgAdmin ? "delle attività del tuo gruppo" : "della tua attività"). I dati si cancellano comunque da soli dopo il periodo di conservazione.</p>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<form method="get" class="inline-form"><div class="field" style="max-width:300px"><label for="Numero">Cellulare del cliente</label><input id="Numero" name="Numero" value="@Model.Numero" placeholder="es. 333 123 4567" required></div><button class="btn primary" type="submit">Cerca</button></form>
+@if (Model.Phone is not null)
+{
+    @if (!Model.Found)
+    {
+        <div class="note">Nessun dato su <b>@Model.Phone</b>@(me.IsSuperAdmin ? "" : " nel tuo perimetro").</div>
+    }
+    else
+    {
+    <section class="panel">
+        <div class="panel-h"><h2>Dati su @Model.Phone</h2><span style="flex:1"></span><a class="btn sm" href="/Privacy?numero=@Uri.EscapeDataString(Model.Phone)&handler=Export">Scarica tutti i dati (accesso)</a></div>
+        <div class="panel-b">
+            <ul>
+                <li><b>@Model.Contacts.Count</b> righe in liste contatti @foreach (var c in Model.Contacts) {<span class="muted"> · @c.FirstName @c.LastName, lista «@c.ListName» (@c.GymName), consenso @(c.ConsentDate?.ToString("dd/MM/yyyy") ?? "—") @c.ConsentSource</span>}</li>
+                <li><b>@Model.Conversations.Count</b> conversazioni con <b>@Model.Messages</b> messaggi @foreach (var c in Model.Conversations) {<span class="muted"> · <a href="/Conversazioni/@c.Id">@c.GymName, @c.CreatedAt.ToRome().ToString("dd/MM/yyyy")</a></span>}</li>
+                <li><b>@Model.Recipients</b> invii di campagne</li>
+                <li><b>@Model.OptOuts.Count</b> iscrizioni alla lista STOP @foreach (var o in Model.OptOuts) {<span class="muted"> · @o.OrgName@(o.GymName is null ? "" : " / " + o.GymName), @o.CreatedAt.ToRome().ToString("dd/MM/yyyy")</span>}</li>
+            </ul>
+        </div>
+        <form method="post" asp-page-handler="Erase" asp-route-numero="@Model.Phone" class="actions" onsubmit="return confirm('Cancellare definitivamente tutti i dati di @Model.Phone? Non si può annullare.')">
+            <label class="check" style="flex:1"><input type="checkbox" name="AddStop" value="true" checked> Aggiungi alla lista STOP, così non verrà ricontattato (consigliato)</label><input type="hidden" name="AddStop" value="false">
+            <button class="btn primary" type="submit">Cancella tutti i dati (oblio)</button>
+        </form>
+    </section>
+    }
+}

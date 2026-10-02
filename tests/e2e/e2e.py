@@ -55,8 +55,12 @@ def temp_pwd(html):
     m = re.search(r"<code>([A-Za-z0-9]{12})</code>", html); return m.group(1) if m else None
 
 # 1. Install
+INSTALL_CODE = os.environ.get("MVCHAT_INSTALL_CODE", "codice-di-prova")
 c = Client()
-s, html, loc = c.req("/Install", {"Input.DbHost":os.environ.get("DB_HOST","127.0.0.1"),"Input.DbPort":"3306","Input.DbName":"mvchat","Input.DbUser":"mv","Input.DbPassword":"Pwd12345!",
+s, html, loc = c.req("/Install", {"Input.InstallCode":"sbagliato","Input.DbHost":os.environ.get("DB_HOST","127.0.0.1"),"Input.DbPort":"3306","Input.DbName":"mvchat","Input.DbUser":"mv","Input.DbPassword":"Pwd12345!",
+    "Input.ProductName":"mvchat","Input.AdminName":"X","Input.AdminEmail":"x@x.test","Input.AdminPassword":"Admin12345x","Input.AdminPassword2":"Admin12345x"})
+check("installazione rifiutata senza il codice del file", "Codice di installazione sbagliato" in html and "Installazione completata" not in html)
+s, html, loc = c.req("/Install", {"Input.InstallCode":INSTALL_CODE,"Input.DbHost":os.environ.get("DB_HOST","127.0.0.1"),"Input.DbPort":"3306","Input.DbName":"mvchat","Input.DbUser":"mv","Input.DbPassword":"Pwd12345!",
     "Input.ProductName":"mvchat","Input.AdminName":"Maurizio Voglino","Input.AdminEmail":"admin@mvitalia.test","Input.AdminPassword":"Admin12345x","Input.AdminPassword2":"Admin12345x"})
 check("installazione completata", "Installazione completata" in html, html[:300] if "Installazione completata" not in html else "")
 check("indirizzo tick mostrato", "/jobs/tick?token=" in html)
@@ -643,6 +647,49 @@ _,html,_ = m.req(f"/Fatturazione?mese={cur_m}"); _,menu,_ = m.req("/")
 check("le attività di un gruppo non hanno rendiconti propri", "Niente da fatturare" in html and ">Rendiconti<" not in menu)
 s,csv,_ = sa.req(f"/Fatturazione?mese={cur_m}&handler=Csv")
 check("rendiconti scaricabili per la contabilità", s == 200 and "Intestatario;Ragione sociale;Partita IVA" in csv and "Consumo AI" in csv and "Abbonamento" in csv, csv[:150])
+
+# 5j. Passo 10: privacy e sicurezza
+import urllib.request as _ur
+hdr = _ur.urlopen(BASE + "/Login").headers
+check("protezioni del browser attive", hdr.get("X-Frame-Options") == "DENY" and "frame-ancestors 'none'" in (hdr.get("Content-Security-Policy") or "") and hdr.get("X-Content-Type-Options") == "nosniff", str(dict(hdr))[:200])
+d.post("/OptOuts?handler=Add", {"Phone":"347 222 3344","Reason":"chiesto alla direzione"}, form_path="/OptOuts")
+_,stop_m,_ = m.req("/OptOuts"); _,stop_d,_ = d.req("/OptOuts")
+check("lista STOP: l'attività vede solo i suoi numeri, il gruppo tutti", "+393472223344" in stop_d and "+393472223344" not in stop_m and "+393331114455" in stop_m)
+aurc.post(f"/Attivita/{aur}", {"Input.Name":"Centro Benessere Aurora","Input.LegalName":"=1+1","Input.PrivacyUrl":"https://www.aurora.test/privacy"}, form_path=f"/Attivita/{aur}")
+_,csv,_ = sa.req(f"/Fatturazione?mese={cur_m}&handler=Csv")
+check("file per Excel: le formule nei dati vengono neutralizzate", "\"'=1+1\"" in csv and "\"=1+1\"" not in csv, csv[csv.find("Aurora"):][:120])
+s,html,_ = aurc.post(f"/Attivita/{aur}", {"Input.Name":"Centro Benessere Aurora","Input.PrivacyUrl":"non è un link"}, form_path=f"/Attivita/{aur}")
+check("informativa privacy: serve un link valido", s == 200 and "indirizzo completo dell'informativa" in html, str(s))
+_,html,_ = aurc.req(f"/Modelli/Anteprima?model={rinnovo}&gym={aur}")
+check("l'assistente indica l'informativa privacy dell'attività", "indica l'informativa: https://www.aurora.test/privacy" in html)
+_,html,_ = m.req(f"/Modelli/Anteprima?model={rinnovo}&gym={gym['FitActive Alba']}")
+check("senza informativa l'assistente passa la privacy allo staff", "Se il cliente chiede della privacy o dei suoi dati, passa a una persona dello staff" in html)
+s,html,_ = m.req("/Privacy?numero=333%20111%202233")
+check("richiesta privacy: dati del cliente trovati nell'attività", s == 200 and "Dati su +393331112233" in html and "conversazioni con" in html, str(s))
+s,body,_ = m.req("/Privacy?numero=333%20111%202233&handler=Export")
+dump = _json.loads(body) if s == 200 else {}
+check("diritto di accesso: tutti i dati in un file", dump.get("numero") == "+393331112233" and len(dump.get("messaggi", [])) >= 5, str(dump)[:200])
+_,html,_ = oth.req("/Privacy?numero=333%20111%202233"); check("richiesta privacy: le altre attività non trovano nulla", "Nessun dato su" in html)
+s,_,_ = o.req("/Privacy"); check("l'operatore non gestisce le richieste privacy", s in (302,403), str(s))
+m.post("/Privacy?numero=%2B393331112233&handler=Erase", {"AddStop":"true"}, form_path="/Privacy?numero=333%20111%202233")
+s1,_,_ = m.req(f"/Conversazioni/{cid}"); _,html,_ = m.req("/Privacy?numero=333%20111%202233"); _,stop_m,_ = m.req("/OptOuts")
+check("diritto all'oblio: dati cancellati e numero nella lista STOP", s1 == 404 and "Dati su +393331112233" in html and "<b>0</b> conversazioni" in html and "+393331112233" in stop_m, str(s1))
+_,audit_ok,_ = sa.req("/Impostazioni/Privacy")
+check("conservazione di base: 12 mesi", 'value="12"' in audit_ok)
+try:
+    import pymysql
+    db = pymysql.connect(host=os.environ.get("DB_HOST","127.0.0.1"), user="mv", password="Pwd12345!", database="mvchat", autocommit=True)
+    with db.cursor() as cur:
+        cur.execute("UPDATE Conversations SET CreatedAt=UTC_TIMESTAMP() - INTERVAL 13 MONTH, LastMessageAt=UTC_TIMESTAMP() - INTERVAL 13 MONTH WHERE Id=%s", (cid4,))
+        cur.execute("UPDATE WaWebhookEvents SET ReceivedAt=UTC_TIMESTAMP() - INTERVAL 40 DAY ORDER BY Id LIMIT 3")
+    sa.post("/Impostazioni/Privacy?handler=Run", {}, form_path="/Impostazioni/Privacy")
+    _,html,_ = sa.req("/Impostazioni/Privacy"); s4,_,_ = m.req(f"/Conversazioni/{cid4}")
+    with db.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM WaMessages WHERE ConversationId=%s", (cid4,)); left = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM Conversations"); still = cur.fetchone()[0]
+    check("pulizia automatica: cancellati i dati oltre i 12 mesi, il resto resta", s4 == 404 and left == 0 and still > 5 and "conversazioni 1" in html and "avvisi Meta 3" in html, f"{s4} {left} {still} {html[html.find('Ultima pulizia'):][:200]}")
+except ImportError:
+    check("pulizia automatica (serve pymysql per la prova)", False, "pip install pymysql")
 fai.shutdown()
 
 # 6. Blocco dopo 5 tentativi sbagliati

@@ -34,14 +34,21 @@ jobs:
       - name: Crea il pacchetto per Aruba
         run: dotnet publish src/MvChat.Web/MvChat.Web.csproj -c Release -o publish --no-build
 
-      - name: Prove automatiche (installazione, accessi, separazione tra catene e palestre)
+      - name: Libreria Excel aggiornata (SheetJS 0.20.3, corregge le vulnerabilità della 0.18.5)
+        run: |
+          curl -fsSL https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js -o xlsx.full.min.js
+          grep -q "0.20.3" xlsx.full.min.js
+          cp xlsx.full.min.js publish/wwwroot/js/vendor/xlsx.full.min.js
+
+      - name: Prove automatiche (installazione, accessi, separazione dei dati, campagne, assistente, privacy)
         run: |
           mkdir -p run && cp -r publish/* run/
           cd run
-          ASPNETCORE_URLS=http://127.0.0.1:5078 ASPNETCORE_ENVIRONMENT=Production nohup dotnet MvChat.Web.dll > ../app.log 2>&1 &
+          MVCHAT_INSTALL_CODE=codice-di-prova ASPNETCORE_URLS=http://127.0.0.1:5078 ASPNETCORE_ENVIRONMENT=Production nohup dotnet MvChat.Web.dll > ../app.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:5078/health && break; sleep 1; done
           cd ..
-          python3 tests/e2e/e2e.py
+          pip install --quiet pymysql
+          MVCHAT_INSTALL_CODE=codice-di-prova python3 tests/e2e/e2e.py
 
       - name: Log dell'applicazione (solo se qualcosa fallisce)
         if: failure()

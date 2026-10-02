@@ -24,6 +24,7 @@
         <div class="field"><label asp-for="Input.City">Città</label><input asp-for="Input.City"></div>
         <div class="field"><label asp-for="Input.Phone">Telefono</label><input asp-for="Input.Phone"></div>
         <div class="field"><label asp-for="Input.ContactEmail">Email</label><input asp-for="Input.ContactEmail" type="email"><span asp-validation-for="Input.ContactEmail" class="field-error"></span></div>
+        <div class="field full"><label asp-for="Input.PrivacyUrl">Informativa privacy (link)</label><input asp-for="Input.PrivacyUrl" placeholder="https://www.sito.it/privacy"><small>Vale per tutte le attività del gruppo che non ne hanno una propria. L'assistente la indica a chi chiede come vengono usati i suoi dati.</small><span asp-validation-for="Input.PrivacyUrl" class="field-error"></span></div>
         <div class="field full"><label asp-for="Input.Website">Sito internet</label><input asp-for="Input.Website" placeholder="https://"><span asp-validation-for="Input.Website" class="field-error"></span></div>
         <div class="field full"><label asp-for="Input.Description">Chi siamo</label><textarea asp-for="Input.Description" rows="5" placeholder="Due o tre frasi su cosa fa l'attività, in cosa è diversa, a chi si rivolge. L'assistente le usa per presentarla ai clienti."></textarea><small>Niente prezzi qui: si scrivono nelle offerte.</small></div>
     </div>

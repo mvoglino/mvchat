@@ -26,6 +26,7 @@ public class InstallModel : PageModel
     {
         if (_config.Current.Installed) return Redirect("/Login");
         _config.CanWrite(out var err);
+        _config.InstallCode(); // crea il file con il codice, se non c'è
         WriteError = string.IsNullOrEmpty(err) ? null : err;
         return Page();
     }
@@ -35,6 +36,9 @@ public class InstallModel : PageModel
         if (_config.Current.Installed) return Redirect("/Login");
         if (!_config.CanWrite(out var werr)) { WriteError = werr; return Page(); }
 
+        var code = _config.InstallCode();
+        if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes((Input.InstallCode ?? "").Trim()), System.Text.Encoding.UTF8.GetBytes(code)))
+            ModelState.AddModelError("Input.InstallCode", "Codice di installazione sbagliato: lo trovi nel file App_Data/codice-installazione.txt del sito.");
         if (Input.AdminPassword != Input.AdminPassword2)
             ModelState.AddModelError("Input.AdminPassword2", "Le due password non coincidono.");
         if (PasswordService.Weakness(Input.AdminPassword) is { } weak)
@@ -85,6 +89,7 @@ public class InstallModel : PageModel
             InstalledAt = DateTime.UtcNow,
             Meta = new MetaSettings { WebhookVerifyToken = AppConfigStore.NewToken() }
         });
+        _config.DeleteInstallCode();
         TickUrl = $"{Request.Scheme}://{Request.Host}/jobs/tick?token={token}";
         Done = true;
         return Page();
@@ -102,6 +107,7 @@ public class InstallModel : PageModel
 
     public class InstallInput
     {
+        public string? InstallCode { get; set; }
         [Required(ErrorMessage = "Indica il server del database.")] public string DbHost { get; set; } = "";
         [Range(1, 65535)] public int DbPort { get; set; } = 3306;
         [Required(ErrorMessage = "Indica il nome del database.")] public string DbName { get; set; } = "";

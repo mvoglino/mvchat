@@ -43,17 +43,38 @@ public sealed class LoginService
     private readonly PasswordService _pwd;
     public LoginService(Repos repos, PasswordService pwd) { _repos = repos; _pwd = pwd; }
 
-    public async Task<(bool Ok, string? Error, UserAuth? User)> CheckAsync(string email, string password)
+    // Limite per indirizzo di rete: chi prova tante password su tanti account viene fermato.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int Count, DateTime Since)> ByIp = new();
+    public const int MaxPerIp = 30;
+    private static readonly string DummyHash = new PasswordService().Hash("password-che-non-esiste-" + Guid.NewGuid());
+
+    public static bool IpBlocked(string? ip) =>
+        ip is not null && ByIp.TryGetValue(ip, out var v) && v.Since > DateTime.UtcNow.AddMinutes(-15) && v.Count >= MaxPerIp;
+
+    private static void IpFailed(string? ip)
+    {
+        if (ip is null) return;
+        ByIp.AddOrUpdate(ip, _ => (1, DateTime.UtcNow), (_, v) => v.Since < DateTime.UtcNow.AddMinutes(-15) ? (1, DateTime.UtcNow) : (v.Count + 1, v.Since));
+        if (ByIp.Count > 10000) ByIp.Clear(); // non deve crescere all'infinito
+    }
+
+    public async Task<(bool Ok, string? Error, UserAuth? User)> CheckAsync(string email, string password, string? ip = null)
     {
         const string generic = "Email o password non corrette.";
+        if (IpBlocked(ip)) return (false, "Troppi tentativi da questa rete. Riprova tra 15 minuti.", null);
         var u = await _repos.UserForLoginAsync(email.Trim());
-        if (u is null) return (false, generic, null);
+        if (u is null)
+        {
+            _pwd.Verify(DummyHash, password); // stesso tempo di risposta di un'email esistente
+            IpFailed(ip);
+            return (false, generic, null);
+        }
         if (u.LockedUntil is { } until && until > DateTime.UtcNow)
             return (false, $"Troppi tentativi sbagliati. Riprova dopo le {until.ToRome():HH:mm}.", null);
         if (!_pwd.Verify(u.PasswordHash, password))
         {
-            var failed = u.FailedLogins + 1;
-            await _repos.LoginFailedAsync(u.Id, failed, failed >= MaxAttempts ? DateTime.UtcNow.Add(LockTime) : null);
+            await _repos.LoginFailedAsync(u.Id, MaxAttempts, DateTime.UtcNow.Add(LockTime));
+            IpFailed(ip);
             return (false, generic, null);
         }
         if (!u.IsActive || !u.OrgActive) return (false, "Questo accesso è disattivato. Contatta il tuo amministratore.", null);
@@ -73,6 +94,7 @@ public sealed class LoginService
         if (u.OrganizationId is { } o) claims.Add(new("org", o.ToString()));
         if (u.GymId is { } g) claims.Add(new("gym", g.ToString()));
         if (u.MustChangePassword) claims.Add(new("pwd", "change"));
+        claims.Add(new("stamp", Stamp(u.PasswordHash)));
         return new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
     }
 
@@ -80,6 +102,10 @@ public sealed class LoginService
     /// A ogni richiesta (al massimo ogni 5 minuti) ricontrolla l'utente nel database:
     /// se è stato disattivato o gli è cambiato ruolo o attività, l'accesso si aggiorna o si chiude.
     /// </summary>
+    /// <summary>Impronta della password: se la password cambia, le sessioni aperte con quella vecchia non valgono più.</summary>
+    public static string Stamp(string passwordHash) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(passwordHash)))[..16];
+
     public static async Task ValidateAsync(CookieValidatePrincipalContext ctx)
     {
         var issued = ctx.Properties.IssuedUtc ?? DateTimeOffset.MinValue;
@@ -87,7 +113,7 @@ public sealed class LoginService
         var scope = ctx.Principal!.Scope();
         var repos = ctx.HttpContext.RequestServices.GetRequiredService<Repos>();
         var u = await repos.UserForLoginAsync(scope.UserId);
-        if (u is null || !u.IsActive || !u.OrgActive)
+        if (u is null || !u.IsActive || !u.OrgActive || ctx.Principal!.FindFirstValue("stamp") != Stamp(u.PasswordHash))
         {
             ctx.RejectPrincipal();
             await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);

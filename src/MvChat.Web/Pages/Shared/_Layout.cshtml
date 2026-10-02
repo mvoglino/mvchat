@@ -73,6 +73,7 @@ else
                     <a href="/Impostazioni/WhatsApp" aria-current="@(Cur("/Impostazioni/WhatsApp"))">Impostazioni Meta</a>
                     <a href="/Impostazioni/AI" aria-current="@(Cur("/Impostazioni/AI"))">Impostazioni AI</a>
                     <a href="/Fatturazione" aria-current="@(Cur("/Fatturazione"))">Fatturazione</a>
+                    <a href="/Impostazioni/Privacy" aria-current="@(Cur("/Impostazioni/Privacy"))">Privacy e dati</a>
                 }
                 @if (scope.IsOrgAdmin || (scope.IsManager && !inGroup))
                 {
@@ -103,6 +104,7 @@ else
                     <a href="/Assistente/Prova" aria-current="@(Cur("/Assistente"))">Prova l'assistente</a>
                     <a href="/Lists" aria-current="@(Cur("/Lists"))">Liste contatti</a>
                     <a href="/OptOuts" aria-current="@(Cur("/OptOuts"))">Lista STOP</a>
+                    <a href="/Privacy" aria-current="@(Cur("/Privacy"))">Richieste privacy</a>
                 }
                 @if (scope.CanManageUsers)
                 {

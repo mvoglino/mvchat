@@ -19,6 +19,16 @@ public sealed class AppConfig
     public MetaSettings Meta { get; set; } = new();
     public AiSettings Ai { get; set; } = new();
     public BillingSettings Billing { get; set; } = new();
+    public PrivacySettings Privacy { get; set; } = new();
+}
+
+/// <summary>Per quanto tempo si tengono i dati dei clienti. Dopo, la pulizia automatica li cancella.</summary>
+public sealed class PrivacySettings
+{
+    /// <summary>Conversazioni, messaggi, liste contatti, destinatari delle campagne e registro attività.</summary>
+    public int RetentionMonths { get; set; } = 12;
+    /// <summary>Copie grezze degli avvisi di Meta (contengono i messaggi): servono solo per controllare problemi recenti.</summary>
+    public int WebhookDays { get; set; } = 30;
 }
 
 /// <summary>Regole con cui MVitalia rifattura il servizio. Quando un mese viene chiuso, i valori usati restano salvati nel rendiconto.</summary>
@@ -99,12 +109,35 @@ public sealed class AppConfigStore
     public string DataDir { get; }
     public AppConfig Current { get { lock (_lock) return _current; } }
 
+    /// <summary>
+    /// Se il file c'è ma non si legge, mvchat si ferma invece di ripartire "da installare":
+    /// altrimenti chiunque potrebbe rifare l'installazione e collegarlo a un altro database.
+    /// </summary>
     private AppConfig Load()
     {
         if (!File.Exists(_path)) return new AppConfig();
-        try { return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(_path)) ?? new AppConfig(); }
-        catch { return new AppConfig(); }
+        try { return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(_path)) ?? throw new InvalidDataException("file vuoto"); }
+        catch (Exception ex) { throw new InvalidOperationException($"App_Data/mvchat.json non è leggibile ({ex.Message}). Ripristina il file dal backup: mvchat non riparte da solo per sicurezza.", ex); }
     }
+
+    private string CodePath => Path.Combine(DataDir, "codice-installazione.txt");
+
+    /// <summary>
+    /// Codice richiesto dall'installazione guidata: sta in App_Data/codice-installazione.txt (si legge via FTP),
+    /// così può installare solo chi ha accesso ai file del sito. Nelle prove automatiche arriva da MVCHAT_INSTALL_CODE.
+    /// </summary>
+    public string InstallCode()
+    {
+        var env = Environment.GetEnvironmentVariable("MVCHAT_INSTALL_CODE");
+        if (!string.IsNullOrWhiteSpace(env)) return env.Trim();
+        lock (_lock)
+        {
+            if (!File.Exists(CodePath)) File.WriteAllText(CodePath, NewToken()[..12]);
+            return File.ReadAllText(CodePath).Trim();
+        }
+    }
+
+    public void DeleteInstallCode() { try { File.Delete(CodePath); } catch { } }
 
     public void Save(AppConfig cfg)
     {

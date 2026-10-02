@@ -42,7 +42,7 @@ public class IndexModel : PageModel
         Input = new ProfileInput
         {
             Name = P.Name, Sector = P.InGroup ? P.Sector ?? "" : P.GroupSector, PrimaryColor = P.PrimaryColor, LegalName = P.LegalName, VatNumber = P.VatNumber,
-            Address = P.Address, City = P.City, Phone = P.Phone, ContactEmail = P.ContactEmail, Website = P.Website, Description = P.Description
+            Address = P.Address, City = P.City, Phone = P.Phone, ContactEmail = P.ContactEmail, Website = P.Website, Description = P.Description, PrivacyUrl = P.PrivacyUrl
         };
         return Page();
     }
@@ -54,6 +54,8 @@ public class IndexModel : PageModel
         if (CanChangeSector && !string.IsNullOrEmpty(Input.Sector) && !Sectors.All.Any(s => s.Key == Input.Sector)) ModelState.AddModelError("Input.Sector", "Scegli il tipo di attività.");
         if (!string.IsNullOrWhiteSpace(Input.Website) && !Uri.TryCreate(Input.Website.Trim().StartsWith("http") ? Input.Website.Trim() : "https://" + Input.Website.Trim(), UriKind.Absolute, out _))
             ModelState.AddModelError("Input.Website", "Indirizzo del sito non valido.");
+        if (!string.IsNullOrWhiteSpace(Input.PrivacyUrl) && !(Uri.TryCreate(Input.PrivacyUrl.Trim(), UriKind.Absolute, out var pu) && (pu.Scheme == "https" || pu.Scheme == "http")))
+            ModelState.AddModelError("Input.PrivacyUrl", "Scrivi l'indirizzo completo dell'informativa, es. https://www.sito.it/privacy");
         var (logo, logoType, logoError) = await Gruppo.IndexModel.ReadLogoAsync(Logo);
         if (logoError is not null) ModelState.AddModelError("Logo", logoError);
         if (!ModelState.IsValid) return Page();
@@ -61,7 +63,7 @@ public class IndexModel : PageModel
         P.Name = Input.Name.Trim(); P.PrimaryColor = T(Input.PrimaryColor);
         P.Sector = string.IsNullOrEmpty(Input.Sector) ? null : Input.Sector; // vuoto = come il gruppo
         P.LegalName = T(Input.LegalName); P.VatNumber = T(Input.VatNumber); P.Address = T(Input.Address); P.City = T(Input.City); P.Phone = T(Input.Phone);
-        P.ContactEmail = T(Input.ContactEmail); P.Website = T(Input.Website); P.Description = T(Input.Description);
+        P.ContactEmail = T(Input.ContactEmail); P.Website = T(Input.Website); P.Description = T(Input.Description); P.PrivacyUrl = T(Input.PrivacyUrl);
         await _repos.SaveActivityProfileAsync(P, CanChangeSector);
         if (logo is not null) await _repos.SaveActivityLogoAsync(P.Id, logo, logoType);
         else if (RemoveLogo) await _repos.SaveActivityLogoAsync(P.Id, null, null);
@@ -85,5 +87,6 @@ public class IndexModel : PageModel
         [EmailAddress(ErrorMessage = "Email non valida."), StringLength(200)] public string? ContactEmail { get; set; }
         [StringLength(300)] public string? Website { get; set; }
         [StringLength(4000)] public string? Description { get; set; }
+        [StringLength(300)] public string? PrivacyUrl { get; set; }
     }
 }

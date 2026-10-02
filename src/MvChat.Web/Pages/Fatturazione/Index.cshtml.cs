@@ -66,7 +66,7 @@ public class IndexModel : PageModel
     {
         if (!await LoadAsync(mese)) return Forbid();
         var it = CultureInfo.GetCultureInfo("it-IT");
-        static string C(string? v) => "\"" + (v ?? "").Replace("\"", "\"\"") + "\"";
+        static string C(string? v) => Csv.Cell(v);
         var sb = new StringBuilder();
         sb.AppendLine("Mese;Intestatario;Ragione sociale;Partita IVA;Indirizzo;Email;Attività;Voce;Descrizione;Importo (€);IVA %;Stato");
         foreach (var s in Items)

@@ -70,10 +70,11 @@ public sealed class CatalogRepo
     /// <summary>Per le istruzioni dell'assistente: tipo e presentazione dell'attività, più quella del gruppo se ne fa parte.</summary>
     public Task<OrgInfo?> ActivityInfoAsync(int gymId) => _db.FirstAsync(
         @"SELECT g.Id, g.Name, COALESCE(g.Sector, o.Sector) AS Sector, g.Description, COALESCE(g.Website, o.Website) AS Website,
-                 COALESCE(g.Phone, o.Phone) AS Phone, o.IsGroup, o.Name AS GroupName, o.Description AS GroupDescription
+                 COALESCE(g.Phone, o.Phone) AS Phone, o.IsGroup, o.Name AS GroupName, o.Description AS GroupDescription,
+                 COALESCE(g.PrivacyUrl, o.PrivacyUrl) AS PrivacyUrl
           FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId WHERE g.Id=@gymId", new { gymId },
         r => new OrgInfo(r.Int("Id"), r.Str("Name")!, r.Str("Sector") ?? "palestra", r.Str("Description"), r.Str("Website"), r.Str("Phone"),
-            r.Bool("IsGroup") ? r.Str("GroupName") : null, r.Bool("IsGroup") ? r.Str("GroupDescription") : null));
+            r.Bool("IsGroup") ? r.Str("GroupName") : null, r.Bool("IsGroup") ? r.Str("GroupDescription") : null, r.Str("PrivacyUrl")));
 
     /// <summary>Tipo di attività e presentazione del gruppo.</summary>
     public Task<OrgInfo?> OrgInfoAsync(int orgId) => _db.FirstAsync(
