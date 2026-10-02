@@ -1,0 +1,17 @@
+@page
+@model MvChat.Web.Pages.Impostazioni.FatturazioneModel
+@{ ViewData["Title"] = "Impostazioni di fatturazione"; }
+@section Actions { <a class="btn" href="/Fatturazione">Rendiconti</a> }
+<p class="muted" style="margin:0">Come MVitalia rifattura il servizio. Abbonamento per ogni attività; consumo dell'assistente AI al costo del fornitore più il ricarico. I messaggi WhatsApp li fattura Meta direttamente alle attività. Quando chiudi un mese, i valori usati restano salvati in quel rendiconto.</p>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<form method="post" class="panel">
+    <div class="panel-b form">
+        <div class="field"><label for="DefaultFee">Canone mensile di base per attività (€, IVA esclusa)</label><input id="DefaultFee" name="DefaultFee" value="@Model.DefaultFee" inputmode="decimal"><small>Si può cambiare attività per attività nella sua scheda.</small></div>
+        <div class="field"><label for="Markup">Ricarico sul consumo AI (%)</label><input id="Markup" name="Markup" value="@Model.Markup" inputmode="decimal"></div>
+        <div class="field"><label for="UsdToEur">Cambio: quanti euro vale 1 dollaro</label><input id="UsdToEur" name="UsdToEur" value="@Model.UsdToEur" inputmode="decimal"><small>Il fornitore AI fattura in dollari. Aggiornalo prima di chiudere il mese (es. cambio BCE di fine mese).</small></div>
+        <div class="field"><label for="Vat">IVA (%)</label><input id="Vat" name="Vat" value="@Model.Vat" inputmode="decimal"></div>
+        <div class="field"><label for="IssuerName">Chi emette i rendiconti</label><input id="IssuerName" name="IssuerName" value="@Model.IssuerName" maxlength="150"></div>
+        <div class="field full"><label for="IssuerDetails">Dati di MVitalia stampati in testa</label><textarea id="IssuerDetails" name="IssuerDetails" rows="3" maxlength="500" placeholder="Ragione sociale, P.IVA, indirizzo, email">@Model.IssuerDetails</textarea></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
+</form>

@@ -24,6 +24,13 @@
         <div class="field"><label asp-for="Input.City">Città</label><input asp-for="Input.City"></div>
         <div class="field"><label asp-for="Input.Address">Indirizzo</label><input asp-for="Input.Address"></div>
         <div class="field"><label asp-for="Input.Phone">Telefono</label><input asp-for="Input.Phone" type="tel"></div>
+        @if (Model.Me.IsSuperAdmin)
+        {
+            <div class="field full" style="border-top:1px solid var(--line);padding-top:12px"><b>Abbonamento a mvchat</b> <small>Il rendiconto va @(Model.Existing?.InGroup == true || Model.Input.OrganizationId is not null ? "al gruppo" : "all'attività"). Il consumo AI si aggiunge a parte, con il ricarico delle impostazioni di fatturazione.</small></div>
+            <div class="field"><label for="Fee">Canone mensile (€)</label><input id="Fee" name="Fee" value="@Model.Fee" inputmode="decimal" placeholder="vuoto = canone di base (@Model.DefaultFee.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("it-IT")) €)"><span asp-validation-for="Fee" class="field-error"></span></div>
+            <div class="field"><label for="FeeFrom">Abbonamento attivo dal</label><input id="FeeFrom" name="FeeFrom" type="date" value="@Model.FeeFrom?.ToString("yyyy-MM-dd")"><small>Vuoto = abbonamento non ancora attivo: niente canone.</small></div>
+            <div class="field"><label for="FeeTo">fino al (facoltativo)</label><input id="FeeTo" name="FeeTo" type="date" value="@Model.FeeTo?.ToString("yyyy-MM-dd")"><span asp-validation-for="FeeTo" class="field-error"></span></div>
+        }
         <div class="field full"><label class="check"><input asp-for="Input.IsActive"> Attività attiva</label><small>Un'attività singola disattivata blocca anche l'accesso dei suoi utenti.</small></div>
     </div>
     <div class="actions"><a class="btn" href="/Gyms">Annulla</a><button class="btn primary" type="submit">Salva</button></div>

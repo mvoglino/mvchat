@@ -1,0 +1,39 @@
+@page
+@model MvChat.Web.Pages.Fatturazione.DettaglioModel
+@using MvChat.Web.Billing
+@{
+    var s = Model.S;
+    ViewData["Title"] = "Rendiconto " + BillingService.MonthName(s.Month);
+    var it = System.Globalization.CultureInfo.GetCultureInfo("it-IT");
+    string Eur(decimal v) => v.ToString("#,0.00", it) + " €";
+}
+@section Actions { <a class="btn" href="/Fatturazione?mese=@s.Month">Tutti i rendiconti</a><button class="btn primary" type="button" onclick="window.print()">Stampa o salva PDF</button> }
+<article class="panel statement">
+    <div class="panel-b">
+        <div class="statement-head">
+            <div><span class="muted">Da</span><b>@Model.B.IssuerName</b>@if (Model.B.IssuerDetails is not null) {<span style="white-space:pre-line">@Model.B.IssuerDetails</span>}<span>servizio mvchat</span></div>
+            <div><span class="muted">Intestato a</span><b>@(s.LegalName ?? s.RecipientName)</b>
+                @if (s.LegalName is not null && s.LegalName != s.RecipientName) {<span>@s.RecipientName</span>}
+                @if (s.VatNumber is not null) {<span>P.IVA @s.VatNumber</span>}
+                @if (s.Address is not null) {<span>@s.Address</span>}
+                @if (s.Email is not null) {<span>@s.Email</span>}</div>
+            <div><span class="muted">Mese</span><b>@BillingService.MonthName(s.Month)</b><span>@(s.Closed ? $"chiuso il {s.ClosedAt?.ToRome():dd/MM/yyyy}" : "provvisorio")</span></div>
+        </div>
+        @if (s.MissingData) { <div class="note warn no-print">Mancano ragione sociale o partita IVA: completali in «Dati e logo» @(s.IsGroup ? "del gruppo" : "dell'attività") prima di fatturare.</div> }
+    </div>
+    <div class="tbl"><table>
+        <thead><tr><th>Attività</th><th>Voce</th><th class="num">Importo</th></tr></thead>
+        <tbody>
+        @foreach (var l in s.Lines.OrderBy(l => l.Activity).ThenBy(l => l.Kind == "canone" ? 0 : 1))
+        {
+            <tr><td>@l.Activity</td><td>@l.Description@if (l.Kind == "ai") {<div class="muted">costo fornitore $ @l.AiUsd.ToString("0.0000", it) × cambio @s.UsdToEur.ToString("0.####", it) + ricarico @s.AiMarkupPct.ToString("0.##", it)%</div>}</td><td class="num">@Eur(l.Amount)</td></tr>
+        }
+        </tbody>
+        <tfoot>
+            <tr><td colspan="2">Imponibile</td><td class="num"><b>@Eur(s.Subtotal)</b></td></tr>
+            <tr><td colspan="2">IVA @s.VatPct.ToString("0.##", it)%</td><td class="num">@Eur(s.VatAmount)</td></tr>
+            <tr><td colspan="2"><b>Totale</b></td><td class="num"><b>@Eur(s.Total)</b></td></tr>
+        </tfoot>
+    </table></div>
+    <div class="panel-b muted" style="font-size:12.5px">I messaggi WhatsApp non sono compresi: li fattura Meta direttamente @(s.IsGroup ? "alle attività" : "all'attività"). Documento di riepilogo, non valido come fattura.</div>
+</article>

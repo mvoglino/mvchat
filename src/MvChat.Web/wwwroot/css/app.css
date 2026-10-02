@@ -174,3 +174,15 @@ a.kpi{text-decoration:none;color:inherit}
 .alerts{list-style:none;margin:0;padding:0}
 .alerts li{display:flex;gap:10px;align-items:baseline;padding:10px 18px;border-top:1px solid var(--line)}
 .alerts li:first-child{border-top:0}
+
+/* Passo 9 · rendiconti */
+.statement-head{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.statement-head div{display:flex;flex-direction:column;gap:2px}
+.statement-head b{font-size:16px}
+@media print{
+  .rail,.top .btn,.flash,.no-print,.toast{display:none!important}
+  .app{display:block;background:#fff}
+  .main{padding:0}
+  .panel{border:0;box-shadow:none}
+  body{background:#fff;color:#000}
+}

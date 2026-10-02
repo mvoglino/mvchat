@@ -22,6 +22,12 @@ public class EditModel : PageModel
     public Scope Me { get; private set; } = new();
     public bool IsNew => Input.Id is null;
     public Gym? Existing { get; private set; }
+    public decimal DefaultFee { get; private set; }
+
+    // Abbonamento (solo MVitalia). Il canone è testo: così "49,90" e "49.90" funzionano con qualsiasi impostazione di lingua.
+    [BindProperty] public string? Fee { get; set; }
+    [BindProperty] public DateTime? FeeFrom { get; set; }
+    [BindProperty] public DateTime? FeeTo { get; set; }
 
     public async Task<IActionResult> OnGetAsync(int? id, int? gruppo)
     {
@@ -33,6 +39,8 @@ public class EditModel : PageModel
         }
         Existing = await _repos.GymAsync(Me, id.Value);
         if (Existing is null) return NotFound();
+        var (fee, from, to) = await _repos.FeeAsync(Existing.Id);
+        Fee = fee?.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("it-IT")); FeeFrom = from; FeeTo = to;
         Input = new GymInput { Id = Existing.Id, OrganizationId = Existing.InGroup ? Existing.OrganizationId : null, Name = Existing.Name, City = Existing.City,
             Address = Existing.Address, Phone = Existing.Phone, IsActive = Existing.IsActive, Sector = Existing.Sector };
         return Page();
@@ -52,6 +60,13 @@ public class EditModel : PageModel
         if (Input.OrganizationId is null && !Me.IsSuperAdmin) ModelState.AddModelError("Input.OrganizationId", "Scegli un gruppo valido.");
         var single = Input.OrganizationId is null;
         if (single && !Sectors.All.Any(s => s.Key == Input.Sector)) ModelState.AddModelError("Input.Sector", "Scegli il tipo di attività.");
+        decimal? feeValue = null;
+        if (Me.IsSuperAdmin && !string.IsNullOrWhiteSpace(Fee))
+        {
+            if (decimal.TryParse(Fee.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var fv) && fv >= 0 && fv < 100000) feeValue = Math.Round(fv, 2);
+            else ModelState.AddModelError("Fee", "Scrivi il canone in euro, ad esempio 49,90.");
+        }
+        if (Me.IsSuperAdmin && FeeFrom is DateTime ff && FeeTo is DateTime ft && ft < ff) ModelState.AddModelError("FeeTo", "La fine dell'abbonamento è prima dell'inizio.");
         if (!ModelState.IsValid) return Page();
 
         int id; int orgId;
@@ -72,6 +87,7 @@ public class EditModel : PageModel
             orgId = Input.OrganizationId!.Value;
             id = await _repos.SaveGymAsync(null, orgId, name, Input.City?.Trim(), Input.Address?.Trim(), Input.Phone?.Trim(), Input.IsActive);
         }
+        if (Me.IsSuperAdmin) await _repos.SaveFeeAsync(id, feeValue, FeeFrom?.Date, FeeTo?.Date);
         await _repos.AuditAsync(Me, IsNew ? "gym.created" : "gym.updated", name + (IsNew && single ? " (attività singola)" : ""), HttpContext.Connection.RemoteIpAddress?.ToString(), orgId, id);
         TempData["Ok"] = IsNew ? "Attività creata: ora aggiungi il suo amministratore e completa dati e logo." : "Attività aggiornata.";
         return Redirect(IsNew ? $"/Attivita/{id}" : "/Gyms");
@@ -80,6 +96,7 @@ public class EditModel : PageModel
     private async Task LoadAsync()
     {
         Me = User.Scope();
+        DefaultFee = HttpContext.RequestServices.GetRequiredService<AppConfigStore>().Current.Billing.DefaultMonthlyFeeEur;
         Groups = (await _repos.OrganizationsAsync(Me)).Where(o => o.IsGroup).ToList();
     }
 

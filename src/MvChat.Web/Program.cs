@@ -27,6 +27,7 @@ builder.Services.AddSingleton<AiQueue>();
 builder.Services.AddHostedService<AiWorker>();
 builder.Services.AddScoped<CampaignRepo>();
 builder.Services.AddScoped<ArchiveRepo>();
+builder.Services.AddScoped<MvChat.Web.Billing.BillingService>();
 builder.Services.AddScoped<MvChat.Web.Reports.ReportRepo>();
 builder.Services.AddScoped<MvChat.Web.Reports.AlertRepo>();
 builder.Services.AddScoped<QuickReplyRepo>();

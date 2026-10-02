@@ -206,6 +206,14 @@ public sealed class Repos
                 new { p.Name, p.Sector, p.OrganizationId, can = canChangeSector ? 1 : 0 });
     }
 
+    /// <summary>Abbonamento dell'attività: canone (vuoto = canone di base) e periodo in cui è attivo.</summary>
+    public async Task<(decimal? Fee, DateTime? From, DateTime? To)> FeeAsync(int gymId) =>
+        (await _db.QueryAsync("SELECT MonthlyFeeEur, FeeStartsOn, FeeEndsOn FROM Gyms WHERE Id=@gymId", new { gymId },
+            r => (r.IsDBNull(0) ? (decimal?)null : r.GetDecimal(0), r.Date("FeeStartsOn"), r.Date("FeeEndsOn")))).FirstOrDefault();
+
+    public Task SaveFeeAsync(int gymId, decimal? fee, DateTime? from, DateTime? to) => _db.ExecuteAsync(
+        "UPDATE Gyms SET MonthlyFeeEur=@fee, FeeStartsOn=@from, FeeEndsOn=@to WHERE Id=@gymId", new { gymId, fee, from, to });
+
     public Task SaveActivityLogoAsync(int gymId, byte[]? data, string? type) => _db.ExecuteAsync(
         "UPDATE Gyms SET LogoData=@data, LogoType=@type, UpdatedAt=UTC_TIMESTAMP() WHERE Id=@gymId", new { gymId, data, type });
 

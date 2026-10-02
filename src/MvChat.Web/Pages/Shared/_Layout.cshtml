@@ -18,6 +18,12 @@
     var accent = brand?.PrimaryColor ?? "#F6931E";
     // Avviso nel menu: conversazioni che aspettano una persona (solo dentro mvchat, nessuna email).
     var waiting = 0;
+    // I rendiconti dell'amministratore attività esistono solo per le attività singole (nei gruppi sono intestati al gruppo).
+    var inGroup = true;
+    if (scope?.IsManager == true && scope.OrganizationId is int mo && Config.Current.Installed)
+    {
+        try { inGroup = await Repos.IsGroupAsync(mo); } catch { inGroup = true; }
+    }
     if (scope is not null && Config.Current.Installed)
     {
         try { waiting = (await Convs.BadgeAsync(scope)).Count; } catch { waiting = 0; }
@@ -66,6 +72,11 @@ else
                     <a href="/Orgs" aria-current="@(Cur("/Orgs"))">Gruppi</a>
                     <a href="/Impostazioni/WhatsApp" aria-current="@(Cur("/Impostazioni/WhatsApp"))">Impostazioni Meta</a>
                     <a href="/Impostazioni/AI" aria-current="@(Cur("/Impostazioni/AI"))">Impostazioni AI</a>
+                    <a href="/Fatturazione" aria-current="@(Cur("/Fatturazione"))">Fatturazione</a>
+                }
+                @if (scope.IsOrgAdmin || (scope.IsManager && !inGroup))
+                {
+                    <a href="/Fatturazione" aria-current="@(Cur("/Fatturazione"))">Rendiconti</a>
                 }
                 @if (scope.IsOrgAdmin)
                 {

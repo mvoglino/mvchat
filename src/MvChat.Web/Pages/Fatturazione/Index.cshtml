@@ -1,0 +1,48 @@
+@page
+@model MvChat.Web.Pages.Fatturazione.IndexModel
+@using MvChat.Web.Billing
+@{
+    ViewData["Title"] = "Rendiconti · " + BillingService.MonthName(Model.Month);
+    var it = System.Globalization.CultureInfo.GetCultureInfo("it-IT");
+    string Eur(decimal v) => v.ToString("#,0.00", it) + " €";
+    var open = Model.Items.Count(x => !x.Closed);
+}
+@section Actions {
+    <a class="btn" href="/Fatturazione?mese=@Model.Month&handler=Csv">Scarica per Excel</a>
+    @if (Model.Me.IsSuperAdmin) { <a class="btn" href="/Impostazioni/Fatturazione">Impostazioni</a> }
+}
+<p class="muted" style="margin:0">@(Model.Me.IsSuperAdmin ? "Quanto fatturare a ogni cliente: abbonamento per ogni attività più il consumo dell'assistente AI. Le attività di un gruppo sono nel rendiconto del gruppo." : "Il riepilogo di quanto MVitalia ti fattura: abbonamento per ogni attività più il consumo dell'assistente AI.") Non è una fattura elettronica: è la base per emetterla.</p>
+<form method="get" class="inline-form"><div class="field" style="max-width:260px"><label for="mese">Mese</label><select id="mese" name="mese" onchange="this.form.submit()">@foreach (var m in Model.Months) { <option value="@m" selected="@(m == Model.Month)">@BillingService.MonthName(m)</option> }</select></div></form>
+@if (!Model.IsPastMonth) { <div class="note">Mese in corso: gli importi crescono man mano che l'assistente lavora.</div> }
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Intestatario</th><th class="num">Attività</th><th class="num">Abbonamenti</th><th class="num">Assistente AI</th><th class="num">Imponibile</th><th class="num">Con IVA</th><th>Stato</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var s in Model.Items)
+    {
+        <tr>
+            <td><b>@s.RecipientName</b><div class="muted">@(s.IsGroup ? "gruppo" : "attività singola")@(s.LegalName is null ? "" : " · " + s.LegalName)</div>@if (s.MissingData) {<span class="chip warn">mancano ragione sociale o P.IVA</span>}</td>
+            <td class="num">@s.Activities</td>
+            <td class="num">@Eur(s.Fees)</td>
+            <td class="num">@Eur(s.Ai)</td>
+            <td class="num"><b>@Eur(s.Subtotal)</b></td>
+            <td class="num">@Eur(s.Total)</td>
+            <td>@if (s.Closed) {<span class="chip good">Chiuso</span>} else {<span class="chip">Provvisorio</span>}</td>
+            <td><a class="btn sm" href="/Fatturazione/Dettaglio?mese=@Model.Month&org=@s.OrganizationId">Dettaglio</a>
+                @if (s.Closed && Model.Me.IsSuperAdmin) {<form method="post" asp-page-handler="Reopen" asp-route-mese="@Model.Month" asp-route-org="@s.OrganizationId" style="display:inline"><button class="btn sm" type="submit">Riapri</button></form>}</td>
+        </tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="8" class="muted">Niente da fatturare in questo mese.</td></tr> }
+    </tbody>
+    @if (Model.Items.Count > 1)
+    {
+        <tfoot><tr><td><b>Totale</b></td><td class="num">@Model.Items.Sum(x => x.Activities)</td><td class="num">@Eur(Model.Items.Sum(x => x.Fees))</td><td class="num">@Eur(Model.Items.Sum(x => x.Ai))</td><td class="num"><b>@Eur(Model.Items.Sum(x => x.Subtotal))</b></td><td class="num">@Eur(Model.Items.Sum(x => x.Total))</td><td></td><td></td></tr></tfoot>
+    }
+</table></div>
+@if (Model.Me.IsSuperAdmin && Model.IsPastMonth && open > 0)
+{
+    <form method="post" asp-page-handler="Close" asp-route-mese="@Model.Month" class="actions" onsubmit="return confirm('Chiudere @BillingService.MonthName(Model.Month)? I rendiconti non cambieranno più (si possono riaprire uno per uno).')">
+        <span class="muted" style="flex:1">@open rendiconti provvisori. Chiudendo il mese gli importi vengono fissati con il cambio e il ricarico di oggi.</span>
+        <button class="btn primary" type="submit">Chiudi il mese</button>
+    </form>
+}
+</section>

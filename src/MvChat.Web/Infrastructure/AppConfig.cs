@@ -18,6 +18,22 @@ public sealed class AppConfig
     public DateTime? InstalledAt { get; set; }
     public MetaSettings Meta { get; set; } = new();
     public AiSettings Ai { get; set; } = new();
+    public BillingSettings Billing { get; set; } = new();
+}
+
+/// <summary>Regole con cui MVitalia rifattura il servizio. Quando un mese viene chiuso, i valori usati restano salvati nel rendiconto.</summary>
+public sealed class BillingSettings
+{
+    /// <summary>Canone mensile di base per ogni attività (si può cambiare attività per attività).</summary>
+    public decimal DefaultMonthlyFeeEur { get; set; }
+    /// <summary>Ricarico sul costo del fornitore AI.</summary>
+    public decimal AiMarkupPct { get; set; } = 20m;
+    /// <summary>Quanti euro vale un dollaro: il fornitore AI fattura in dollari.</summary>
+    public decimal UsdToEur { get; set; } = 0.90m;
+    public decimal VatPct { get; set; } = 22m;
+    /// <summary>Chi emette i rendiconti: nome e dati (ragione sociale, P.IVA, indirizzo) stampati in testa.</summary>
+    public string IssuerName { get; set; } = "MVitalia";
+    public string? IssuerDetails { get; set; }
 }
 
 /// <summary>Fornitore AI scelto da MVitalia. Le chiavi sono salvate cifrate.</summary>
