@@ -1,9 +1,9 @@
 @page
 @model MvChat.Web.Pages.Sedi.IndexModel
-@{ ViewData["Title"] = "Scheda sede"; }
+@{ ViewData["Title"] = "Scheda attività"; }
 <p class="muted" style="margin:0">La scheda contiene le informazioni con cui l'assistente risponde alle domande dei clienti: orari, servizi, corsi, come arrivare. I prezzi non stanno qui: si scrivono nelle offerte.</p>
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Sede</th><th>Completezza</th><th></th></tr></thead>
+    <thead><tr><th>Attività</th><th>Completezza</th><th></th></tr></thead>
     <tbody>
     @foreach (var g in Model.Gyms)
     {
@@ -12,6 +12,6 @@
             <td><div class="bar" style="max-width:220px"><i style="width:@(c)%"></i></div><span class="muted">@c%</span></td>
             <td><a class="btn sm" href="/Sedi/Edit/@g.Id">@(c == 0 ? "Compila" : "Modifica")</a> <a class="btn sm" href="/Sedi/Orari/@g.Id">Orari di invio</a></td></tr>
     }
-    @if (Model.Gyms.Count == 0) { <tr><td colspan="3" class="muted">Nessuna sede attiva.</td></tr> }
+    @if (Model.Gyms.Count == 0) { <tr><td colspan="3" class="muted">Nessuna attività attiva.</td></tr> }
     </tbody>
 </table></div></section>

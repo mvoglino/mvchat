@@ -2,7 +2,7 @@
 @model MvChat.Web.Pages.Modelli.IndexModel
 @{ ViewData["Title"] = "Modelli di obiettivo"; var canCreate = Model.Me.IsSuperAdmin || Model.Me.IsOrgAdmin; }
 @section Actions { @if (canCreate) {<a class="btn primary" href="/Modelli/Edit">Nuovo modello</a>} <a class="btn" href="/Modelli/Anteprima">Prova le istruzioni</a> }
-<p class="muted" style="margin:0">Il modello dice all'assistente cosa deve ottenere nella conversazione. Quelli standard li cura MVitalia; ogni struttura può aggiungerne di suoi.</p>
+<p class="muted" style="margin:0">Il modello dice all'assistente cosa deve ottenere nella conversazione. Quelli standard li cura MVitalia; ogni gruppo può aggiungerne di suoi.</p>
 <section class="panel"><div class="tbl"><table>
     <thead><tr><th>Modello</th><th>Successo quando</th><th>Offerta</th><th>Tipo</th><th>Stato</th><th></th></tr></thead>
     <tbody>
@@ -10,7 +10,7 @@
     {
         <tr><td><b>@m.Name</b></td><td class="muted">@m.Success</td>
             <td>@(m.NeedsOffer ? "Serve" : "Facoltativa")</td>
-            <td>@(m.IsStandard ? "Standard MVitalia" : "Della struttura" + (Model.Me.IsSuperAdmin ? " · " + m.OrganizationName : ""))</td>
+            <td>@(m.IsStandard ? "Standard MVitalia" : "Del gruppo" + (Model.Me.IsSuperAdmin ? " · " + m.OrganizationName : ""))</td>
             <td><span class="chip @(m.IsActive ? "good" : "")">@(m.IsActive ? "Attivo" : "Disattivato")</span></td>
             <td style="white-space:nowrap"><a class="btn sm" href="/Modelli/Anteprima?model=@m.Id">Prova</a> @if (CatalogRepo.CanEdit(Model.Me, m)) {<a class="btn sm" href="/Modelli/Edit/@m.Id">Modifica</a>}</td></tr>
     }

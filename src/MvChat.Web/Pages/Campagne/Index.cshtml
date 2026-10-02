@@ -2,13 +2,13 @@
 @model MvChat.Web.Pages.Campagne.IndexModel
 @{ ViewData["Title"] = "Campagne"; var many = Model.Gyms.Count > 1; }
 @section Actions { <a class="btn primary" href="/Campagne/Nuova@(Model.Gym is int g ? "?gym=" + g : "")">Nuova campagna</a> }
-<p class="muted" style="margin:0">Una campagna manda il primo messaggio (template approvato) a tutti i contatti di una lista; poi l'assistente porta avanti ogni conversazione verso l'obiettivo. Gli invii rispettano gli orari della sede e i limiti di Meta.</p>
+<p class="muted" style="margin:0">Una campagna manda il primo messaggio (template approvato) a tutti i contatti di una lista; poi l'assistente porta avanti ogni conversazione verso l'obiettivo. Gli invii rispettano gli orari dell'attività e i limiti di Meta.</p>
 @if (many)
 {
-    <form method="get" class="inline-form"><div class="field" style="max-width:300px"><label for="gym">Sede</label><select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+    <form method="get" class="inline-form"><div class="field" style="max-width:300px"><label for="gym">Attività</label><select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
 }
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Campagna</th>@if (many) {<th>Sede</th>}<th>Stato</th><th>Inviati</th><th>Risposte</th><th>Obiettivo raggiunto</th><th>Creata</th><th></th></tr></thead>
+    <thead><tr><th>Campagna</th>@if (many) {<th>Attività</th>}<th>Stato</th><th>Inviati</th><th>Risposte</th><th>Obiettivo raggiunto</th><th>Creata</th><th></th></tr></thead>
     <tbody>
     @foreach (var c in Model.Items)
     {

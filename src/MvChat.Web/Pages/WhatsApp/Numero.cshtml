@@ -24,7 +24,7 @@
             <label class="check"><input type="radio" name="Mode" value="simulato" checked="@(Model.Mode != "meta")"> Simulato: nessun messaggio esce davvero, per prove e dimostrazioni</label>
             <label class="check"><input type="radio" name="Mode" value="meta" checked="@(Model.Mode == "meta")"> Meta: numero vero collegato alla WhatsApp Cloud API</label></div>
         <div class="field"><label asp-for="DisplayPhone">Numero di telefono</label><input asp-for="DisplayPhone" placeholder="es. 0173 123456 o 333 1234567"></div>
-        <div class="field"><label asp-for="DisplayName">Nome visualizzato</label><input asp-for="DisplayName"><small>Su Meta va approvato: di solito il nome della sede.</small></div>
+        <div class="field"><label asp-for="DisplayName">Nome visualizzato</label><input asp-for="DisplayName"><small>Su Meta va approvato: di solito il nome dell'attività.</small></div>
         <div class="field"><label asp-for="PhoneNumberId">Phone number ID (solo Meta)</label><input asp-for="PhoneNumberId" inputmode="numeric" autocomplete="off"></div>
         <div class="field"><label asp-for="WabaId">WhatsApp Business Account ID (solo Meta)</label><input asp-for="WabaId" inputmode="numeric" autocomplete="off"></div>
         <div class="field full"><label asp-for="AccessToken">Chiave di accesso (solo Meta)</label><input asp-for="AccessToken" type="password" autocomplete="off" placeholder="@(n?.HasToken == true ? "già inserita · lascia vuoto per non cambiarla" : "")"><small>Viene salvata cifrata e non si rivede più.</small></div>
@@ -35,7 +35,7 @@
 }
 else if (n is null)
 {
-    <div class="note">Il numero WhatsApp di questa sede non è ancora collegato. Lo collega la direzione della struttura o MVitalia.</div>
+    <div class="note">Il numero WhatsApp di quest'attività non è ancora collegato. Lo collega MVitalia o l'amministratore del gruppo.</div>
 }
 
 @if (n is not null)

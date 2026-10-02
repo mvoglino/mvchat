@@ -7,7 +7,7 @@
         @if (Model.IsNew && Model.Me.IsSuperAdmin)
         {
             <div class="field full"><label asp-for="Input.OrganizationId">Vale per</label>
-                <select asp-for="Input.OrganizationId" asp-items="@(new SelectList(Model.Orgs, "Id", "Name"))"><option value="">Tutte le strutture (standard MVitalia)</option></select>
+                <select asp-for="Input.OrganizationId" asp-items="@(new SelectList(Model.Orgs, "Id", "Name"))"><option value="">Tutti i gruppi (standard MVitalia)</option></select>
                 <span asp-validation-for="Input.OrganizationId" class="field-error"></span></div>
         }
         <div class="field"><label asp-for="Input.Name">Nome</label><input asp-for="Input.Name" placeholder="es. Rinnovo con prova corso"><span asp-validation-for="Input.Name" class="field-error"></span></div>

@@ -4,9 +4,9 @@ using MvChat.Web.Security;
 
 namespace MvChat.Web.Data;
 
-public sealed record Organization(int Id, string Name, string Slug, string? LogoUrl, string PrimaryColor, string? VatNumber, string? BillingEmail, bool IsActive, int Gyms, int Users, string Sector);
+public sealed record Organization(int Id, string Name, string Slug, string? LogoUrl, string PrimaryColor, string? VatNumber, string? BillingEmail, bool IsActive, int Gyms, int Users, string Sector, bool IsGroup);
 
-/// <summary>Dati dell'attività di una struttura: personalizzabili da MVitalia e dalla direzione della struttura.</summary>
+/// <summary>Dati dell'attività di un gruppo: personalizzabili da MVitalia e dalla direzione del gruppo.</summary>
 public sealed class OrgProfile
 {
     public int Id { get; set; }
@@ -25,13 +25,39 @@ public sealed class OrgProfile
     public string? LogoUrl { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
-public sealed record Gym(int Id, int OrganizationId, string OrganizationName, string Name, string? City, string? Address, string? Phone, bool IsActive, int Users);
+/// <summary>Un'attività (nel codice «Gym»). InGroup = fa parte di un gruppo; altrimenti è un'attività singola.</summary>
+public sealed record Gym(int Id, int OrganizationId, string OrganizationName, string Name, string? City, string? Address, string? Phone, bool IsActive, int Users,
+    bool InGroup = true, string Sector = "palestra", string? OwnSector = null);
+
+/// <summary>Dati propri di un'attività: tipo (se diverso dal gruppo), nome legale, logo, presentazione.</summary>
+public sealed class ActivityProfile
+{
+    public int Id { get; set; }
+    public int OrganizationId { get; set; }
+    public string GroupName { get; set; } = "";
+    public bool InGroup { get; set; }
+    public string GroupSector { get; set; } = "palestra";
+    public string Name { get; set; } = "";
+    public string? Sector { get; set; }
+    public string? PrimaryColor { get; set; }
+    public string? LegalName { get; set; }
+    public string? VatNumber { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? Phone { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? Website { get; set; }
+    public string? Description { get; set; }
+    public bool HasLogo { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string EffectiveSector => Sector ?? GroupSector;
+}
 public sealed record UserRow(int Id, int? OrganizationId, string? OrganizationName, int? GymId, string? GymName, string Email, string FullName, string Role, bool IsActive, DateTime? LastLoginAt);
 public sealed record UserAuth(int Id, int? OrganizationId, int? GymId, string Email, string FullName, string PasswordHash, string Role, bool IsActive, int FailedLogins, DateTime? LockedUntil, bool MustChangePassword, bool OrgActive);
 public sealed record Branding(string Name, string? LogoUrl, string PrimaryColor, string Sector);
 
 /// <summary>
-/// Query su strutture, sedi e utenti. Ogni lettura riceve lo Scope di chi chiede
+/// Query su gruppi, attività e utenti. Ogni lettura riceve lo Scope di chi chiede
 /// e lo traduce in un filtro SQL: nessuna pagina può dimenticarsi di filtrare.
 /// </summary>
 public sealed class Repos
@@ -39,9 +65,9 @@ public sealed class Repos
     private readonly Db _db;
     public Repos(Db db) => _db = db;
 
-    // ---------- Strutture ----------
+    // ---------- Gruppi ----------
     public Task<List<Organization>> OrganizationsAsync(Scope s) => _db.QueryAsync(
-        @"SELECT o.Id, o.Name, o.Slug, o.LogoUrl, o.PrimaryColor, o.VatNumber, o.BillingEmail, o.IsActive, o.Sector,
+        @"SELECT o.Id, o.Name, o.Slug, o.LogoUrl, o.PrimaryColor, o.VatNumber, o.BillingEmail, o.IsActive, o.Sector, o.IsGroup,
                  (SELECT COUNT(*) FROM Gyms g WHERE g.OrganizationId=o.Id) AS GymCount,
                  (SELECT COUNT(*) FROM Users u WHERE u.OrganizationId=o.Id) AS UserCount
           FROM Organizations o WHERE (@All=1 OR o.Id=@Org) ORDER BY o.Name",
@@ -64,6 +90,8 @@ public sealed class Repos
         return id.Value;
     }
 
+    public async Task<bool> IsGroupAsync(int orgId) => await _db.ScalarAsync<int>("SELECT IsGroup FROM Organizations WHERE Id=@orgId", new { orgId }) == 1;
+
     public Task<OrgProfile?> OrgProfileAsync(int orgId) => _db.FirstAsync(
         @"SELECT Id, Name, Sector, PrimaryColor, LegalName, VatNumber, Address, City, Phone, ContactEmail, Website, Description, LogoUrl, UpdatedAt,
                  LogoData IS NOT NULL AS HasLogo FROM Organizations WHERE Id=@orgId", new { orgId },
@@ -75,7 +103,7 @@ public sealed class Repos
             UpdatedAt = r.Date("UpdatedAt"), HasLogo = Convert.ToInt32(r.GetValue(r.GetOrdinal("HasLogo"))) == 1
         });
 
-    /// <summary>Dati dell'attività e aspetto: li cura MVitalia o la direzione della struttura. Il tipo di attività lo cambia solo MVitalia.</summary>
+    /// <summary>Dati dell'attività e aspetto: li cura MVitalia o la direzione del gruppo. Il tipo di attività lo cambia solo MVitalia.</summary>
     public Task SaveOrgProfileAsync(OrgProfile p, bool canChangeSector) => _db.ExecuteAsync(
         @"UPDATE Organizations SET Name=@Name, PrimaryColor=@PrimaryColor, LegalName=@LegalName, VatNumber=@VatNumber, Address=@Address, City=@City,
             Phone=@Phone, ContactEmail=@ContactEmail, Website=@Website, Description=@Description,
@@ -101,11 +129,12 @@ public sealed class Repos
 
     private static Organization MapOrg(DbDataReader r) => new(
         r.Int("Id"), r.Str("Name")!, r.Str("Slug")!, r.Str("LogoUrl"), r.Str("PrimaryColor")!, r.Str("VatNumber"),
-        r.Str("BillingEmail"), r.Bool("IsActive"), Convert.ToInt32(r["GymCount"]), Convert.ToInt32(r["UserCount"]), r.Str("Sector") ?? "palestra");
+        r.Str("BillingEmail"), r.Bool("IsActive"), Convert.ToInt32(r["GymCount"]), Convert.ToInt32(r["UserCount"]), r.Str("Sector") ?? "palestra", r.Bool("IsGroup"));
 
-    // ---------- Sedi ----------
+    // ---------- Attività ----------
     private const string GymSelect =
-        @"SELECT g.*, o.Name AS OrgName, (SELECT COUNT(*) FROM Users u WHERE u.GymId=g.Id) AS UserCount
+        @"SELECT g.Id, g.OrganizationId, g.Name, g.City, g.Address, g.Phone, g.IsActive, g.Sector AS OwnSector, o.Name AS OrgName, o.IsGroup,
+                 COALESCE(g.Sector, o.Sector) AS Sector, (SELECT COUNT(*) FROM Users u WHERE u.GymId=g.Id) AS UserCount
           FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId
           WHERE (@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR g.Id=@Gym)";
 
@@ -131,12 +160,76 @@ public sealed class Repos
         await _db.ExecuteAsync(
             "UPDATE Gyms SET Name=@name, City=@city, Address=@address, Phone=@phone, IsActive=@active WHERE Id=@id AND OrganizationId=@orgId",
             new { id, orgId, name, city, address, phone, active });
+        // Attività singola: il suo contenitore segue nome e stato dell'attività (se è sospesa, i suoi utenti non entrano).
+        await _db.ExecuteAsync("UPDATE Organizations SET Name=@name, IsActive=@active WHERE Id=@orgId AND IsGroup=0", new { orgId, name, active });
         return id.Value;
     }
 
+    /// <summary>Un'attività che non fa parte di un gruppo: si crea insieme al suo contenitore (non visibile come gruppo).</summary>
+    public async Task<(int OrgId, int GymId)> CreateSingleActivityAsync(string name, string slug, string sector, string? city, string? address, string? phone, bool active)
+    {
+        await using var cn = await _db.OpenAsync();
+        await using var tx = await cn.BeginTransactionAsync();
+        int orgId, gymId;
+        await using (var c1 = Db.Command(cn, @"INSERT INTO Organizations (Name, Slug, Sector, IsActive, IsGroup) VALUES (@name, @slug, @sector, @active, 0); SELECT LAST_INSERT_ID();",
+            new { name, slug, sector, active }, tx)) orgId = Convert.ToInt32(await c1.ExecuteScalarAsync());
+        await using (var c2 = Db.Command(cn, @"INSERT INTO Gyms (OrganizationId, Name, City, Address, Phone, IsActive) VALUES (@orgId, @name, @city, @address, @phone, @active); SELECT LAST_INSERT_ID();",
+            new { orgId, name, city, address, phone, active }, tx)) gymId = Convert.ToInt32(await c2.ExecuteScalarAsync());
+        await tx.CommitAsync();
+        return (orgId, gymId);
+    }
+
+    public Task<ActivityProfile?> ActivityProfileAsync(int gymId) => _db.FirstAsync(
+        @"SELECT g.Id, g.OrganizationId, o.Name AS GroupName, o.IsGroup, o.Sector AS GroupSector, g.Name, g.Sector, g.PrimaryColor, g.LegalName, g.VatNumber,
+                 g.Address, g.City, g.Phone, g.ContactEmail, g.Website, g.Description, g.UpdatedAt, g.LogoData IS NOT NULL AS HasLogo
+          FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId WHERE g.Id=@gymId", new { gymId },
+        r => new ActivityProfile
+        {
+            Id = r.Int("Id"), OrganizationId = r.Int("OrganizationId"), GroupName = r.Str("GroupName")!, InGroup = r.Bool("IsGroup"),
+            GroupSector = r.Str("GroupSector") ?? "palestra", Name = r.Str("Name")!, Sector = r.Str("Sector"), PrimaryColor = r.Str("PrimaryColor"),
+            LegalName = r.Str("LegalName"), VatNumber = r.Str("VatNumber"), Address = r.Str("Address"), City = r.Str("City"), Phone = r.Str("Phone"),
+            ContactEmail = r.Str("ContactEmail"), Website = r.Str("Website"), Description = r.Str("Description"), UpdatedAt = r.Date("UpdatedAt"),
+            HasLogo = Convert.ToInt32(r.GetValue(r.GetOrdinal("HasLogo"))) == 1
+        });
+
+    /// <summary>Salva i dati propri dell'attività. Per un'attività singola il tipo di attività sta nel suo contenitore.</summary>
+    public async Task SaveActivityProfileAsync(ActivityProfile p, bool canChangeSector)
+    {
+        await _db.ExecuteAsync(
+            @"UPDATE Gyms SET Name=@Name, PrimaryColor=@PrimaryColor, LegalName=@LegalName, VatNumber=@VatNumber, Address=@Address, City=@City, Phone=@Phone,
+                ContactEmail=@ContactEmail, Website=@Website, Description=@Description,
+                Sector=CASE WHEN @canChangeSector=1 AND @InGroup=1 THEN @Sector ELSE Sector END, UpdatedAt=UTC_TIMESTAMP() WHERE Id=@Id",
+            new { p.Id, p.Name, p.PrimaryColor, p.LegalName, p.VatNumber, p.Address, p.City, p.Phone, p.ContactEmail, p.Website, p.Description, p.Sector,
+                  InGroup = p.InGroup ? 1 : 0, canChangeSector = canChangeSector ? 1 : 0 });
+        if (!p.InGroup)
+            await _db.ExecuteAsync("UPDATE Organizations SET Name=@Name, Sector=CASE WHEN @can=1 AND @Sector IS NOT NULL THEN @Sector ELSE Sector END WHERE Id=@OrganizationId AND IsGroup=0",
+                new { p.Name, p.Sector, p.OrganizationId, can = canChangeSector ? 1 : 0 });
+    }
+
+    public Task SaveActivityLogoAsync(int gymId, byte[]? data, string? type) => _db.ExecuteAsync(
+        "UPDATE Gyms SET LogoData=@data, LogoType=@type, UpdatedAt=UTC_TIMESTAMP() WHERE Id=@gymId", new { gymId, data, type });
+
+    public async Task<(byte[] Data, string Type, DateTime? At)?> ActivityLogoAsync(int gymId)
+    {
+        var rows = await _db.QueryAsync("SELECT LogoData, LogoType, UpdatedAt FROM Gyms WHERE Id=@gymId AND LogoData IS NOT NULL", new { gymId },
+            r => ((byte[])r.GetValue(0), r.Str("LogoType") ?? "image/png", r.Date("UpdatedAt")));
+        return rows.Count == 0 ? null : rows[0];
+    }
+
+    /// <summary>Come appare mvchat a chi lavora in un'attività: nome, logo e colore dell'attività, altrimenti quelli del gruppo.</summary>
+    public Task<Branding?> ActivityBrandingAsync(int gymId) => _db.FirstAsync(
+        @"SELECT g.Id, g.Name, o.Id AS OrgId, o.Name AS OrgName, COALESCE(g.PrimaryColor, o.PrimaryColor) AS Color, COALESCE(g.Sector, o.Sector) AS Sector,
+                 g.LogoData IS NOT NULL AS GymLogo, o.LogoData IS NOT NULL AS OrgLogo, o.LogoUrl, g.UpdatedAt AS GymAt, o.UpdatedAt AS OrgAt
+          FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId WHERE g.Id=@gymId", new { gymId },
+        r => new Branding(r.Str("Name")!,
+            Convert.ToInt32(r.GetValue(r.GetOrdinal("GymLogo"))) == 1 ? $"/logo/a/{r.Int("Id")}?v={(r.Date("GymAt") ?? DateTime.MinValue).Ticks}"
+            : Convert.ToInt32(r.GetValue(r.GetOrdinal("OrgLogo"))) == 1 ? $"/logo/{r.Int("OrgId")}?v={(r.Date("OrgAt") ?? DateTime.MinValue).Ticks}"
+            : r.Str("LogoUrl"),
+            r.Str("Color")!, r.Str("Sector") ?? "palestra"));
+
     private static Gym MapGym(DbDataReader r) => new(
         r.Int("Id"), r.Int("OrganizationId"), r.Str("OrgName")!, r.Str("Name")!, r.Str("City"), r.Str("Address"),
-        r.Str("Phone"), r.Bool("IsActive"), Convert.ToInt32(r["UserCount"]));
+        r.Str("Phone"), r.Bool("IsActive"), Convert.ToInt32(r["UserCount"]), r.Bool("IsGroup"), r.Str("Sector") ?? "palestra", r.Str("OwnSector"));
 
     // ---------- Utenti ----------
     public Task<List<UserRow>> UsersAsync(Scope s) => _db.QueryAsync(

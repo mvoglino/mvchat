@@ -8,7 +8,7 @@ using MvChat.Web.Security;
 
 namespace MvChat.Web.Pages.Orgs;
 
-/// <summary>Abilitazione di una struttura da parte di MVitalia. Logo e dati dell'attività stanno nella pagina «Dati e logo».</summary>
+/// <summary>Abilitazione di un gruppo da parte di MVitalia. Logo e dati dell'attività stanno nella pagina «Dati e logo».</summary>
 public class EditModel : PageModel
 {
     private readonly Repos _repos;
@@ -21,7 +21,7 @@ public class EditModel : PageModel
     {
         if (id is null) return Page();
         var o = await _repos.OrganizationAsync(User.Scope(), id.Value);
-        if (o is null) return NotFound();
+        if (o is null || !o.IsGroup) return NotFound(); // le attività singole si modificano da «Attività»
         Input = new OrgInput { Id = o.Id, Name = o.Name, Slug = o.Slug, Sector = o.Sector, BillingEmail = o.BillingEmail, IsActive = o.IsActive };
         return Page();
     }
@@ -30,6 +30,7 @@ public class EditModel : PageModel
     {
         Input.Slug = Slugify(string.IsNullOrWhiteSpace(Input.Slug) ? Input.Name : Input.Slug);
         if (!Sectors.All.Any(s => s.Key == Input.Sector)) ModelState.AddModelError("Input.Sector", "Scegli il tipo di attività.");
+        if (Input.Id is int eid && (await _repos.OrganizationAsync(User.Scope(), eid)) is not { IsGroup: true }) return NotFound();
         if (!ModelState.IsValid) return Page();
         int id;
         try
@@ -39,11 +40,11 @@ public class EditModel : PageModel
         }
         catch (Exception ex) when (ex.Message.Contains("Duplicate", StringComparison.OrdinalIgnoreCase))
         {
-            ModelState.AddModelError("Input.Slug", "Questo codice è già usato da un'altra struttura.");
+            ModelState.AddModelError("Input.Slug", "Questo codice è già usato da un altro gruppo.");
             return Page();
         }
-        TempData["Ok"] = IsNew ? "Struttura abilitata: ora completa logo e dati dell'attività." : "Struttura aggiornata.";
-        return Redirect(IsNew ? $"/Struttura/{id}" : "/Orgs");
+        TempData["Ok"] = IsNew ? "Gruppo abilitato: ora completa logo e dati del gruppo, poi crea le sue attività." : "Gruppo aggiornato.";
+        return Redirect(IsNew ? $"/Gruppo/{id}" : "/Orgs");
     }
 
     private static string Slugify(string s) =>
@@ -52,7 +53,7 @@ public class EditModel : PageModel
     public class OrgInput
     {
         public int? Id { get; set; }
-        [Required(ErrorMessage = "Indica il nome della struttura."), StringLength(150)] public string Name { get; set; } = "";
+        [Required(ErrorMessage = "Indica il nome del gruppo."), StringLength(150)] public string Name { get; set; } = "";
         [StringLength(60)] public string Slug { get; set; } = "";
         public string Sector { get; set; } = "palestra";
         [EmailAddress(ErrorMessage = "Email non valida.")] public string? BillingEmail { get; set; }

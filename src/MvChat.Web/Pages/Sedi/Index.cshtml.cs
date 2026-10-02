@@ -18,7 +18,7 @@ public class IndexModel : PageModel
     {
         var me = User.Scope();
         Gyms = (await _repos.GymsAsync(me)).Where(g => g.IsActive).ToList();
-        // Il responsabile ha una sola sede: si va dritti alla sua scheda.
+        // Il responsabile ha una sola attività: si va dritti alla sua scheda.
         if (me.IsManager && Gyms.Count == 1) return Redirect($"/Sedi/Edit/{Gyms[0].Id}");
         Completeness = await _catalog.CompletenessAsync(Gyms.Select(g => g.Id));
         return Page();

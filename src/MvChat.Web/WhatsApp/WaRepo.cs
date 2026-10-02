@@ -58,7 +58,7 @@ public sealed class WaRepo
         NumberSelect + " WHERE (@All=1 OR (@IsOrg=1 AND n.OrganizationId=@Org) OR n.GymId=@Gym) ORDER BY g.Name",
         new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1 }, MapNumber);
 
-    /// <summary>Numero di una sede, senza filtro di perimetro: chi chiama deve aver già controllato la sede.</summary>
+    /// <summary>Numero di un'attività, senza filtro di perimetro: chi chiama deve aver già controllato l'attività.</summary>
     public Task<WaNumber?> NumberForGymAsync(int gymId) => _db.FirstAsync(NumberSelect + " WHERE n.GymId=@gymId", new { gymId }, MapNumber);
     public Task<WaNumber?> NumberAsync(int id) => _db.FirstAsync(NumberSelect + " WHERE n.Id=@id", new { id }, MapNumber);
     public Task<WaNumber?> NumberByPhoneNumberIdAsync(string phoneNumberId) =>

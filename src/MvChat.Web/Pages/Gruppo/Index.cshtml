@@ -1,7 +1,7 @@
 @page "{id:int?}"
-@model MvChat.Web.Pages.Struttura.IndexModel
+@model MvChat.Web.Pages.Gruppo.IndexModel
 @{ ViewData["Title"] = "Dati e logo · " + Model.P.Name; var sector = Sectors.Get(Model.P.Sector); var logo = Model.P.HasLogo ? $"/logo/{Model.P.Id}?v={(Model.P.UpdatedAt ?? DateTime.MinValue).Ticks}" : Model.P.LogoUrl; }
-<p class="muted" style="margin:0">Come la struttura appare in mvchat e cosa l'assistente sa dell'attività. Le informazioni delle singole sedi (orari, servizi, come arrivare) si scrivono nella <a href="/Sedi">scheda sede</a>.</p>
+<p class="muted" style="margin:0">Come il gruppo appare in mvchat e cosa l'assistente sa del gruppo. Le informazioni delle singole attività (orari, servizi, come arrivare) si scrivono nella <a href="/Sedi">scheda attività</a>.</p>
 <form method="post" enctype="multipart/form-data" class="panel">
     <div class="panel-h"><h2>Aspetto</h2></div>
     <div class="panel-b form">

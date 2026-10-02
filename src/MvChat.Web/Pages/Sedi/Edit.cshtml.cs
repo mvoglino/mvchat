@@ -22,7 +22,7 @@ public class EditModel : PageModel
         var g = await _repos.GymAsync(User.Scope(), id);
         if (g is null) return NotFound();
         Gym = g;
-        Sector = (await _catalog.OrgInfoAsync(g.OrganizationId))?.Sector ?? Sector;
+        Sector = MvChat.Web.Infrastructure.Sectors.Get(g.Sector);
         var p = await _catalog.ProfileAsync(id);
         Input = new ProfileInput { OpeningHours = p.OpeningHours, Services = p.Services, Classes = p.Classes, HowToReach = p.HowToReach,
             ExtraInfo = p.ExtraInfo, AssistantName = p.AssistantName, Formality = p.Formality };
@@ -35,7 +35,7 @@ public class EditModel : PageModel
         var g = await _repos.GymAsync(me, id);
         if (g is null) return NotFound();
         Gym = g;
-        Sector = (await _catalog.OrgInfoAsync(g.OrganizationId))?.Sector ?? Sector;
+        Sector = MvChat.Web.Infrastructure.Sectors.Get(g.Sector);
         if (Input.Formality is not ("tu" or "lei")) Input.Formality = "tu";
         if (!ModelState.IsValid) return Page();
         await _catalog.SaveProfileAsync(new GymProfile

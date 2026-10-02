@@ -1,0 +1,42 @@
+@page "{id:int?}"
+@model MvChat.Web.Pages.Attivita.IndexModel
+@{
+    ViewData["Title"] = "Dati e logo · " + Model.P.Name;
+    var sector = Sectors.Get(Model.P.EffectiveSector);
+    var logo = Model.P.HasLogo ? $"/logo/a/{Model.P.Id}?v={(Model.P.UpdatedAt ?? DateTime.MinValue).Ticks}" : null;
+}
+@section Actions { <a class="btn" href="/Sedi/Edit/@Model.P.Id">Scheda per l'assistente</a> }
+<p class="muted" style="margin:0">@(Model.P.InGroup ? $"Fa parte del gruppo {Model.P.GroupName}. Logo e colore vuoti = quelli del gruppo." : "Attività singola.") Orari, servizi e informazioni per i clienti si scrivono nella scheda per l'assistente.</p>
+<form method="post" enctype="multipart/form-data" class="panel">
+    <div class="panel-h"><h2>Aspetto</h2></div>
+    <div class="panel-b form">
+        <div class="field"><label asp-for="Input.Name">Nome dell'attività</label><input asp-for="Input.Name"><span asp-validation-for="Input.Name" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.PrimaryColor">Colore principale</label><input asp-for="Input.PrimaryColor" placeholder="@(Model.P.InGroup ? "vuoto = colore del gruppo" : "#F6931E")"><small>Formato #RRGGBB, es. #F6931E.</small><span asp-validation-for="Input.PrimaryColor" class="field-error"></span></div>
+        <div class="field"><label for="Logo">Logo</label>
+            @if (logo is not null) { <img src="@logo" alt="Logo di @Model.P.Name" class="logo-preview"> }
+            <input id="Logo" name="Logo" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG o WebP, massimo 300 KB.</small><span asp-validation-for="Logo" class="field-error"></span>
+            @if (Model.P.HasLogo) { <label class="check"><input type="checkbox" name="RemoveLogo" value="true"> Togli il logo</label> }</div>
+        <div class="field"><label asp-for="Input.Sector">Tipo di attività</label>
+            @if (Model.CanChangeSector)
+            {
+                <select asp-for="Input.Sector">
+                    @if (Model.P.InGroup) { <option value="">Come il gruppo (@Sectors.Get(Model.P.GroupSector).Label)</option> }
+                    @foreach (var s in Sectors.All) { <option value="@s.Key">@s.Label</option> }
+                </select>
+            }
+            else { <input value="@sector.Label" disabled><input type="hidden" asp-for="Input.Sector"> }
+            <small>Con i clienti l'assistente parla di «@sector.Customer» e «@sector.Membership».</small></div>
+    </div>
+    <div class="panel-h" style="border-top:1px solid var(--line)"><h2>Dati dell'attività</h2></div>
+    <div class="panel-b form">
+        <div class="field"><label asp-for="Input.LegalName">Ragione sociale</label><input asp-for="Input.LegalName"></div>
+        <div class="field"><label asp-for="Input.VatNumber">Partita IVA</label><input asp-for="Input.VatNumber"></div>
+        <div class="field"><label asp-for="Input.Address">Indirizzo</label><input asp-for="Input.Address"></div>
+        <div class="field"><label asp-for="Input.City">Città</label><input asp-for="Input.City"></div>
+        <div class="field"><label asp-for="Input.Phone">Telefono</label><input asp-for="Input.Phone"></div>
+        <div class="field"><label asp-for="Input.ContactEmail">Email</label><input asp-for="Input.ContactEmail" type="email"><span asp-validation-for="Input.ContactEmail" class="field-error"></span></div>
+        <div class="field full"><label asp-for="Input.Website">Sito internet</label><input asp-for="Input.Website" placeholder="https://"><span asp-validation-for="Input.Website" class="field-error"></span></div>
+        <div class="field full"><label asp-for="Input.Description">Chi siamo</label><textarea asp-for="Input.Description" rows="4" placeholder="Due o tre frasi su questa attività: cosa offre, cosa la rende diversa. L'assistente le usa per presentarla."></textarea><small>Niente prezzi qui: si scrivono nelle offerte.</small></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
+</form>

@@ -29,7 +29,7 @@ public class NewModel : PageModel
     {
         var me = User.Scope();
         var gym = await _repos.GymAsync(me, req.GymId);
-        if (gym is null || !gym.IsActive) return Problem("Scegli una sede valida.");
+        if (gym is null || !gym.IsActive) return Problem("Scegli un'attività valida.");
         if (string.IsNullOrWhiteSpace(req.Name)) return Problem("Dai un nome alla lista.");
         if (req.Map.Phone < 0 || req.Map.FirstName < 0 || req.Map.Consent < 0)
             return Problem("Indica quali colonne contengono nome, cellulare e consenso.");

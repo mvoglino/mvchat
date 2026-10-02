@@ -42,10 +42,10 @@ public class EditModel : PageModel
         {
             existing = await _catalog.ModelAsync(Me, Input.Id);
             if (existing is null || !CatalogRepo.CanEdit(Me, existing)) return NotFound();
-            Input.OrganizationId = existing.OrganizationId; // standard resta standard, struttura resta struttura
+            Input.OrganizationId = existing.OrganizationId; // standard resta standard, gruppo resta gruppo
         }
         else if (!Me.IsSuperAdmin) Input.OrganizationId = Me.OrganizationId;
-        else if (Input.OrganizationId is int o && !Orgs.Any(x => x.Id == o)) ModelState.AddModelError("Input.OrganizationId", "Struttura non valida.");
+        else if (Input.OrganizationId is int o && !Orgs.Any(x => x.Id == o)) ModelState.AddModelError("Input.OrganizationId", "Gruppo non valido.");
         if (!ModelState.IsValid) return Page();
 
         var code = existing?.Code ?? Regex.Replace(Input.Name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');

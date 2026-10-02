@@ -1,6 +1,6 @@
 # mvchat
 
-Piattaforma SaaS di MVitalia: campagne WhatsApp per strutture di qualsiasi settore (palestre, hotel, centri benessere, studi, negozi…), ciascuna con più sedi, con un assistente AI che dialoga verso un obiettivo (rinnovo, promo, rientro). Primo cliente: FitActive (palestre).
+Piattaforma SaaS erogata da MVitalia: campagne WhatsApp per attività di qualsiasi settore (palestre, hotel, centri benessere, studi, negozi…), singole o riunite in gruppi (marchi), con un assistente AI che dialoga verso un obiettivo (rinnovo, promo, rientro). Primo cliente: FitActive (palestre).
 
 ## Persona e lingua
 - Il committente è Maurizio (MVitalia). Non scrive codice: spiegazioni in italiano semplice, niente gergo.
@@ -17,16 +17,20 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per strutture di qualsiasi setto
 - Date e ore salvate in UTC (la connessione imposta time_zone='+00:00'); in pagina si mostrano con `.ToRome()`.
 - Messaggi Meta fatturati direttamente alla struttura; uso dell'AI misurato per sede e rifatturato a consumo da MVitalia, separato dall'abbonamento.
 
-## Parole e settori
-- Nell'interfaccia: **struttura** (il cliente abilitato da MVitalia; nel codice `Organization`), **sede** (nel codice `Gym`, tabella `Gyms`), **cliente** (il destinatario). Mai «palestra» o «catena» nei testi delle pagine.
-- Ogni struttura ha un tipo di attività (`Infrastructure/Sectors.cs`): cambia solo le parole che l'assistente usa con i clienti (iscritto/ospite/paziente, abbonamento/soggiorno…) e l'etichetta delle attività nella scheda sede.
-- Nome, colore, logo (caricato nel database, servito da `/logo/{id}`) e dati dell'attività in *Dati e logo* (`/Struttura`): MVitalia per tutte, la direzione per la propria; il tipo di attività lo cambia solo MVitalia. La presentazione «Chi siamo» entra nelle istruzioni dell'AI.
-- Segnaposto dei template: `{{sede}}`; `{{palestra}}` resta valido come sinonimo per i template già approvati.
+## Gerarchia del servizio e parole
+- **MVitalia** eroga il servizio: amministratore generale (`superadmin`) con tutti i poteri e il controllo su tutto.
+- **Attività** (nel codice `Gym`, tabella `Gyms`): la singola palestra, hotel, studio… Ha il suo **amministratore attività** (`manager`) e i suoi **operatori** (`operator`).
+- **Gruppo / marchio** (nel codice `Organization`, `IsGroup = 1`): più attività collegate (es. FitActive) con un **amministratore di gruppo** (`orgadmin`) che vede tutte le sue attività.
+- **Attività singola**: ha comunque un contenitore in `Organizations` con `IsGroup = 0` e lo stesso nome (nome e stato sincronizzati); non compare tra i gruppi e non può avere un amministratore di gruppo. Si crea da *Attività → Nuova attività* scegliendo «attività singola».
+- Nelle pagine si dice «gruppo», «attività», «cliente»: mai «palestra», «catena», «sede» o «struttura».
+- Tipo di attività (`Infrastructure/Sectors.cs`): del gruppo, ogni attività può averne uno proprio (`Gyms.Sector`, vuoto = come il gruppo); cambia solo le parole dell'assistente con i clienti (iscritto/ospite/paziente…). Lo cambiano MVitalia e, dentro un gruppo, l'amministratore del gruppo.
+- Nome, colore, logo e dati (ragione sociale, P.IVA, contatti, «Chi siamo»): del gruppo in `/Gruppo` (logo `/logo/{id}`), dell'attività in `/Attivita` (logo `/logo/a/{id}`). Chi lavora in un'attività vede logo e colore dell'attività, altrimenti quelli del gruppo. Nelle istruzioni dell'AI entrano «Chi siamo» dell'attività e del gruppo.
+- Segnaposto dei template: `{{sede}}` (nome dell'attività); `{{palestra}}` resta valido come sinonimo.
 
 ## Separazione dei dati
-- Ruoli: `superadmin` (MVitalia), `orgadmin` (direzione della struttura), `manager` (responsabile di sede), `operator`.
-- Ogni lettura di dati di lavoro passa da `Scope` (`Security/Scope.cs`) e da `Repos`: il filtro per struttura/sede sta nella query, non nella pagina.
-- Struttura e sede di un record si ricavano dalle regole lato server, mai da campi del modulo non verificati.
+- Ruoli: `superadmin` (MVitalia), `orgadmin` (amministratore di gruppo), `manager` (amministratore attività), `operator` (operatore).
+- Ogni lettura di dati di lavoro passa da `Scope` (`Security/Scope.cs`) e da `Repos`: il filtro per gruppo/attività sta nella query, non nella pagina.
+- Gruppo e attività di un record si ricavano dalle regole lato server, mai da campi del modulo non verificati.
 
 ## Compilare e provare
 - In questo ambiente NuGet può essere bloccato e c'è solo l'SDK .NET 8: `dotnet build -p:OfflineBuild=true -p:TargetFramework=net8.0` compila senza il driver MySQL (solo controllo sintassi). La build vera su .NET 10 la fa GitHub Actions.

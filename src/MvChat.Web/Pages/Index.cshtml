@@ -1,22 +1,22 @@
 @page
 @model IndexModel
 @{ ViewData["Title"] = "Panoramica"; }
-<p class="muted" style="margin:0">Ciao @Model.Me.Name. Questa è la base di mvchat: accessi, ruoli e sedi separate. Liste, campagne e conversazioni arrivano nei prossimi passi.</p>
+<p class="muted" style="margin:0">Ciao @Model.Me.Name. Questa è la base di mvchat: accessi, ruoli e attività separate. Liste, campagne e conversazioni arrivano nei prossimi passi.</p>
 <div class="kpis">
     @if (Model.Me.IsSuperAdmin)
     {
-        <div class="kpi"><span>Strutture</span><b>@Model.Counts.Orgs</b></div>
+        <div class="kpi"><span>Gruppi</span><b>@Model.Counts.Orgs</b></div>
     }
-    <div class="kpi"><span>Sedi</span><b>@Model.Counts.Gyms</b></div>
+    <div class="kpi"><span>Attività</span><b>@Model.Counts.Gyms</b></div>
     @if (Model.Me.CanManageUsers)
     {
         <div class="kpi"><span>Utenti</span><b>@Model.Counts.Users</b></div>
     }
 </div>
 <section class="panel">
-    <div class="panel-h"><h2>@(Model.Me.IsSuperAdmin ? "Tutte le sedi" : Model.Me.IsOrgAdmin ? "Le sedi della struttura" : "La tua sede")</h2></div>
+    <div class="panel-h"><h2>@(Model.Me.IsSuperAdmin ? "Tutte le attività" : Model.Me.IsOrgAdmin ? "Le attività del gruppo" : "La tua attività")</h2></div>
     <div class="tbl"><table>
-        <thead><tr>@if (Model.Me.IsSuperAdmin) {<th>Struttura</th>}<th>Sede</th><th>Città</th><th>Utenti</th><th>Stato</th></tr></thead>
+        <thead><tr>@if (Model.Me.IsSuperAdmin) {<th>Gruppo</th>}<th>Attività</th><th>Città</th><th>Utenti</th><th>Stato</th></tr></thead>
         <tbody>
         @foreach (var g in Model.Gyms)
         {
@@ -24,7 +24,7 @@
         }
         @if (Model.Gyms.Count == 0)
         {
-            <tr><td colspan="5" class="muted">Nessuna sede ancora. @(Model.Me.IsSuperAdmin ? "Crea prima una struttura, poi le sue sedi." : "")</td></tr>
+            <tr><td colspan="5" class="muted">Nessuna attività ancora. @(Model.Me.IsSuperAdmin ? "Crea un'attività singola oppure un gruppo con le sue attività." : "")</td></tr>
         }
         </tbody>
     </table></div>

@@ -46,10 +46,10 @@ public class EditModel : PageModel
         {
             var existing = await _catalog.OfferAsync(me, Input.Id);
             if (existing is null) return NotFound();
-            Input.GymId = existing.GymId; // la sede di un'offerta esistente non si cambia
+            Input.GymId = existing.GymId; // l'attività di un'offerta esistente non si cambia
         }
         var gym = Gyms.FirstOrDefault(g => g.Id == Input.GymId);
-        if (gym is null) ModelState.AddModelError("Input.GymId", "Scegli la sede.");
+        if (gym is null) ModelState.AddModelError("Input.GymId", "Scegli l'attività.");
 
         var price = ParseMoney(Input.Price, "Input.Price");
         var full = ParseMoney(Input.FullPrice, "Input.FullPrice");

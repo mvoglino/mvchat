@@ -2,14 +2,14 @@
 @model MvChat.Web.Pages.Offerte.IndexModel
 @{ ViewData["Title"] = "Offerte"; var many = Model.Gyms.Count > 1; }
 @section Actions { <a class="btn primary" href="/Offerte/Edit@(Model.GymFilter is int g ? "?gym=" + g : "")">Nuova offerta</a> }
-<p class="muted" style="margin:0">L'offerta è l'oggetto della promo: cosa si propone, a che prezzo e fino a quando. Ogni sede decide le sue. Nelle campagne l'assistente userà solo questi prezzi.</p>
+<p class="muted" style="margin:0">L'offerta è l'oggetto della promo: cosa si propone, a che prezzo e fino a quando. Ogni attività decide le sue. Nelle campagne l'assistente userà solo questi prezzi.</p>
 @if (many)
 {
-    <form method="get" class="inline-form"><div class="field" style="max-width:320px"><label for="gym">Sede</label>
+    <form method="get" class="inline-form"><div class="field" style="max-width:320px"><label for="gym">Attività</label>
         <select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.GymFilter)">@g.Name</option> }</select></div></form>
 }
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Offerta</th>@if (many) {<th>Sede</th>}<th>Prezzo</th><th>Validità</th><th>Sconto extra</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr><th>Offerta</th>@if (many) {<th>Attività</th>}<th>Prezzo</th><th>Validità</th><th>Sconto extra</th><th>Stato</th><th></th></tr></thead>
     <tbody>
     @foreach (var o in Model.Items)
     {

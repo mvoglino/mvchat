@@ -4,14 +4,14 @@
 @Html.AntiForgeryToken()
 @if (Model.Gyms.Count == 0)
 {
-    <div class="note warn">Non ci sono sedi attive a cui assegnare la lista.</div>
+    <div class="note warn">Non ci sono attività attive a cui assegnare la lista.</div>
 }
 else
 {
 <section class="panel">
     <div class="panel-h"><h2>1 · Scegli il file</h2><span style="flex:1"></span><button type="button" class="btn sm" id="tplBtn">Scarica il modello Excel</button></div>
     <div class="panel-b form">
-        <div class="field"><label for="gym">Sede</label>
+        <div class="field"><label for="gym">Attività</label>
             <select id="gym">@foreach (var g in Model.Gyms) { <option value="@g.Id">@(Model.Gyms.Select(x => x.OrganizationId).Distinct().Count() > 1 ? g.OrganizationName + " · " : "")@g.Name</option> }</select></div>
         <div class="field"><label for="listName">Nome della lista</label><input id="listName" placeholder="es. Scadenze novembre"></div>
         <label class="drop field full" id="drop" for="file">
@@ -26,7 +26,7 @@ else
 <section class="panel" id="mapPanel" hidden>
     <div class="panel-h"><h2>2 · Controlla le colonne</h2></div>
     <div class="panel-b">
-        <p class="muted" style="margin-top:0">mvchat ha provato a riconoscere le colonne del file. Correggi quelle sbagliate: la prossima volta se le ricorderà per questa sede.</p>
+        <p class="muted" style="margin-top:0">mvchat ha provato a riconoscere le colonne del file. Correggi quelle sbagliate: la prossima volta se le ricorderà per quest'attività.</p>
         <div class="form" id="mapFields"></div>
         <div class="note" style="margin-top:14px"><b>Consenso:</b> scegli la colonna che dice se la persona ha accettato di ricevere comunicazioni commerciali. Valgono come sì: «SI», «Sì», «X», «1», «Vero». Chi non ce l'ha non viene importato.</div>
     </div>

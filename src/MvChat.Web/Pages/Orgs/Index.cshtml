@@ -1,10 +1,10 @@
 @page
 @model MvChat.Web.Pages.Orgs.IndexModel
-@{ ViewData["Title"] = "Strutture"; }
-@section Actions { <a class="btn primary" href="/Orgs/Edit">Abilita una struttura</a> }
-<p class="muted" style="margin:0">Ogni struttura è un cliente di mvchat, di qualsiasi settore: ha il suo nome, logo, colore e dati dell'attività, le sue sedi e i suoi utenti, separati da tutti gli altri.</p>
+@{ ViewData["Title"] = "Gruppi"; }
+@section Actions { <a class="btn primary" href="/Orgs/Edit">Abilita un gruppo</a> }
+<p class="muted" style="margin:0">Un gruppo (marchio) riunisce più attività collegate, come FitActive con le sue palestre: ha un amministratore di gruppo, nome, logo e dati propri. Ogni attività ha poi i suoi amministratori e operatori. Gruppi e attività sono separati da tutti gli altri.</p>
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Struttura</th><th>Attività</th><th>Colore</th><th>Sedi</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr><th>Gruppo</th><th>Settore</th><th>Colore</th><th>Attività</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
     <tbody>
     @foreach (var o in Model.Items)
     {
@@ -13,8 +13,8 @@
             <td><span class="swatch" style="background:@o.PrimaryColor"></span> <code>@o.PrimaryColor</code></td>
             <td>@o.Gyms</td><td>@o.Users</td>
             <td>@(o.IsActive ? Html.Raw("<span class=\"chip good\">Attiva</span>") : Html.Raw("<span class=\"chip bad\">Sospesa</span>"))</td>
-            <td><a class="btn sm" href="/Orgs/Edit/@o.Id">Modifica</a> <a class="btn sm" href="/Struttura/@o.Id">Dati e logo</a></td></tr>
+            <td><a class="btn sm" href="/Orgs/Edit/@o.Id">Modifica</a> <a class="btn sm" href="/Gruppo/@o.Id">Dati e logo</a> <a class="btn sm" href="/Gyms/Edit?gruppo=@o.Id">+ Attività</a></td></tr>
     }
-    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna struttura. Crea la prima, ad esempio FitActive (palestre) o un hotel.</td></tr> }
+    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessun gruppo. Crea il primo, ad esempio FitActive con le sue palestre. Le attività singole si creano direttamente da «Attività».</td></tr> }
     </tbody>
 </table></div></section>

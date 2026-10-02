@@ -6,7 +6,7 @@ namespace MvChat.Web.Campaigns;
 public sealed record SendWindow(int Day, int Start, int End);
 
 /// <summary>
-/// Quando una sede permette l'invio dei primi messaggi di una campagna.
+/// Quando un'attività permette l'invio dei primi messaggi di una campagna.
 /// Nessuna fascia = sempre (24 ore su 24). Le risposte ai clienti non sono mai bloccate dagli orari.
 /// </summary>
 public static class SendWindows

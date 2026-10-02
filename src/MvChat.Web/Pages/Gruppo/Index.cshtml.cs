@@ -6,10 +6,10 @@ using MvChat.Web.Data;
 using MvChat.Web.Infrastructure;
 using MvChat.Web.Security;
 
-namespace MvChat.Web.Pages.Struttura;
+namespace MvChat.Web.Pages.Gruppo;
 
 /// <summary>
-/// Nome, logo, colore e dati dell'attività di una struttura.
+/// Nome, logo, colore e dati dell'attività di un gruppo.
 /// MVitalia le modifica tutte; la direzione solo la propria (senza cambiare il tipo di attività).
 /// </summary>
 public class IndexModel : PageModel
@@ -24,14 +24,14 @@ public class IndexModel : PageModel
     [BindProperty] public IFormFile? Logo { get; set; }
     [BindProperty] public bool RemoveLogo { get; set; }
 
-    /// <summary>La struttura si ricava da chi chiede: la direzione non può aprirne un'altra cambiando il numero nell'indirizzo.</summary>
+    /// <summary>Il gruppo si ricava da chi chiede: la direzione non può aprirne un'altra cambiando il numero nell'indirizzo.</summary>
     private async Task<bool> LoadAsync(int? id)
     {
         var me = User.Scope();
         var orgId = me.IsSuperAdmin ? id : me.OrganizationId;
         if (orgId is null || (id is not null && id != orgId)) return false;
         var p = await _repos.OrgProfileAsync(orgId.Value);
-        if (p is null) return false;
+        if (p is null || !await _repos.IsGroupAsync(orgId.Value)) return false; // le attività singole hanno i loro dati in «Attività»
         P = p;
         return true;
     }
@@ -55,20 +55,8 @@ public class IndexModel : PageModel
         if (!string.IsNullOrWhiteSpace(Input.Website) && !Uri.TryCreate(Input.Website.Trim().StartsWith("http") ? Input.Website.Trim() : "https://" + Input.Website.Trim(), UriKind.Absolute, out _))
             ModelState.AddModelError("Input.Website", "Indirizzo del sito non valido.");
 
-        byte[]? logo = null; string? logoType = null;
-        if (Logo is { Length: > 0 })
-        {
-            if (Logo.Length > MaxLogoBytes) ModelState.AddModelError("Logo", "Il logo è troppo pesante: massimo 300 KB.");
-            else
-            {
-                using var ms = new MemoryStream();
-                await Logo.CopyToAsync(ms);
-                logo = ms.ToArray();
-                // Si guarda il contenuto vero del file, non l'estensione: solo PNG, JPEG o WebP.
-                logoType = ImageType(logo);
-                if (logoType is null) ModelState.AddModelError("Logo", "Il logo deve essere un'immagine PNG, JPG o WebP.");
-            }
-        }
+        var (logo, logoType, logoError) = await ReadLogoAsync(Logo);
+        if (logoError is not null) ModelState.AddModelError("Logo", logoError);
         if (!ModelState.IsValid) return Page();
 
         var me = User.Scope();
@@ -79,8 +67,20 @@ public class IndexModel : PageModel
         if (logo is not null) await _repos.SaveLogoAsync(P.Id, logo, logoType);
         else if (RemoveLogo) await _repos.SaveLogoAsync(P.Id, null, null);
         await _repos.AuditAsync(me, "org.profile", P.Name + (logo is not null ? " · nuovo logo" : ""), HttpContext.Connection.RemoteIpAddress?.ToString(), P.Id);
-        TempData["Ok"] = "Dati della struttura salvati.";
-        return Redirect(me.IsSuperAdmin ? $"/Struttura/{P.Id}" : "/Struttura");
+        TempData["Ok"] = "Dati del gruppo salvati.";
+        return Redirect(me.IsSuperAdmin ? $"/Gruppo/{P.Id}" : "/Gruppo");
+    }
+
+    /// <summary>Legge il file del logo e controlla che sia davvero un'immagine (dal contenuto, non dall'estensione).</summary>
+    public static async Task<(byte[]? Data, string? Type, string? Error)> ReadLogoAsync(IFormFile? file)
+    {
+        if (file is not { Length: > 0 }) return (null, null, null);
+        if (file.Length > MaxLogoBytes) return (null, null, "Il logo è troppo pesante: massimo 300 KB.");
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms);
+        var data = ms.ToArray();
+        var type = ImageType(data);
+        return type is null ? (null, null, "Il logo deve essere un'immagine PNG, JPG o WebP.") : (data, type, null);
     }
 
     private static string? T(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

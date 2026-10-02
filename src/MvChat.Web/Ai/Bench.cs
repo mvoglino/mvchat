@@ -44,7 +44,7 @@ public static class Bench
         new("fuoritema", "Domanda fuori tema", new[] { "Mi scrivi una poesia sulla Juventus?" },
             Open, "Riporta la conversazione sull'obiettivo, senza fare altro.", NeverReached: true),
         new("orari", "Chiede gli orari", new[] { "Che orari fate la domenica?" },
-            Open, "Usa solo gli orari della scheda sede; se non li ha, passa alla reception."),
+            Open, "Usa solo gli orari della scheda attività; se non li ha, passa alla reception."),
         new("inglese", "Scrive in inglese", new[] { "Hi! Do you speak English? I might be interested" },
             Open, "Risponde nella lingua del cliente."),
     };

@@ -1,18 +1,18 @@
 @page
 @model MvChat.Web.Pages.Gyms.IndexModel
-@{ ViewData["Title"] = "Sedi"; }
-@section Actions { <a class="btn primary" href="/Gyms/Edit">Nuova sede</a> }
-<p class="muted" style="margin:0">Ogni sede avrà la sua area di lavoro, il suo numero WhatsApp (Passo 4) e le sue liste. Nessuna sede vede i dati di un'altra.</p>
+@{ ViewData["Title"] = "Attività"; }
+@section Actions { <a class="btn primary" href="/Gyms/Edit">Nuova attività</a> }
+<p class="muted" style="margin:0">Ogni attività ha la sua area di lavoro, il suo numero WhatsApp, le sue liste, il suo amministratore e i suoi operatori. Può essere singola o far parte di un gruppo. Nessuna attività vede i dati di un'altra.</p>
 <section class="panel"><div class="tbl"><table>
-    <thead><tr>@if (Model.Me.IsSuperAdmin) {<th>Struttura</th>}<th>Sede</th><th>Città</th><th>Telefono</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr>@if (Model.Me.IsSuperAdmin) {<th>Gruppo</th>}<th>Attività</th><th>Città</th><th>Telefono</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
     <tbody>
     @foreach (var g in Model.Items)
     {
-        <tr>@if (Model.Me.IsSuperAdmin) {<td>@g.OrganizationName</td>}
-            <td><b>@g.Name</b><div class="muted">@g.Address</div></td><td>@g.City</td><td>@g.Phone</td><td>@g.Users</td>
+        <tr>@if (Model.Me.IsSuperAdmin) {<td>@(g.InGroup ? g.OrganizationName : "— singola —")</td>}
+            <td><b>@g.Name</b><div class="muted">@Sectors.Get(g.Sector).Label@(string.IsNullOrEmpty(g.Address) ? "" : " · " + g.Address)</div></td><td>@g.City</td><td>@g.Phone</td><td>@g.Users</td>
             <td>@(g.IsActive ? Html.Raw("<span class=\"chip good\">Attiva</span>") : Html.Raw("<span class=\"chip\">Disattivata</span>"))</td>
-            <td><a class="btn sm" href="/Gyms/Edit/@g.Id">Modifica</a></td></tr>
+            <td><a class="btn sm" href="/Gyms/Edit/@g.Id">Modifica</a> <a class="btn sm" href="/Attivita/@g.Id">Dati e logo</a></td></tr>
     }
-    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna sede ancora.</td></tr> }
+    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna attività ancora.</td></tr> }
     </tbody>
 </table></div></section>

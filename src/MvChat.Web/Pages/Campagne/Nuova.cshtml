@@ -3,10 +3,10 @@
 @{ ViewData["Title"] = "Nuova campagna"; }
 @section Actions { <a class="btn" href="/Campagne">Tutte le campagne</a> }
 @if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
-<form method="get" class="inline-form"><div class="field" style="max-width:340px"><label for="gym">Sede</label><select id="gym" name="gym" onchange="this.form.submit()">@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+<form method="get" class="inline-form"><div class="field" style="max-width:340px"><label for="gym">Attività</label><select id="gym" name="gym" onchange="this.form.submit()">@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
 @if (Model.Number is null)
 {
-    <div class="note warn">Questa sede non ha ancora un numero WhatsApp: collegalo dalla pagina WhatsApp.</div>
+    <div class="note warn">Quest'attività non ha ancora un numero WhatsApp: collegalo dalla pagina WhatsApp.</div>
 }
 else
 {
@@ -25,7 +25,7 @@ else
             <label class="check"><input type="radio" name="When" value="data" checked="@(Model.When == "data")"> Dal giorno e ora</label>
             <input name="StartAt" type="datetime-local" value="@Model.StartAt?.ToString("yyyy-MM-ddTHH:mm")" aria-label="Data e ora di partenza"></div>
         <div class="field"><label for="DailyLimit">Massimo invii al giorno (facoltativo)</label><input id="DailyLimit" name="DailyLimit" type="number" min="1" value="@Model.DailyLimit" placeholder="nessun limite"><small>Utile per non intasare la reception di risposte.</small></div>
-        <div class="field full"><small>Orari di invio della sede: <b>@Model.Windows</b> · <a href="/Sedi/Orari/@Model.Gym">modifica</a>. Limite di Meta del numero: <b>@(SendWindows.MetaDailyLimit(Model.Number.MessagingLimit, Model.Number.IsSimulated) is int ml ? ml.ToString("N0") + " persone nuove ogni 24 ore" : "nessuno")</b>.</small></div>
+        <div class="field full"><small>Orari di invio dell'attività: <b>@Model.Windows</b> · <a href="/Sedi/Orari/@Model.Gym">modifica</a>. Limite di Meta del numero: <b>@(SendWindows.MetaDailyLimit(Model.Number.MessagingLimit, Model.Number.IsSimulated) is int ml ? ml.ToString("N0") + " persone nuove ogni 24 ore" : "nessuno")</b>.</small></div>
     </div>
     <div class="actions"><span class="muted" style="flex:1">La campagna nasce come bozza: prima dell'invio vedi l'anteprima e quante persone riceveranno il messaggio.</span><button class="btn primary" type="submit" disabled="@(Model.Lists.Count == 0 || Model.Templates.Count == 0)">Crea la campagna</button></div>
 </form>

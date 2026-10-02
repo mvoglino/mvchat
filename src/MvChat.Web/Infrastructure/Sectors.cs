@@ -1,9 +1,9 @@
 namespace MvChat.Web.Infrastructure;
 
 /// <summary>
-/// Il tipo di attività di una struttura. Cambia le parole che l'assistente AI usa con i clienti
+/// Il tipo di attività di un gruppo. Cambia le parole che l'assistente AI usa con i clienti
 /// (palestra/hotel/studio, iscritto/ospite/paziente, abbonamento/soggiorno/trattamento):
-/// le pagine di mvchat usano invece parole neutre (struttura, sede, cliente).
+/// le pagine di mvchat usano invece parole neutre (gruppo, attività, cliente).
 /// </summary>
 public sealed record Sector(string Key, string Label, string Place, string Customer, string Membership, string Activities);
 

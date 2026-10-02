@@ -16,7 +16,7 @@ public sealed class GymProfile
     public string Formality { get; set; } = "tu";
     public DateTime? UpdatedAt { get; set; }
 
-    /// <summary>Quanto è completa la scheda: serve a ricordare alla sede cosa manca.</summary>
+    /// <summary>Quanto è completa la scheda: serve a ricordare all'attività cosa manca.</summary>
     public int Completeness => new[] { OpeningHours, Services, Classes, HowToReach, ExtraInfo }.Count(s => !string.IsNullOrWhiteSpace(s)) * 20;
 }
 
@@ -60,14 +60,22 @@ public sealed class GoalModel
     public bool IsStandard => OrganizationId is null;
 }
 
-/// <summary>Scheda sede, offerte e modelli di obiettivo, sempre filtrati in base a chi chiede.</summary>
+/// <summary>Scheda attività, offerte e modelli di obiettivo, sempre filtrati in base a chi chiede.</summary>
 public sealed class CatalogRepo
 {
     private readonly Db _db;
     public CatalogRepo(Db db) => _db = db;
 
-    // ---------- Scheda sede ----------
-    /// <summary>Tipo di attività e presentazione della struttura, per le istruzioni dell'assistente.</summary>
+    // ---------- Scheda attività ----------
+    /// <summary>Per le istruzioni dell'assistente: tipo e presentazione dell'attività, più quella del gruppo se ne fa parte.</summary>
+    public Task<OrgInfo?> ActivityInfoAsync(int gymId) => _db.FirstAsync(
+        @"SELECT g.Id, g.Name, COALESCE(g.Sector, o.Sector) AS Sector, g.Description, COALESCE(g.Website, o.Website) AS Website,
+                 COALESCE(g.Phone, o.Phone) AS Phone, o.IsGroup, o.Name AS GroupName, o.Description AS GroupDescription
+          FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId WHERE g.Id=@gymId", new { gymId },
+        r => new OrgInfo(r.Int("Id"), r.Str("Name")!, r.Str("Sector") ?? "palestra", r.Str("Description"), r.Str("Website"), r.Str("Phone"),
+            r.Bool("IsGroup") ? r.Str("GroupName") : null, r.Bool("IsGroup") ? r.Str("GroupDescription") : null));
+
+    /// <summary>Tipo di attività e presentazione del gruppo.</summary>
     public Task<OrgInfo?> OrgInfoAsync(int orgId) => _db.FirstAsync(
         "SELECT Id, Name, Sector, Description, Website, Phone FROM Organizations WHERE Id=@orgId", new { orgId },
         r => new OrgInfo(r.Int("Id"), r.Str("Name")!, r.Str("Sector") ?? "palestra", r.Str("Description"), r.Str("Website"), r.Str("Phone")));
@@ -139,7 +147,7 @@ public sealed class CatalogRepo
     }
 
     // ---------- Modelli di obiettivo ----------
-    /// <summary>Modelli standard MVitalia più quelli della struttura di chi chiede (MVitalia li vede tutti).</summary>
+    /// <summary>Modelli standard MVitalia più quelli del gruppo di chi chiede (MVitalia li vede tutti).</summary>
     public Task<List<GoalModel>> ModelsAsync(Scope s, int? modelId = null, bool onlyActive = false) => _db.QueryAsync(
         @"SELECT m.*, o.Name AS OrgName FROM GoalModels m LEFT JOIN Organizations o ON o.Id=m.OrganizationId
           WHERE (m.OrganizationId IS NULL OR @All=1 OR m.OrganizationId=@Org)
@@ -170,6 +178,6 @@ public sealed class CatalogRepo
         return m.Id;
     }
 
-    /// <summary>Chi può modificare un modello: gli standard solo MVitalia, quelli di struttura la direzione della struttura.</summary>
+    /// <summary>Chi può modificare un modello: gli standard solo MVitalia, quelli di gruppo la direzione del gruppo.</summary>
     public static bool CanEdit(Scope s, GoalModel m) => s.IsSuperAdmin || (s.IsOrgAdmin && m.OrganizationId == s.OrganizationId);
 }

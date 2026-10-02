@@ -4,8 +4,9 @@ using MvChat.Web.Infrastructure;
 
 namespace MvChat.Web.Catalog;
 
-/// <summary>I dati dell'attività (struttura) che l'assistente può usare: tipo di attività e presentazione.</summary>
-public sealed record OrgInfo(int Id, string Name, string SectorKey, string? Description, string? Website, string? Phone)
+/// <summary>I dati dell'attività (gruppo) che l'assistente può usare: tipo di attività e presentazione.</summary>
+public sealed record OrgInfo(int Id, string Name, string SectorKey, string? Description, string? Website, string? Phone,
+    string? GroupName = null, string? GroupDescription = null)
 {
     public Sector Sector => Sectors.Get(SectorKey);
 }
@@ -15,8 +16,8 @@ public sealed record Recipient(string FirstName, string? LastName, string? Membe
 
 /// <summary>
 /// Compone le istruzioni che l'assistente AI riceve per una conversazione:
-/// regole fisse di mvchat + modello di obiettivo + scheda sede + offerta + dati del cliente.
-/// La sede non scrive prompt: compila moduli, e questa classe li traduce.
+/// regole fisse di mvchat + modello di obiettivo + scheda attività + offerta + dati del cliente.
+/// L'attività non scrive prompt: compila moduli, e questa classe li traduce.
 /// </summary>
 public static class PromptBuilder
 {
@@ -45,10 +46,12 @@ public static class PromptBuilder
         sb.AppendLine($"Oggi è {Day(today)}. Scrivi in italiano, {(lei ? "dando del lei" : "dando del tu")}, con tono cordiale e diretto, come una persona dello staff.");
         sb.AppendLine();
 
-        if (org is not null && (!string.IsNullOrWhiteSpace(org.Description) || !string.IsNullOrWhiteSpace(org.Website) || !string.IsNullOrWhiteSpace(org.Phone)))
+        if (org is not null && (!string.IsNullOrWhiteSpace(org.Description) || !string.IsNullOrWhiteSpace(org.GroupDescription)
+                                || !string.IsNullOrWhiteSpace(org.Website) || !string.IsNullOrWhiteSpace(org.Phone)))
         {
             sb.AppendLine($"## Chi siamo: {org.Name}");
             if (!string.IsNullOrWhiteSpace(org.Description)) sb.AppendLine(org.Description.Trim());
+            if (org.GroupName is not null) sb.AppendLine($"Fa parte del gruppo {org.GroupName}." + (string.IsNullOrWhiteSpace(org.GroupDescription) ? "" : " " + org.GroupDescription.Trim()));
             if (!string.IsNullOrWhiteSpace(org.Website)) sb.AppendLine($"Sito: {org.Website.Trim()}");
             if (!string.IsNullOrWhiteSpace(org.Phone)) sb.AppendLine($"Telefono: {org.Phone.Trim()}");
             sb.AppendLine();
@@ -78,7 +81,7 @@ public static class PromptBuilder
                 ? $"Sconto extra concedibile: al massimo il {offer.MaxExtraDiscountPct}% sul prezzo dell'offerta, solo se il cliente esita per il prezzo. Non proporlo subito."
                 : "Sconto extra: nessuno. Non concedere riduzioni oltre il prezzo dell'offerta.");
             if (!string.IsNullOrWhiteSpace(offer.ActionUrl)) sb.AppendLine($"Per aderire il cliente usa questo link: {offer.ActionUrl}");
-            else sb.AppendLine($"Per aderire il cliente passa in sede ({gymName}): proponi di fissare quando.");
+            else sb.AppendLine($"Per aderire il cliente passa da {gymName}: proponi di fissare quando.");
         }
         sb.AppendLine();
 

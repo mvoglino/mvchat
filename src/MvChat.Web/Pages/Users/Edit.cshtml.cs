@@ -47,7 +47,7 @@ public class EditModel : PageModel
             if (existing is null || (!AssignableRoles.Contains(existing.Role) && existing.Id != Me.UserId)) return NotFound();
         }
 
-        // Su se stessi non si cambiano ruolo, struttura, sede né stato: si evita di chiudersi fuori.
+        // Su se stessi non si cambiano ruolo, gruppo, attività né stato: si evita di chiudersi fuori.
         if (existing is not null && existing.Id == Me.UserId)
         {
             Input.Role = existing.Role; Input.OrganizationId = existing.OrganizationId; Input.GymId = existing.GymId; Input.IsActive = true;
@@ -55,7 +55,7 @@ public class EditModel : PageModel
         else if (!AssignableRoles.Contains(Input.Role))
             ModelState.AddModelError("Input.Role", "Non puoi assegnare questo ruolo.");
 
-        // Ogni ruolo ha il suo perimetro: struttura e sede si ricavano dalle regole, non da quello che arriva dal modulo.
+        // Ogni ruolo ha il suo perimetro: gruppo e attività si ricavano dalle regole, non da quello che arriva dal modulo.
         switch (Input.Role)
         {
             case Roles.SuperAdmin:
@@ -64,11 +64,11 @@ public class EditModel : PageModel
                 Input.GymId = null;
                 if (!Me.IsSuperAdmin) Input.OrganizationId = Me.OrganizationId;
                 if (Input.OrganizationId is null || !Orgs.Any(o => o.Id == Input.OrganizationId))
-                    ModelState.AddModelError("Input.OrganizationId", "Scegli la struttura.");
+                    ModelState.AddModelError("Input.OrganizationId", "Scegli il gruppo.");
                 break;
             default:
                 var gym = Gyms.FirstOrDefault(g => g.Id == Input.GymId);
-                if (gym is null) ModelState.AddModelError("Input.GymId", "Scegli la sede.");
+                if (gym is null) ModelState.AddModelError("Input.GymId", "Scegli l'attività.");
                 else Input.OrganizationId = gym.OrganizationId;
                 break;
         }
@@ -93,7 +93,7 @@ public class EditModel : PageModel
     {
         Me = User.Scope();
         AssignableRoles = Roles.Assignable(Me.Role);
-        Orgs = await _repos.OrganizationsAsync(Me);
+        Orgs = (await _repos.OrganizationsAsync(Me)).Where(o => o.IsGroup).ToList(); // l'amministratore di gruppo esiste solo nei gruppi
         Gyms = (await _repos.GymsAsync(Me)).Where(g => g.IsActive).ToList();
     }
 

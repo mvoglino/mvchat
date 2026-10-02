@@ -18,7 +18,7 @@
     <tbody>
     @foreach (var q in Model.Items)
     {
-        <tr><td><b>@q.Title</b></td><td>@(q.GymName ?? "Tutta la struttura")</td><td class="muted" style="white-space:pre-wrap">@q.Body</td>
+        <tr><td><b>@q.Title</b></td><td>@(q.GymName ?? "Tutto il gruppo")</td><td class="muted" style="white-space:pre-wrap">@q.Body</td>
             <td>@if (q.GymId is not null || me.CanManageGyms) {<form method="post" asp-page-handler="Delete" asp-route-id="@q.Id"><button class="btn sm" type="submit">Elimina</button></form>}</td></tr>
     }
     @if (Model.Items.Count == 0) { <tr><td colspan="4" class="muted">Nessuna risposta rapida ancora.</td></tr> }

@@ -3,7 +3,7 @@
 @{ ViewData["Title"] = Model.IsNew ? "Nuova offerta" : "Modifica offerta"; }
 @if (Model.Gyms.Count == 0)
 {
-    <div class="note warn">Non ci sono sedi attive.</div>
+    <div class="note warn">Non ci sono attività attive.</div>
 }
 else
 {
@@ -12,13 +12,13 @@ else
     <div class="panel-b form">
         @if (Model.IsNew && Model.Gyms.Count > 1)
         {
-            <div class="field full"><label asp-for="Input.GymId">Sede</label>
+            <div class="field full"><label asp-for="Input.GymId">Attività</label>
                 <select asp-for="Input.GymId" asp-items="@(new SelectList(Model.Gyms, "Id", "Name"))"></select><span asp-validation-for="Input.GymId" class="field-error"></span></div>
         }
         else
         {
             <input type="hidden" asp-for="Input.GymId">
-            <div class="field full"><label>Sede</label><div>@(Model.Gyms.FirstOrDefault(g => g.Id == Model.Input.GymId)?.Name)</div><span asp-validation-for="Input.GymId" class="field-error"></span></div>
+            <div class="field full"><label>Attività</label><div>@(Model.Gyms.FirstOrDefault(g => g.Id == Model.Input.GymId)?.Name)</div><span asp-validation-for="Input.GymId" class="field-error"></span></div>
         }
         <div class="field full"><label asp-for="Input.Title">Titolo</label><input asp-for="Input.Title" placeholder="es. Rinnovo annuale con 2 mesi omaggio"><span asp-validation-for="Input.Title" class="field-error"></span></div>
         <div class="field full"><label asp-for="Input.Description">Cosa comprende</label><textarea asp-for="Input.Description" rows="3" placeholder="es. 14 mesi di accesso illimitato a sala e corsi al prezzo di 12"></textarea><span asp-validation-for="Input.Description" class="field-error"></span></div>

@@ -66,11 +66,11 @@ public class NuovaModel : PageModel
             startUtc = local.FromRome(); // l'orario scritto in pagina è quello italiano
         }
         Error =
-            g is null || Number is null ? "La sede scelta non ha un numero WhatsApp collegato."
+            g is null || Number is null ? "L'attività scelta non ha un numero WhatsApp collegato."
             : string.IsNullOrWhiteSpace(Name) ? "Dai un nome alla campagna (es. «Rinnovi ottobre»)."
-            : list is null ? "Scegli una lista contatti della sede."
+            : list is null ? "Scegli una lista contatti dell'attività."
             : model is null ? "Scegli l'obiettivo."
-            : model.NeedsOffer && offer is null ? "Questo obiettivo ha bisogno di un'offerta attiva della sede."
+            : model.NeedsOffer && offer is null ? "Questo obiettivo ha bisogno di un'offerta attiva dell'attività."
             : template is null ? "Scegli il template del primo messaggio (deve essere approvato da Meta)."
             : template.Variables.Contains("offerta") && offer is null ? "Il template cita l'offerta: collega un'offerta alla campagna."
             : When == "data" && (startUtc is null || startUtc < DateTime.UtcNow.AddMinutes(-5)) ? "Indica una data e ora di partenza futura."

@@ -71,7 +71,7 @@ public class NumeroModel : PageModel
         if (!await LoadAsync(id)) return NotFound();
         if (!CanConfigure) return Forbid();
         var (phone, _) = ImportRules.NormalizePhone(DisplayPhone);
-        // Il numero di una sede può essere anche un fisso: qui basta che sia un numero plausibile.
+        // Il numero di un'attività può essere anche un fisso: qui basta che sia un numero plausibile.
         var display = phone ?? (DisplayPhone ?? "").Trim();
         if (display.Count(char.IsDigit) < 6) { Error = "Indica il numero di telefono."; return Page(); }
 
@@ -95,7 +95,7 @@ public class NumeroModel : PageModel
         try { n.Id = await _wa.SaveNumberAsync(n); }
         catch (Exception ex) when (ex.Message.Contains("Duplicate", StringComparison.OrdinalIgnoreCase))
         {
-            Error = "Questo identificativo è già collegato a un'altra sede."; return Page();
+            Error = "Questo identificativo è già collegato a un'altra attività."; return Page();
         }
         await _repos.AuditAsync(Me, "wa.number.saved", $"{n.DisplayPhone} ({(n.IsSimulated ? "simulato" : "Meta")})", HttpContext.Connection.RemoteIpAddress?.ToString(), Gym.OrganizationId, Gym.Id);
         var saved = await _wa.NumberAsync(n.Id);

@@ -1,9 +1,9 @@
 @page
 @model MvChat.Web.Pages.WhatsApp.IndexModel
 @{ ViewData["Title"] = "WhatsApp"; }
-<p class="muted" style="margin:0">Ogni sede ha il suo numero WhatsApp. Finché l'account Meta non è pronto si può usare un numero <b>simulato</b>: mvchat funziona uguale, ma nessun messaggio esce davvero.</p>
+<p class="muted" style="margin:0">Ogni attività ha il suo numero WhatsApp. Finché l'account Meta non è pronto si può usare un numero <b>simulato</b>: mvchat funziona uguale, ma nessun messaggio esce davvero.</p>
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Sede</th><th>Numero</th><th>Tipo</th><th>Stato</th><th>Qualità</th><th></th></tr></thead>
+    <thead><tr><th>Attività</th><th>Numero</th><th>Tipo</th><th>Stato</th><th>Qualità</th><th></th></tr></thead>
     <tbody>
     @foreach (var g in Model.Gyms)
     {
@@ -15,6 +15,6 @@
             <td>@n?.QualityRating</td>
             <td><a class="btn sm" href="/WhatsApp/Numero/@g.Id">Apri</a></td></tr>
     }
-    @if (Model.Gyms.Count == 0) { <tr><td colspan="6" class="muted">Nessuna sede attiva.</td></tr> }
+    @if (Model.Gyms.Count == 0) { <tr><td colspan="6" class="muted">Nessuna attività attiva.</td></tr> }
     </tbody>
 </table></div></section>

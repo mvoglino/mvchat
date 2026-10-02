@@ -7,7 +7,7 @@ using MvChat.Web.Security;
 
 namespace MvChat.Web.Pages.Modelli;
 
-/// <summary>Mostra cosa riceverà l'assistente AI per una combinazione di modello, sede e offerta.</summary>
+/// <summary>Mostra cosa riceverà l'assistente AI per una combinazione di modello, attività e offerta.</summary>
 public class AnteprimaModel : PageModel
 {
     private readonly CatalogRepo _catalog;
@@ -37,7 +37,7 @@ public class AnteprimaModel : PageModel
         var gym = Gyms.FirstOrDefault(g => g.Id == Gym) ?? Gyms.FirstOrDefault();
         if (model is null || gym is null) return;
         Model = model.Id; Gym = gym.Id;
-        // Le offerte proposte sono solo quelle della sede scelta: niente prezzi di altre sedi.
+        // Le offerte proposte sono solo quelle dell'attività scelta: niente prezzi di altre attività.
         Offers = await _catalog.OffersAsync(me, gym.Id);
         var offer = Offers.FirstOrDefault(o => o.Id == Offer);
         Offer = offer?.Id;
@@ -51,7 +51,7 @@ public class AnteprimaModel : PageModel
         if (offer is not null && offer.Status != "Attiva") Warnings.Add($"L'offerta scelta è «{offer.Status.ToLower()}»: in una campagna vera non verrebbe accettata.");
         if (profile.Completeness < 60) Warnings.Add($"La scheda di {gym.Name} è compilata al {profile.Completeness}%: l'assistente saprà rispondere a poche domande.");
 
-        Prompt = PromptBuilder.Build(model, gym.Name, profile, offer, who, today, await _catalog.OrgInfoAsync(gym.OrganizationId));
+        Prompt = PromptBuilder.Build(model, gym.Name, profile, offer, who, today, await _catalog.ActivityInfoAsync(gym.Id));
         FirstMessage = PromptBuilder.FillTemplate(model.TemplateSuggestion, who, gym.Name, offer);
     }
 }
