@@ -10,7 +10,7 @@
         var c = Model.Completeness.GetValueOrDefault(g.Id);
         <tr><td><b>@g.Name</b><div class="muted">@g.OrganizationName</div></td>
             <td><div class="bar" style="max-width:220px"><i style="width:@(c)%"></i></div><span class="muted">@c%</span></td>
-            <td><a class="btn sm" href="/Sedi/Edit/@g.Id">@(c == 0 ? "Compila" : "Modifica")</a></td></tr>
+            <td><a class="btn sm" href="/Sedi/Edit/@g.Id">@(c == 0 ? "Compila" : "Modifica")</a> <a class="btn sm" href="/Sedi/Orari/@g.Id">Orari di invio</a></td></tr>
     }
     @if (Model.Gyms.Count == 0) { <tr><td colspan="3" class="muted">Nessuna palestra attiva.</td></tr> }
     </tbody>

@@ -1,0 +1,36 @@
+@page "{id:int}"
+@model MvChat.Web.Pages.Sedi.OrariModel
+@{ ViewData["Title"] = "Orari di invio · " + Model.Gym.Name; }
+@section Actions { <a class="btn" href="/Sedi/Edit/@Model.Gym.Id">Scheda sede</a> }
+<p class="muted" style="margin:0">Quando le campagne di questa palestra possono mandare il <b>primo messaggio</b> ai clienti (ora italiana). Fuori orario l'invio si ferma e riparte da solo all'apertura successiva. Le risposte a chi scrive non sono mai bloccate.</p>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<form method="post" class="panel">
+    <div class="panel-h"><h2>Quando inviare</h2>@if (Model.Current != "") {<span class="muted">adesso: @Model.Current</span>}</div>
+    <div class="panel-b">
+        <label class="check"><input type="radio" name="Mode" value="sempre" checked="@(Model.Mode == "sempre")"> Sempre, 24 ore su 24</label>
+        <label class="check"><input type="radio" name="Mode" value="fasce" checked="@(Model.Mode == "fasce")"> Solo nei giorni e negli orari qui sotto</label>
+    </div>
+    <div class="tbl" id="days"><table>
+        <thead><tr><th>Giorno</th><th>Invio</th><th>Dalle</th><th>Alle</th></tr></thead>
+        <tbody>
+        @for (var i = 0; i < 7; i++)
+        {
+            var d = Model.Days.ElementAtOrDefault(i) ?? new();
+            <tr>
+                <td><b>@SendWindows.DayNames[i + 1]</b></td>
+                <td><label class="check" style="margin:0"><input type="checkbox" name="Days[@i].On" value="true" checked="@d.On"> sì</label><input type="hidden" name="Days[@i].On" value="false"></td>
+                <td><input name="Days[@i].From" value="@d.From" type="time" aria-label="@SendWindows.DayNames[i + 1] dalle" style="max-width:130px"></td>
+                <td><input name="Days[@i].To" value="@d.To" type="time" aria-label="@SendWindows.DayNames[i + 1] alle" style="max-width:130px"></td>
+            </tr>
+        }
+        </tbody>
+    </table></div>
+    <div class="actions"><span class="muted" style="flex:1">Per «fino a mezzanotte» scrivi 23:59.</span><button class="btn primary" type="submit">Salva gli orari</button></div>
+</form>
+<script>
+(function () {
+    var days = document.getElementById('days');
+    function sync() { var on = document.querySelector('input[name=Mode][value=fasce]').checked; days.style.opacity = on ? 1 : .45; days.querySelectorAll('input').forEach(function (i) { i.disabled = !on; }); }
+    document.querySelectorAll('input[name=Mode]').forEach(function (r) { r.addEventListener('change', sync); }); sync();
+})();
+</script>

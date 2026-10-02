@@ -15,4 +15,8 @@ public static class Time
 
     public static DateTime ToRome(this DateTime utc) =>
         TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), Rome);
+
+    /// <summary>Un orario scritto in pagina (ora italiana) convertito in UTC per il database.</summary>
+    public static DateTime FromRome(this DateTime local) =>
+        TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), Rome);
 }

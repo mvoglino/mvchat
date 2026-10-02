@@ -49,7 +49,12 @@ Alla fine la pagina mostra un indirizzo che finisce con `/jobs/tick?token=…`. 
 
 Nel pannello Aruba crea un'**operazione pianificata** che richiami l'indirizzo del punto 4 ogni 5 minuti, o meno se il pannello lo permette.
 
-Serve a tenere sveglio il programma e, dal Passo 6, a far partire gli invii in coda.
+Serve a tenere sveglio il programma e a far ripartire il lavoro in coda:
+
+- **campagne**: mentre mvchat è acceso invia da solo ogni 30 secondi; se Aruba lo ha spento per inattività, ogni chiamata dell'operazione pianificata fa un giro di invio (circa 25 secondi);
+- **risposte dell'assistente** rimaste in sospeso dopo un riavvio.
+
+Gli orari di invio si impostano per ogni palestra in *Scheda sede → Orari di invio WhatsApp* (di base: sempre).
 
 ## Aggiornare mvchat
 

@@ -371,6 +371,89 @@ ai_settings("")
 cid6,_,_ = start_conv(m, "333 222 3300", name="Elena")
 say(m, cid6, "Ciao")
 html = page(m, cid6); check("con l'assistente spento risponde la reception", "Serve una persona" in html and "collega della reception" in html)
+# 5f. Passo 6: campagne, orari di invio, limiti
+from datetime import datetime as _dt, timedelta as _td
+from zoneinfo import ZoneInfo as _Zone
+ai_settings("anthropic")  # la chiave inserita prima resta
+def import_list(client, gym_id, name, people):
+    rws = [[n, "Test", ph, "", "Annuale", "2026-10-31", "SI", ""] for n, ph in people]
+    s, res = client.post_json("/Lists/New?handler=Import", {"GymId":gym_id,"Name":name,"FileName":"x.xlsx","Map":mp,"Rows":rws}, "/Lists/New")
+    return res.get("listId")
+def camp_post(client, data, gym_id):
+    s,html,loc = client.post("/Campagne/Nuova", dict(data, Gym=gym_id), form_path=f"/Campagne/Nuova?gym={gym_id}")
+    mm = re.search(r"/Campagne/(\d+)$", loc or "")
+    return (mm.group(1) if mm else None), s, html
+def cpage(client, cid): return client.req(f"/Campagne/{cid}")[1]
+def act(client, cid, handler): return client.post(f"/Campagne/{cid}?handler={handler}", {}, form_path=f"/Campagne/{cid}")
+alba = gym["FitActive Alba"]; orari = f"/Sedi/Orari/{alba}"
+
+s,_,_ = o.req("/Campagne"); check("l'operatore non gestisce le campagne", s in (302,403), str(s))
+_,html,_ = m.req(orari); check("orari di invio: di base sempre, 24 ore su 24", "sempre, 24 ore su 24" in html)
+week = {f"Days[{i}].On":"true" for i in range(7)}
+s,html,_ = m.post(orari, dict(week, Mode="fasce", **{f"Days[{i}].From":"20:00" for i in range(7)}, **{f"Days[{i}].To":"09:00" for i in range(7)}))
+check("orari sbagliati rifiutati con spiegazione", s == 200 and "la fine dopo l'inizio" in html, str(s))
+now_rome = _dt.now(_Zone("Europe/Rome"))
+closed_from, closed_to = ("13:00","14:00") if now_rome.hour < 12 else ("08:00","09:00")
+s,_,_ = m.post(orari, dict(week, Mode="fasce", **{f"Days[{i}].From":closed_from for i in range(7)}, **{f"Days[{i}].To":closed_to for i in range(7)}))
+_,html,_ = m.req(orari); check("orari di invio salvati dalla palestra", s == 302 and f"Lun–Dom {closed_from}–{closed_to}" in html, html[html.find("adesso"):][:120])
+s,_,_ = oth.post(orari, {"Mode":"sempre"}, form_path="/Account/Password"); check("un'altra catena non cambia gli orari della palestra", s == 404, str(s))
+
+lid_a = import_list(m, alba, "Campagna ottobre", [("Anna","320 000 0001"),("Bruno","320 000 0002"),("Carla","320 000 0003"),("Dario","320 000 0004"),("Sara","333 111 6677")])
+base = {"Name":"Rinnovi ottobre","ListId":lid_a,"ModelId":rinnovo,"OfferId":offer_alba,"TemplateId":tid,"When":"subito","DailyLimit":""}
+cA, s, html = camp_post(m, dict(base, Name=""), alba); check("campagna senza nome rifiutata", cA is None and "Dai un nome" in html)
+cA, s, html = camp_post(m, dict(base, TemplateId="999999"), alba); check("campagna con template non approvato rifiutata", cA is None and "template" in html)
+cA, s, html = camp_post(m, base, alba)
+html = cpage(m, cA) if cA else html
+check("campagna creata come bozza con anteprima del primo messaggio", cA is not None and "Bozza" in html and "Ciao Anna, il tuo abbonamento Annuale in FitActive Alba scade il 31/10/2026" in html and "Avvia l'invio a 5 persone" in html, (html or "")[:300])
+m.post("/OptOuts?handler=Add", {"Phone":"320 000 0004","Reason":"chiesto in reception"}, form_path="/OptOuts")
+act(m, cA, "Start"); html = cpage(m, cA)
+check("fuori orario la campagna aspetta e dice quando riparte", "In invio" in html and "Adesso la palestra non invia" in html and "Si riparte da solo" in html and "Inviati (0)" in html)
+m.post(orari, {"Mode":"sempre"}); act(m, cA, "Run"); _time.sleep(0.5); html = cpage(m, cA)
+check("con orario aperto la campagna invia e si completa", "Inviati (3)" in html and "Completata" in html, html[html.find('class="stats"'):][:400])
+check("saltati: chi è entrato nella lista STOP e chi ha già una conversazione aperta", "Saltati (2)" in html and "nella lista STOP" in html and "già una conversazione aperta" in html)
+conv_anna = re.search(r"/Conversazioni/(\d+)", html).group(1)
+chat = page(m, conv_anna)
+check("ogni invio apre la sua conversazione con il primo messaggio", "Ciao Anna, il tuo abbonamento" in chat and "Rinnovo abbonamento" in chat)
+say(m, conv_anna, "Quanto costa?")
+check("il cliente risponde e l'assistente prosegue la campagna", "Il rinnovo costa 399 €." in page(m, conv_anna))
+say(m, conv_anna, "Va bene, procediamo")
+html = cpage(m, cA)
+check("risposte ed esiti contati nella campagna", re.search(r"<b>1</b><span>hanno risposto", html) is not None and re.search(r"<b>1</b><span>obiettivo raggiunto", html) is not None)
+
+lid_b = import_list(m, alba, "Seconda lista", [("Elisa","320 000 0011"),("Fabio","320 000 0012"),("Gino","320 000 0013")])
+cB,_,_ = camp_post(m, dict(base, Name="Limite giornaliero", ListId=lid_b, DailyLimit="1"), alba)
+act(m, cB, "Start"); _time.sleep(0.3); act(m, cB, "Run"); html = cpage(m, cB)
+check("limite giornaliero della campagna rispettato", "Inviati (1)" in html and "In attesa (2)" in html and "limite di 1 invii al giorno" in html, html[html.find("Ultimo giro"):][:200])
+act(m, cB, "Pause"); check("campagna in pausa", "In pausa" in cpage(m, cB))
+act(m, cB, "Resume"); check("campagna ripresa", "In invio" in cpage(m, cB))
+act(m, cB, "Cancel"); html = cpage(m, cB)
+check("campagna annullata: chi era in attesa non riceve nulla", "Annullata" in html and "Saltati (2)" in html and "campagna annullata" in html)
+tomorrow = (now_rome + _td(days=1)).strftime("%Y-%m-%dT09:30")
+cC,_,_ = camp_post(m, dict(base, Name="Programmata", ListId=lid_b, When="data", StartAt=tomorrow), alba)
+act(m, cC, "Start"); html = cpage(m, cC)
+check("campagna programmata per domani alle 9:30", "Programmata" in html and "09:30" in html and "Inviati (0)" in html)
+s,_,_ = oth.req(f"/Campagne/{cA}"); check("un'altra catena non vede le campagne", s == 404, str(s))
+s,_,_ = oth.post(f"/Campagne/{cC}?handler=Cancel", {}, form_path="/Account/Password"); check("un'altra catena non annulla le campagne", s == 404, str(s))
+_,html,_ = d.req("/Campagne"); check("la direzione vede le campagne della catena", "Rinnovi ottobre" in html and "FitActive Alba" in html)
+
+# Numero Meta (finto server): invio vero, errore di chiave che mette in pausa, ripresa
+fake.server_close(); fake = fake_meta.start(5079)
+d.post(tpl_b + "?handler=Refresh", {}, form_path=tpl_b)  # il template era stato segnato rifiutato in una prova precedente
+bra = gym["FitActive Bra"]
+_,html,_ = d.req("/Modelli"); pil = re.search(r"model=(\d+)", html[html.find("Prova corso Pilates"):]).group(1)
+lid_c = import_list(d, bra, "Bra ottobre", [("Ivo","320 000 0021"),("Lia","320 000 0022")])
+fake_meta.TOKEN = "revocata"
+cD,_,_ = camp_post(d, {"Name":"Pilates Bra","ListId":lid_c,"ModelId":pil,"OfferId":"","TemplateId":tidb,"When":"subito","DailyLimit":""}, bra)
+act(d, cD, "Start"); html = cpage(d, cD)
+check("chiave Meta non valida: la campagna va in pausa e spiega il motivo", "In pausa" in html and "codice 190" in html and "In attesa (2)" in html, html[html.find("note"):][:300])
+fake_meta.TOKEN = "good-token"
+act(d, cD, "Resume"); html = cpage(d, cD)
+sent_meta = [r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/111/messages") and r["body"].get("template",{}).get("name") == "rinnovo_bra" and r["body"].get("to") in ("393200000021","393200000022")]
+check("ripresa: template inviati a Meta per ogni destinatario", "Completata" in html and len({r["body"]["to"] for r in sent_meta}) == 2, str(len(sent_meta)))
+check("limite di Meta del numero mostrato", "1.000 persone nuove in 24 ore" in html or "1,000 persone nuove in 24 ore" in html)
+s,body,_ = Client().req("/jobs/tick?token=" + tick.group(1)); check("il giro pianificato lavora anche le campagne", s == 200 and '"sent":' in body, body[:200])
+fake.shutdown()
+
 fai.shutdown()
 
 # 6. Blocco dopo 5 tentativi sbagliati

@@ -1,0 +1,32 @@
+@page
+@model MvChat.Web.Pages.Campagne.NuovaModel
+@{ ViewData["Title"] = "Nuova campagna"; }
+@section Actions { <a class="btn" href="/Campagne">Tutte le campagne</a> }
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<form method="get" class="inline-form"><div class="field" style="max-width:340px"><label for="gym">Palestra</label><select id="gym" name="gym" onchange="this.form.submit()">@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+@if (Model.Number is null)
+{
+    <div class="note warn">Questa palestra non ha ancora un numero WhatsApp: collegalo dalla pagina WhatsApp.</div>
+}
+else
+{
+    @if (Model.Lists.Count == 0) { <div class="note warn">Nessuna lista contatti con persone contattabili: <a href="/Lists/New">carica una lista</a>.</div> }
+    @if (Model.Templates.Count == 0) { <div class="note warn">Nessun template approvato per questo numero: <a href="/WhatsApp/Template/@Model.Gym">crea il primo messaggio</a> e attendi l'approvazione di Meta.</div> }
+<form method="post" class="panel">
+    <input type="hidden" name="Gym" value="@Model.Gym">
+    <div class="panel-b form">
+        <div class="field full"><label for="Name">Nome della campagna</label><input id="Name" name="Name" value="@Model.Name" maxlength="150" placeholder="es. Rinnovi ottobre" required></div>
+        <div class="field"><label for="ListId">Lista contatti</label><select id="ListId" name="ListId">@foreach (var l in Model.Lists) { <option value="@l.Id" selected="@(l.Id == Model.ListId)">@l.Name · @l.ValidCount contatti</option> }</select></div>
+        <div class="field"><label for="ModelId">Obiettivo</label><select id="ModelId" name="ModelId">@foreach (var m in Model.Models) { <option value="@m.Id" selected="@(m.Id == Model.ModelId)">@m.Name@(m.NeedsOffer ? " · serve un'offerta" : "")</option> }</select></div>
+        <div class="field"><label for="OfferId">Offerta</label><select id="OfferId" name="OfferId"><option value="">Nessuna</option>@foreach (var o in Model.Offers) { <option value="@o.Id" selected="@(o.Id == Model.OfferId)">@o.Title @(o.Price is decimal p ? "· " + PromptBuilder.Money(p) : "")</option> }</select><small>L'assistente potrà citare solo il prezzo di questa offerta.</small></div>
+        <div class="field"><label for="TemplateId">Primo messaggio (template)</label><select id="TemplateId" name="TemplateId">@foreach (var t in Model.Templates) { <option value="@t.Id" selected="@(t.Id == Model.TemplateId)">@t.Name</option> }</select></div>
+        <div class="field"><label>Quando partire</label>
+            <label class="check"><input type="radio" name="When" value="subito" checked="@(Model.When != "data")"> Appena avviata</label>
+            <label class="check"><input type="radio" name="When" value="data" checked="@(Model.When == "data")"> Dal giorno e ora</label>
+            <input name="StartAt" type="datetime-local" value="@Model.StartAt?.ToString("yyyy-MM-ddTHH:mm")" aria-label="Data e ora di partenza"></div>
+        <div class="field"><label for="DailyLimit">Massimo invii al giorno (facoltativo)</label><input id="DailyLimit" name="DailyLimit" type="number" min="1" value="@Model.DailyLimit" placeholder="nessun limite"><small>Utile per non intasare la reception di risposte.</small></div>
+        <div class="field full"><small>Orari di invio della palestra: <b>@Model.Windows</b> · <a href="/Sedi/Orari/@Model.Gym">modifica</a>. Limite di Meta del numero: <b>@(SendWindows.MetaDailyLimit(Model.Number.MessagingLimit, Model.Number.IsSimulated) is int ml ? ml.ToString("N0") + " persone nuove ogni 24 ore" : "nessuno")</b>.</small></div>
+    </div>
+    <div class="actions"><span class="muted" style="flex:1">La campagna nasce come bozza: prima dell'invio vedi l'anteprima e quante persone riceveranno il messaggio.</span><button class="btn primary" type="submit" disabled="@(Model.Lists.Count == 0 || Model.Templates.Count == 0)">Crea la campagna</button></div>
+</form>
+}

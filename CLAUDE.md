@@ -33,7 +33,7 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per catene di palestre, con un a
 3. Scheda sede (senza prezzi), offerte con prezzo per palestra, modelli di obiettivo (standard MVitalia + della catena), anteprima istruzioni AI (`Catalog/PromptBuilder.cs`) ✅
 4. Collegamento WhatsApp Cloud API: numeri per palestra simulati o Meta (inserimento manuale ID + chiave cifrata), template con approvazione, invio, webhook firmato, STOP automatico, finto server Meta nelle prove ✅ · da fare quando MVitalia sarà Tech Provider: Embedded Signup
 5. Assistente AI (Anthropic o OpenAI, scelto in Impostazioni AI, chiave cifrata): risposte in JSON {risposta, esito, nota}, controlli di mvchat prima dell'invio (prezzi solo dall'offerta e sconto massimo, dichiararsi assistente virtuale, limite risposte), passaggio alla reception, coda in memoria + ripresa da /jobs/tick, pagina Conversazioni, banco di prova con clienti simulati, consumi in AiUsage; finto fornitore AI nelle prove (`tests/e2e/fake_ai.py`) ✅
-6. Campagne con coda e limiti Meta
+6. Campagne (`Campaigns/`): destinatari copiati dalla lista alla creazione, bozza → programmata/in invio → completata, pausa/ripresa/annullamento; invio a gruppi con prenotazione dei destinatari (mai due volte), ogni 30 s (CampaignWorker) e da /jobs/tick; orari di invio per palestra in `GymSendWindows` (nessuna riga = 24 ore su 24, ora italiana); limite giornaliero della campagna e limite Meta del numero (persone nuove in 24 ore dal tier); pausa automatica per errori di chiave/account Meta, qualità RED, template non approvato, offerta non attiva; salta chi è in lista STOP o ha già una conversazione aperta ✅
 7. Conversazioni operatori
 8. Pannello amministratore e report
 9. Abbonamenti e consumi rifatturati

@@ -1,3 +1,4 @@
+using MvChat.Web.Campaigns;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using MvChat.Web.Ai;
@@ -24,6 +25,9 @@ builder.Services.AddScoped<ConversationRepo>();
 builder.Services.AddScoped<AssistantService>();
 builder.Services.AddSingleton<AiQueue>();
 builder.Services.AddHostedService<AiWorker>();
+builder.Services.AddScoped<CampaignRepo>();
+builder.Services.AddScoped<CampaignSender>();
+builder.Services.AddHostedService<CampaignWorker>();
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddScoped<LoginService>();
 
@@ -74,6 +78,7 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizeFolder("/WhatsApp", "ManageLists");
     o.Conventions.AuthorizeFolder("/Impostazioni", "SuperAdmin");
     o.Conventions.AuthorizeFolder("/Assistente", "ManageLists");
+    o.Conventions.AuthorizeFolder("/Campagne", "ManageLists");
 }).AddMvcOptions(o =>
 {
     // I campi obbligatori sono solo quelli marcati [Required], con messaggi in italiano.
@@ -148,15 +153,18 @@ app.MapGet("/health", (AppConfigStore cfg) => Results.Json(new
 
 // Indirizzo richiamato ogni pochi minuti dall'operazione pianificata di Aruba.
 // Dal Passo 6 farà partire gli invii in coda; per ora registra solo che è stato chiamato.
-app.MapGet("/jobs/tick", async (string? token, AppConfigStore cfg, Db db, ConversationRepo convs, AiQueue queue) =>
+app.MapGet("/jobs/tick", async (string? token, AppConfigStore cfg, Db db, ConversationRepo convs, AiQueue queue, CampaignSender sender) =>
 {
     var c = cfg.Current;
     if (!c.Installed || string.IsNullOrEmpty(token) || token != c.JobToken) return Results.NotFound();
     // Risposte AI rimaste in sospeso (per esempio dopo un riavvio dell'hosting).
     var pending = await convs.PendingAsync(60);
     foreach (var id in pending) queue.Enqueue(id);
-    await db.ExecuteAsync("INSERT INTO AuditLog (Action, Detail) VALUES ('jobs.tick', @d)", new { d = pending.Count > 0 ? $"riprese {pending.Count} risposte" : null });
-    return Results.Json(new { ok = true, at = DateTime.UtcNow, resumed = pending.Count });
+    // Campagne: un giro di invio (l'operazione pianificata di Aruba ha un tempo massimo, quindi si resta sotto i 30 secondi).
+    var run = await sender.RunAsync(TimeSpan.FromSeconds(25));
+    var detail = string.Join(" · ", new[] { pending.Count > 0 ? $"riprese {pending.Count} risposte" : null, run.Sent + run.Skipped + run.Errors > 0 ? $"campagne: inviati {run.Sent}, saltati {run.Skipped}, errori {run.Errors}" : null }.Where(x => x is not null));
+    await db.ExecuteAsync("INSERT INTO AuditLog (Action, Detail) VALUES ('jobs.tick', @d)", new { d = detail == "" ? null : detail });
+    return Results.Json(new { ok = true, at = DateTime.UtcNow, resumed = pending.Count, sent = run.Sent, skipped = run.Skipped, errors = run.Errors, notes = run.Notes });
 });
 
 // Webhook WhatsApp: Meta chiama questo indirizzo per consegnare messaggi e aggiornamenti di stato.

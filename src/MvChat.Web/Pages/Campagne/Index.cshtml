@@ -1,0 +1,28 @@
+@page
+@model MvChat.Web.Pages.Campagne.IndexModel
+@{ ViewData["Title"] = "Campagne"; var many = Model.Gyms.Count > 1; }
+@section Actions { <a class="btn primary" href="/Campagne/Nuova@(Model.Gym is int g ? "?gym=" + g : "")">Nuova campagna</a> }
+<p class="muted" style="margin:0">Una campagna manda il primo messaggio (template approvato) a tutti i contatti di una lista; poi l'assistente porta avanti ogni conversazione verso l'obiettivo. Gli invii rispettano gli orari della palestra e i limiti di Meta.</p>
+@if (many)
+{
+    <form method="get" class="inline-form"><div class="field" style="max-width:300px"><label for="gym">Palestra</label><select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+}
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Campagna</th>@if (many) {<th>Palestra</th>}<th>Stato</th><th>Inviati</th><th>Risposte</th><th>Obiettivo raggiunto</th><th>Creata</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var c in Model.Items)
+    {
+        <tr>
+            <td><b>@c.Name</b><div class="muted">@c.GoalName · @c.ListName</div></td>
+            @if (many) {<td>@c.GymName</td>}
+            <td><span class="chip @Campaign.StatusCss(c.Status)">@Campaign.StatusLabel(c.Status)</span></td>
+            <td><div class="bar" style="max-width:140px"><i style="width:@(c.Percent)%"></i></div><span class="muted">@c.Sent di @c.Total</span></td>
+            <td>@c.Replied</td>
+            <td><b>@c.Reached</b></td>
+            <td class="muted">@c.CreatedAt.ToRome().ToString("dd/MM/yyyy")</td>
+            <td><a class="btn sm" href="/Campagne/@c.Id">Apri</a></td>
+        </tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="8" class="muted">Nessuna campagna ancora. Servono una lista contatti, un template approvato e (per le promo) un'offerta attiva.</td></tr> }
+    </tbody>
+</table></div></section>

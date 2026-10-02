@@ -1,6 +1,7 @@
 @page "{id:int}"
 @model MvChat.Web.Pages.Sedi.EditModel
 @{ ViewData["Title"] = "Scheda di " + Model.Gym.Name; }
+@section Actions { <a class="btn" href="/Sedi/Orari/@Model.Gym.Id">Orari di invio WhatsApp</a> }
 <p class="muted" style="margin:0">Scrivi come lo diresti a un cliente al bancone. L'assistente userà solo queste informazioni: quello che manca, non lo dirà.</p>
 <form method="post" class="panel">
     <div class="panel-b form">

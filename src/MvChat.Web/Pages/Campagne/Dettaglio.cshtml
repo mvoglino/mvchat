@@ -1,0 +1,67 @@
+@page "/Campagne/{id:int}"
+@model MvChat.Web.Pages.Campagne.DettaglioModel
+@{
+    var c = Model.C;
+    ViewData["Title"] = c.Name;
+    string RStatus(string s) => s switch { "in_attesa" => "In attesa", "in_invio" => "In invio", "inviato" => "Inviato", "saltato" => "Saltato", "errore" => "Errore", _ => s };
+    string RCss(string s) => s switch { "inviato" => "good", "errore" => "bad", "saltato" => "warn", _ => "" };
+}
+@section Actions { <a class="btn" href="/Campagne">Tutte le campagne</a> }
+<div class="stats">
+    <div class="stat"><b style="font-size:17px"><span class="chip @Campaign.StatusCss(c.Status)">@Campaign.StatusLabel(c.Status)</span></b><span>@c.GymName · @c.GoalName@(c.OfferTitle is null ? "" : " · " + c.OfferTitle)</span></div>
+    <div class="stat"><b>@c.Sent <small class="muted" style="font-size:14px">di @c.Total</small></b><span>primi messaggi inviati@(c.Waiting > 0 ? $" · {c.Waiting} in attesa" : "")</span></div>
+    <div class="stat"><b>@c.Replied</b><span>hanno risposto</span></div>
+    <div class="stat ok"><b>@c.Reached</b><span>obiettivo raggiunto</span></div>
+</div>
+<div class="bar"><i style="width:@(c.Percent)%"></i></div>
+@if (c.PauseReason is not null && c.Status == "in_pausa") { <div class="note warn">In pausa: @c.PauseReason</div> }
+@if (c.Status is "in_corso" or "programmata" && !Model.WindowOpen) { <div class="note">Adesso la palestra non invia (orari: @Model.Windows)@(Model.NextOpen is DateTime n ? $". Si riparte da solo {n:dd/MM} alle {n:HH:mm}." : ".")</div> }
+
+<section class="panel">
+    <div class="panel-h"><h2>Comandi</h2><span style="flex:1"></span>
+        @if (c.CanStart) { <form method="post" asp-page-handler="Start"><button class="btn primary sm" type="submit">@(c.StartAt is DateTime s && s > DateTime.UtcNow ? "Programma l'invio" : $"Avvia l'invio a {c.Waiting} persone")</button></form> }
+        @if (c.Status == "in_corso") { <form method="post" asp-page-handler="Run"><button class="btn sm" type="submit">Invia adesso un gruppo</button></form> }
+        @if (c.CanPause) { <form method="post" asp-page-handler="Pause"><button class="btn sm" type="submit">Metti in pausa</button></form> }
+        @if (c.CanResume) { <form method="post" asp-page-handler="Resume"><button class="btn primary sm" type="submit">Riprendi</button></form> }
+        @if (c.CanCancel) { <form method="post" asp-page-handler="Cancel" onsubmit="return confirm('Annullare la campagna? Chi non ha ancora ricevuto il messaggio non lo riceverà.')"><button class="btn sm" type="submit">Annulla campagna</button></form> }
+    </div>
+    <div class="panel-b form">
+        <div class="field full"><label>Anteprima del primo messaggio · template @c.TemplateName</label><div class="bubble" style="margin-left:0">@Model.Preview</div></div>
+        <div class="field"><label>Lista</label><span>@c.ListName</span></div>
+        <div class="field"><label>Partenza</label><span>@(c.StartAt is DateTime st ? st.ToRome().ToString("dd/MM/yyyy HH:mm") : "appena avviata")</span></div>
+        <div class="field"><label>Orari di invio della palestra</label><span>@Model.Windows · <a href="/Sedi/Orari/@c.GymId">modifica</a></span></div>
+        <div class="field"><label>Limiti</label><span>@(c.DailyLimit is int d ? $"massimo {d} al giorno" : "nessun limite della campagna") · Meta: @(Model.MetaLimit is int ml ? ml.ToString("N0") + " persone nuove in 24 ore" : "nessun limite")</span></div>
+        <div class="field"><label>Ultimo giro di invio</label><span class="muted">@(c.LastRunAt is DateTime lr ? lr.ToRome().ToString("dd/MM HH:mm") + " · " + c.LastRunNote : "non ancora")</span></div>
+        <div class="field"><label>Esiti</label><span>@c.Reached raggiunti · @c.Refused rifiuti · @c.OptOut non contattare più · @c.ToOperator aspettano la reception</span></div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-h"><h2>Destinatari</h2><span style="flex:1"></span>
+        <form method="get" class="inline-form" style="margin:0"><select name="stato" onchange="this.form.submit()" aria-label="Filtra per stato">
+            <option value="">Tutti (@c.Total)</option>
+            <option value="in_attesa" selected="@(Model.Filter == "in_attesa")">In attesa (@c.Waiting)</option>
+            <option value="inviato" selected="@(Model.Filter == "inviato")">Inviati (@c.Sent)</option>
+            <option value="saltato" selected="@(Model.Filter == "saltato")">Saltati (@c.Skipped)</option>
+            <option value="errore" selected="@(Model.Filter == "errore")">Errori (@c.Errors)</option>
+        </select></form>
+    </div>
+    <div class="tbl"><table>
+        <thead><tr><th>Cliente</th><th>Abbonamento</th><th>Invio</th><th>Esito</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var r in Model.Recipients)
+        {
+            <tr>
+                <td><b>@r.FirstName @r.LastName</b><div class="muted">@r.Phone</div></td>
+                <td class="muted">@r.Membership@(r.ExpiresOn is DateTime e ? " · scade " + e.ToString("dd/MM/yyyy") : "")</td>
+                <td><span class="chip @RCss(r.Status)">@RStatus(r.Status)</span>@if (r.SentAt is DateTime sa) {<span class="muted"> @sa.ToRome().ToString("dd/MM HH:mm")</span>}@if (r.Reason is not null) {<div class="muted">@r.Reason</div>}</td>
+                <td>@if (r.Outcome is not null) {<span class="chip @Outcomes.Css(r.Outcome)">@Outcomes.Label(r.Outcome)</span>}</td>
+                <td>@if (r.ConversationId is long cv) {<a class="btn sm" href="/Conversazioni/@cv">Conversazione</a>}</td>
+            </tr>
+        }
+        @if (Model.Recipients.Count == 0) { <tr><td colspan="5" class="muted">Nessun destinatario in questo stato.</td></tr> }
+        </tbody>
+    </table></div>
+    @if (Model.Recipients.Count == 500) { <div class="panel-b muted">Mostrati i primi 500.</div> }
+</section>
+@if (c.Status is "in_corso" or "programmata") { <script>setTimeout(function () { if (!document.activeElement || document.activeElement.tagName !== 'SELECT') location.reload(); }, 20000);</script> }
