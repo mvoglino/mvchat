@@ -12,10 +12,10 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per strutture di qualsiasi setto
 - Hosting: Aruba Windows condiviso (IIS in-process). Sul server Aruba (verificato ottobre 2026): .NET 9.0.20 e 10.0.12, ASP.NET Core Module V2: niente .NET 8. Niente processi sempre attivi: il lavoro in coda parte da `/jobs/tick?token=…`, richiamato dall'operazione pianificata di Aruba.
 - Configurazione in `App_Data/mvchat.json`, scritta dall'installazione guidata (`/Install`). Mai segreti nel repository.
 - Modifiche al database solo con nuovi script `Data/Schema/NNN_nome.sql` (numerati, mai modificare quelli già rilasciati). Separatore tra istruzioni: riga `GO`. Usare `IF NOT EXISTS` dove possibile: in MySQL le istruzioni DDL non sono transazionali.
-- Prezzi solo nelle offerte, definiti da ogni palestra: la scheda sede non contiene prezzi e l'assistente può citare solo il prezzo dell'offerta collegata.
-- Nessun collegamento al gestionale delle palestre: l'esito di una campagna è quello rilevato nella conversazione.
+- Prezzi solo nelle offerte, definiti da ogni sede: la scheda sede non contiene prezzi e l'assistente può citare solo il prezzo dell'offerta collegata.
+- Nessun collegamento al gestionale delle strutture: l'esito di una campagna è quello rilevato nella conversazione.
 - Date e ore salvate in UTC (la connessione imposta time_zone='+00:00'); in pagina si mostrano con `.ToRome()`.
-- Messaggi Meta fatturati direttamente alla palestra; uso dell'AI misurato per palestra e rifatturato a consumo da MVitalia, separato dall'abbonamento.
+- Messaggi Meta fatturati direttamente alla struttura; uso dell'AI misurato per sede e rifatturato a consumo da MVitalia, separato dall'abbonamento.
 
 ## Parole e settori
 - Nell'interfaccia: **struttura** (il cliente abilitato da MVitalia; nel codice `Organization`), **sede** (nel codice `Gym`, tabella `Gyms`), **cliente** (il destinatario). Mai «palestra» o «catena» nei testi delle pagine.
@@ -34,10 +34,10 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per strutture di qualsiasi setto
 - Ogni nuovo passo aggiunge le sue prove in `tests/e2e`.
 
 ## Piano di lavoro (10 passi)
-1. Fondamenta: installazione, accessi, ruoli, catene/palestre/utenti ✅
-2. Liste contatti: import Excel nel browser con abbinamento colonne ricordato per palestra, consensi, normalizzazione numeri, lista STOP per catena ✅
-3. Scheda sede (senza prezzi), offerte con prezzo per palestra, modelli di obiettivo (standard MVitalia + della catena), anteprima istruzioni AI (`Catalog/PromptBuilder.cs`) ✅
-4. Collegamento WhatsApp Cloud API: numeri per palestra simulati o Meta (inserimento manuale ID + chiave cifrata), template con approvazione, invio, webhook firmato, STOP automatico, finto server Meta nelle prove ✅ · da fare quando MVitalia sarà Tech Provider: Embedded Signup
+1. Fondamenta: installazione, accessi, ruoli, strutture/sedi/utenti ✅
+2. Liste contatti: import Excel nel browser con abbinamento colonne ricordato per sede, consensi, normalizzazione numeri, lista STOP per struttura ✅
+3. Scheda sede (senza prezzi), offerte con prezzo per sede, modelli di obiettivo (standard MVitalia + della struttura), anteprima istruzioni AI (`Catalog/PromptBuilder.cs`) ✅
+4. Collegamento WhatsApp Cloud API: numeri per sede simulati o Meta (inserimento manuale ID + chiave cifrata), template con approvazione, invio, webhook firmato, STOP automatico, finto server Meta nelle prove ✅ · da fare quando MVitalia sarà Tech Provider: Embedded Signup
 5. Assistente AI (Anthropic o OpenAI, scelto in Impostazioni AI, chiave cifrata): risposte in JSON {risposta, esito, nota}, controlli di mvchat prima dell'invio (prezzi solo dall'offerta e sconto massimo, dichiararsi assistente virtuale, limite risposte), passaggio alla reception, coda in memoria + ripresa da /jobs/tick, pagina Conversazioni, banco di prova con clienti simulati, consumi in AiUsage; finto fornitore AI nelle prove (`tests/e2e/fake_ai.py`) ✅
 6. Campagne (`Campaigns/`): destinatari copiati dalla lista alla creazione, bozza → programmata/in invio → completata, pausa/ripresa/annullamento; invio a gruppi con prenotazione dei destinatari (mai due volte), ogni 30 s (CampaignWorker) e da /jobs/tick; orari di invio per palestra in `GymSendWindows` (nessuna riga = 24 ore su 24, ora italiana); limite giornaliero della campagna e limite Meta del numero (persone nuove in 24 ore dal tier); pausa automatica per errori di chiave/account Meta, qualità RED, template non approvato, offerta non attiva; salta chi è in lista STOP o ha già una conversazione aperta ✅
 7. Postazione reception (avvisi solo dentro mvchat, niente email): viste da gestire/mie/assistente/chiuse/tutte, presa in carico, lascia ai colleghi, assegnazione dal responsabile, avviso nel menu e nel titolo con controllo ogni 30 s (`/Conversazioni?handler=Badge`); risposte rapide per palestra o catena (`QuickReplies`, {{nome}} {{palestra}}); archivio dialoghi diviso «solo assistente AI» / «con operatore» (`Conversations.HumanInvolved`, impostato quando la conversazione passa alla reception o un operatore scrive) con filtri, numeri e file per Excel ✅
