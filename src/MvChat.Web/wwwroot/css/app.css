@@ -152,3 +152,25 @@ a.stat{text-decoration:none;color:inherit}
 .toast a{color:inherit;font-weight:700}
 .toast button{background:none;border:0;color:inherit;font-size:20px;cursor:pointer;line-height:1}
 .logo-preview{display:block;max-width:180px;max-height:80px;object-fit:contain;margin:4px 0 8px;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+
+/* Passo 8 · report */
+.crumbs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--ink-2)}
+.crumbs a{color:inherit}
+.report-kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.bars-chart{margin:0}
+.bars-chart figcaption{margin-bottom:8px}
+.bars{position:relative;display:flex;align-items:flex-end;gap:2px;height:120px;border-bottom:1px solid var(--line);
+  background:linear-gradient(var(--line),var(--line)) top/100% 1px no-repeat}
+.bars-max{position:absolute;top:-2px;right:0;font-size:11px;transform:translateY(-100%)}
+.vbar{flex:1;height:100%;display:flex;align-items:flex-end;cursor:default;min-width:2px}
+.vbar i{display:block;width:100%;height:var(--h);min-height:0;background:var(--accent);border-radius:4px 4px 0 0;opacity:.85}
+.vbar:hover i{opacity:1;outline:2px solid var(--ink);outline-offset:-1px}
+.bars-axis{display:flex;justify-content:space-between;font-size:11.5px;margin-top:4px}
+td.num,th.num{text-align:right;white-space:nowrap}
+.report-table td:first-child{min-width:190px}
+tfoot td{border-top:2px solid var(--line);background:var(--surface-2)}
+a.kpi{text-decoration:none;color:inherit}
+.alerts{list-style:none;margin:0;padding:0}
+.alerts li{display:flex;gap:10px;align-items:baseline;padding:10px 18px;border-top:1px solid var(--line)}
+.alerts li:first-child{border-top:0}

@@ -60,7 +60,7 @@ else
                 <div><b>@(brand?.Name ?? product)</b><small>@Roles.Label(scope!.Role)</small></div>
             </div>
             <nav class="nav" aria-label="Sezioni">
-                <a href="/" aria-current="@(Cur("/Index"))">Panoramica</a>
+                <a href="/" aria-current="@(Cur("/Index"))">@(scope.IsSuperAdmin ? "Pannello" : "Panoramica")</a>
                 @if (scope.IsSuperAdmin)
                 {
                     <a href="/Orgs" aria-current="@(Cur("/Orgs"))">Gruppi</a>
@@ -96,6 +96,7 @@ else
                 @if (scope.CanManageUsers)
                 {
                     <a href="/Campagne" aria-current="@(Cur("/Campagne"))">Campagne</a>
+                    <a href="/Report" aria-current="@(Cur("/Report"))">Report</a>
                 }
                 <a href="/Conversazioni" aria-current="@(Cur("/Conversazioni"))">Conversazioni <span class="badge" id="waitBadge" aria-label="conversazioni che aspettano una persona" hidden="@(waiting == 0)">@waiting</span></a>
             </nav>

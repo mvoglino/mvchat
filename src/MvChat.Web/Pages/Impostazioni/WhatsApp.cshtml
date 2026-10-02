@@ -19,6 +19,8 @@
             <small>Serve a controllare che i messaggi in arrivo vengano davvero da Meta. Senza, mvchat li rifiuta.</small></div>
         <div class="field"><label asp-for="GraphVersion">Versione API di Meta</label><input asp-for="GraphVersion"><small>Formato vNN.N. Si aggiorna quando Meta ritira le versioni vecchie.</small></div>
         <div class="field"><label asp-for="GraphBaseUrl">Indirizzo API</label><input asp-for="GraphBaseUrl"><small>Da non toccare: https://graph.facebook.com</small></div>
+        <div class="field"><label asp-for="MarketingPrice">Prezzo Meta messaggio marketing (€)</label><input asp-for="MarketingPrice" inputmode="decimal"><small>Listino Meta per l'Italia. Serve solo per la stima dei costi nei report: Meta fattura direttamente le attività.</small></div>
+        <div class="field"><label asp-for="UtilityPrice">Prezzo Meta messaggio di servizio (€)</label><input asp-for="UtilityPrice" inputmode="decimal"><small>Categoria «utility». Le risposte entro 24 ore dal messaggio del cliente sono gratuite.</small></div>
     </div>
     <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
 </form>

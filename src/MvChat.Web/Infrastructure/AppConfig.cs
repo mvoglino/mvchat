@@ -60,6 +60,9 @@ public sealed class MetaSettings
     public string GraphVersion { get; set; } = "v23.0";
     /// <summary>Cambia solo nelle prove automatiche, dove Meta è sostituita da un finto server.</summary>
     public string GraphBaseUrl { get; set; } = "https://graph.facebook.com";
+    /// <summary>Listino Meta per l'Italia (€ per messaggio): serve solo a stimare nei report quanto pagano le attività a Meta.</summary>
+    public decimal MarketingPriceEur { get; set; } = 0.0658m;
+    public decimal UtilityPriceEur { get; set; } = 0.0248m;
 }
 
 public sealed class AppConfigStore

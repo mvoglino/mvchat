@@ -1,0 +1,88 @@
+@page
+@model MvChat.Web.Pages.Report.IndexModel
+@using MvChat.Web.Reports
+@{
+    ViewData["Title"] = "Report · " + Model.Title;
+    var t = Model.Total; var meta = Model.Meta;
+    var it = System.Globalization.CultureInfo.GetCultureInfo("it-IT");
+    string Eur(decimal v) => v.ToString("#,0.00", it) + " €";
+    string Usd(decimal v) => "$ " + v.ToString(v < 10 ? "0.00" : "#,0", it);
+    var levelName = Model.Level switch { "clienti" => "Cliente", "attivita" => "Attività", _ => "Campagna" };
+}
+@section Actions { <a class="btn" href="@Model.Url(Model.Group, Model.Activity, "Csv")">Scarica per Excel</a> }
+<nav class="crumbs" aria-label="Percorso">
+    @for (var i = 0; i < Model.Crumbs.Count; i++)
+    {
+        var (label, url) = Model.Crumbs[i];
+        if (i > 0) { <span aria-hidden="true">›</span> }
+        if (url is not null && i < Model.Crumbs.Count - 1) { <a href="@url">@label</a> } else { <b>@label</b> }
+    }
+</nav>
+<form method="get" class="inline-form">
+    @if (Model.Group is int g) { <input type="hidden" name="gruppo" value="@g"> }
+    @if (Model.Activity is int a) { <input type="hidden" name="attivita" value="@a"> }
+    <div class="field"><label for="dal">Dal</label><input id="dal" name="dal" type="date" value="@Model.From.ToString("yyyy-MM-dd")"></div>
+    <div class="field"><label for="al">Al</label><input id="al" name="al" type="date" value="@Model.To.ToString("yyyy-MM-dd")"></div>
+    <button class="btn" type="submit">Aggiorna</button>
+    <span class="muted">Le conversazioni di prova non sono conteggiate.</span>
+</form>
+
+<div class="stats report-kpis">
+    <div class="stat"><b>@t.Sent.ToString("N0", it)</b><span>primi messaggi inviati · @ReportRow.Pct(t.Read, t.Sent)% letti</span></div>
+    <div class="stat"><b>@ReportRow.Pct(t.Replied, t.Conversations)%</b><span>hanno risposto · @t.Replied.ToString("N0", it) clienti</span></div>
+    <div class="stat ok"><b>@t.Reached.ToString("N0", it)</b><span>obiettivi raggiunti · @ReportRow.Pct(t.Reached, t.Conversations)% dei contattati</span></div>
+    <div class="stat"><b>@ReportRow.Pct(t.AiOnly, t.Replied)%</b><span>dialoghi gestiti solo dall'assistente · @t.WithOperator con operatore</span></div>
+    <div class="stat"><b>@Eur(t.MetaCostEur(meta))</b><span>costo Meta stimato (fatturato alle attività)</span></div>
+    <div class="stat"><b>@Usd(t.AiCostUsd)</b><span>consumo AI nel periodo</span></div>
+</div>
+
+<section class="panel">
+    <div class="panel-h"><h2>Andamento giorno per giorno</h2><span class="muted">passa sopra le barre per i numeri</span></div>
+    <div class="panel-b charts">
+        @foreach (var (label, pick) in new (string, Func<DayPoint, int>)[] { ("Primi messaggi inviati", d => d.Sent), ("Messaggi ricevuti dai clienti", d => d.Received), ("Obiettivi raggiunti", d => d.Reached) })
+        {
+            var max = Math.Max(1, Model.Days.Select(pick).DefaultIfEmpty(0).Max());
+            var total = Model.Days.Sum(pick);
+            <figure class="bars-chart">
+                <figcaption><b>@label</b> <span class="muted">· @total.ToString("N0", it) nel periodo</span></figcaption>
+                <div class="bars" role="img" aria-label="@label per giorno, massimo @max">
+                    <span class="bars-max muted">@max</span>
+                    @foreach (var d in Model.Days)
+                    {
+                        var v = pick(d);
+                        <span class="vbar" style="--h:@((100.0 * v / max).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%" title="@d.Day.ToString("ddd d MMM", it): @v"><i></i></span>
+                    }
+                </div>
+                <div class="bars-axis muted"><span>@Model.Days.FirstOrDefault()?.Day.ToString("d MMM", it)</span><span>@Model.Days.LastOrDefault()?.Day.ToString("d MMM", it)</span></div>
+            </figure>
+        }
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-h"><h2>@(Model.Level switch { "clienti" => "Gruppi e attività singole", "attivita" => "Confronto tra le attività", _ => "Campagne nel periodo" })</h2></div>
+    <div class="tbl"><table class="report-table">
+        <thead><tr><th>@levelName</th><th class="num">Inviati</th><th class="num">Risposte</th><th class="num">Obiettivi</th><th class="num">Rifiuti / stop</th><th class="num">Solo AI / operatore</th><th class="num">Meta</th><th class="num">AI</th></tr></thead>
+        <tbody>
+        @foreach (var r in Model.Rows)
+        {
+            <tr>
+                <td>@if (r.Link is not null) {<a href="@r.Link"><b>@r.Name</b></a>} else {<b>@r.Name</b>}@if (r.Detail is not null) {<div class="muted">@r.Detail</div>}</td>
+                <td class="num">@r.Sent <span class="muted">· @ReportRow.Pct(r.Read, r.Sent)% letti</span></td>
+                <td class="num">@r.Replied <span class="muted">(@ReportRow.Pct(r.Replied, r.Conversations)%)</span></td>
+                <td class="num"><b>@r.Reached</b> <span class="muted">(@ReportRow.Pct(r.Reached, r.Conversations)%)</span></td>
+                <td class="num">@r.Refused / @r.OptOut</td>
+                <td class="num">@r.AiOnly / @r.WithOperator</td>
+                <td class="num">@Eur(r.MetaCostEur(meta))</td>
+                <td class="num">@Usd(r.AiCostUsd)</td>
+            </tr>
+        }
+        @if (Model.Rows.Count == 0) { <tr><td colspan="8" class="muted">Nessun dato nel periodo scelto.</td></tr> }
+        </tbody>
+        @if (Model.Rows.Count > 1 || Model.Level == "campagne")
+        {
+            <tfoot><tr><td><b>@(Model.Level == "campagne" ? "Totale attività (anche fuori campagna)" : "Totale")</b></td><td class="num">@t.Sent <span class="muted">· @ReportRow.Pct(t.Read, t.Sent)% letti</span></td><td class="num">@t.Replied</td><td class="num"><b>@t.Reached</b></td><td class="num">@t.Refused / @t.OptOut</td><td class="num">@t.AiOnly / @t.WithOperator</td><td class="num">@Eur(t.MetaCostEur(meta))</td><td class="num">@Usd(t.AiCostUsd)</td></tr></tfoot>
+        }
+    </table></div>
+    <div class="panel-b muted" style="font-size:12.5px">Costo Meta: stima con il listino in Impostazioni Meta (@Eur(meta.MarketingPriceEur) marketing, @Eur(meta.UtilityPriceEur) servizio); lo paga ogni attività direttamente a Meta. Consumo AI: costo del fornitore AI in dollari, comprese prove e banco di prova; la rifatturazione arriva con il Passo 9.</div>
+</section>

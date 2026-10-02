@@ -1,31 +1,55 @@
 @page
 @model IndexModel
-@{ ViewData["Title"] = "Panoramica"; }
-<p class="muted" style="margin:0">Ciao @Model.Me.Name. Questa è la base di mvchat: accessi, ruoli e attività separate. Liste, campagne e conversazioni arrivano nei prossimi passi.</p>
+@{
+    ViewData["Title"] = Model.Me.IsSuperAdmin ? "Pannello MVitalia" : "Panoramica";
+    var me = Model.Me; var p = Model.Pulse;
+    var it = System.Globalization.CultureInfo.GetCultureInfo("it-IT");
+}
+@section Actions { @if (me.CanManageUsers) { <a class="btn" href="/Report">Report</a> } }
+<p class="muted" style="margin:0">Ciao @me.Name. @(me.IsSuperAdmin ? "Qui vedi tutto il servizio: clienti, attività e cosa va controllato." : me.IsOrgAdmin ? "Qui vedi le attività del tuo gruppo." : "Qui vedi la tua attività.")</p>
 <div class="kpis">
-    @if (Model.Me.IsSuperAdmin)
-    {
-        <div class="kpi"><span>Gruppi</span><b>@Model.Counts.Orgs</b></div>
-    }
-    <div class="kpi"><span>Attività</span><b>@Model.Counts.Gyms</b></div>
-    @if (Model.Me.CanManageUsers)
-    {
-        <div class="kpi"><span>Utenti</span><b>@Model.Counts.Users</b></div>
-    }
+    @if (me.IsSuperAdmin) { <div class="kpi"><span>Gruppi</span><b>@Model.Counts.Orgs</b></div> }
+    @if (!me.IsManager && me.Role != Roles.Operator) { <div class="kpi"><span>Attività attive</span><b>@p.Activities</b></div> }
+    @if (me.CanManageUsers) { <div class="kpi"><span>Utenti</span><b>@p.Users</b></div> }
+    @if (me.CanManageUsers) { <a class="kpi" href="/Campagne"><span>Campagne in invio</span><b>@p.CampaignsRunning</b></a> }
+    <a class="kpi" href="/Conversazioni?view=tutte"><span>Conversazioni aperte</span><b>@p.OpenConversations</b></a>
+    <div class="kpi"><span>Obiettivi raggiunti in 30 giorni</span><b>@p.Reached30</b></div>
+    @if (me.CanManageUsers) { <div class="kpi"><span>Consumo AI del mese</span><b>$ @p.AiMonthUsd.ToString("0.00", it)</b></div> }
 </div>
+
 <section class="panel">
-    <div class="panel-h"><h2>@(Model.Me.IsSuperAdmin ? "Tutte le attività" : Model.Me.IsOrgAdmin ? "Le attività del gruppo" : "La tua attività")</h2></div>
+    <div class="panel-h"><h2>Da controllare</h2>@if (Model.Alerts.Count == 0) {<span class="chip good">Tutto a posto</span>}</div>
+    @if (Model.Alerts.Count > 0)
+    {
+        <ul class="alerts">
+            @foreach (var a in Model.Alerts)
+            {
+                <li class="@a.Level"><span class="chip @(a.Level == "bad" ? "bad" : "warn")">@(a.Level == "bad" ? "Urgente" : "Da vedere")</span>
+                    @if (a.Link is not null) {<a href="@a.Link">@a.Text</a>} else {<span>@a.Text</span>}</li>
+            }
+        </ul>
+    }
+    else { <div class="panel-b muted">Nessun problema: numeri WhatsApp, campagne, assistente e conversazioni sono in ordine.</div> }
+</section>
+
+@if (!me.IsManager && me.Role != Roles.Operator)
+{
+<section class="panel">
+    <div class="panel-h"><h2>@(me.IsSuperAdmin ? "Tutte le attività" : "Le attività del gruppo")</h2></div>
     <div class="tbl"><table>
-        <thead><tr>@if (Model.Me.IsSuperAdmin) {<th>Gruppo</th>}<th>Attività</th><th>Città</th><th>Utenti</th><th>Stato</th></tr></thead>
+        <thead><tr>@if (me.IsSuperAdmin) {<th>Gruppo</th>}<th>Attività</th><th>Città</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
         <tbody>
         @foreach (var g in Model.Gyms)
         {
-            <tr>@if (Model.Me.IsSuperAdmin) {<td>@g.OrganizationName</td>}<td><b>@g.Name</b></td><td>@g.City</td><td>@g.Users</td><td>@(g.IsActive ? Html.Raw("<span class=\"chip good\">Attiva</span>") : Html.Raw("<span class=\"chip\">Disattivata</span>"))</td></tr>
+            <tr>@if (me.IsSuperAdmin) {<td>@(g.InGroup ? g.OrganizationName : "— singola —")</td>}<td><b>@g.Name</b><div class="muted">@MvChat.Web.Infrastructure.Sectors.Get(g.Sector).Label</div></td><td>@g.City</td><td>@g.Users</td>
+                <td>@(g.IsActive ? Html.Raw("<span class=\"chip good\">Attiva</span>") : Html.Raw("<span class=\"chip\">Disattivata</span>"))</td>
+                <td><a class="btn sm" href="/Report?attivita=@g.Id">Report</a></td></tr>
         }
         @if (Model.Gyms.Count == 0)
         {
-            <tr><td colspan="5" class="muted">Nessuna attività ancora. @(Model.Me.IsSuperAdmin ? "Crea un'attività singola oppure un gruppo con le sue attività." : "")</td></tr>
+            <tr><td colspan="6" class="muted">Nessuna attività ancora. @(me.IsSuperAdmin ? "Crea un'attività singola oppure un gruppo con le sue attività." : "")</td></tr>
         }
         </tbody>
     </table></div>
 </section>
+}

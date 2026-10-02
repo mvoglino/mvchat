@@ -27,6 +27,8 @@ builder.Services.AddSingleton<AiQueue>();
 builder.Services.AddHostedService<AiWorker>();
 builder.Services.AddScoped<CampaignRepo>();
 builder.Services.AddScoped<ArchiveRepo>();
+builder.Services.AddScoped<MvChat.Web.Reports.ReportRepo>();
+builder.Services.AddScoped<MvChat.Web.Reports.AlertRepo>();
 builder.Services.AddScoped<QuickReplyRepo>();
 builder.Services.AddScoped<CampaignSender>();
 builder.Services.AddHostedService<CampaignWorker>();
@@ -84,6 +86,7 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizeFolder("/RisposteRapide", "ManageLists");
     o.Conventions.AuthorizeFolder("/Gruppo", "ManageGyms");
     o.Conventions.AuthorizeFolder("/Attivita", "ManageLists");
+    o.Conventions.AuthorizeFolder("/Report", "ManageLists");
 }).AddMvcOptions(o =>
 {
     // I campi obbligatori sono solo quelli marcati [Required], con messaggi in italiano.
