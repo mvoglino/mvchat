@@ -5,19 +5,19 @@ namespace MvChat.Web.Ai;
 
 public sealed record QuickReply(int Id, int OrganizationId, int? GymId, string? GymName, string Title, string Body);
 
-/// <summary>Risposte rapide della reception: della singola palestra o di tutta la catena.</summary>
+/// <summary>Risposte rapide della reception: della singola sede o di tutta la struttura.</summary>
 public sealed class QuickReplyRepo
 {
     private readonly Db _db;
     public QuickReplyRepo(Db db) => _db = db;
 
-    /// <summary>Quelle utilizzabili in una palestra: le sue e quelle comuni della catena.</summary>
+    /// <summary>Quelle utilizzabili in una sede: le sue e quelle comuni della struttura.</summary>
     public Task<List<QuickReply>> ForGymAsync(int orgId, int gymId) => _db.QueryAsync(
         @"SELECT q.*, g.Name AS GymName FROM QuickReplies q LEFT JOIN Gyms g ON g.Id=q.GymId
           WHERE q.OrganizationId=@orgId AND (q.GymId IS NULL OR q.GymId=@gymId) ORDER BY q.Title",
         new { orgId, gymId }, Map);
 
-    /// <summary>Quelle che l'utente può gestire: il responsabile solo le sue, la direzione tutte quelle della catena.</summary>
+    /// <summary>Quelle che l'utente può gestire: il responsabile solo le sue, la direzione tutte quelle della struttura.</summary>
     public Task<List<QuickReply>> ManageableAsync(Scope s) => _db.QueryAsync(
         @"SELECT q.*, g.Name AS GymName FROM QuickReplies q LEFT JOIN Gyms g ON g.Id=q.GymId
           WHERE @All=1 OR (@IsOrg=1 AND q.OrganizationId=@Org) OR q.GymId=@Gym ORDER BY q.OrganizationId, g.Name, q.Title",

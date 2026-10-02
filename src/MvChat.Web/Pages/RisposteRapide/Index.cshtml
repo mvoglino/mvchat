@@ -2,7 +2,7 @@
 @model MvChat.Web.Pages.RisposteRapide.IndexModel
 @{ ViewData["Title"] = "Risposte rapide"; var me = User.Scope(); }
 @section Actions { <a class="btn" href="/Conversazioni">Conversazioni</a> }
-<p class="muted" style="margin:0">Testi pronti che la reception inserisce con un clic nella risposta al cliente. Puoi usare <code>{{nome}}</code> e <code>{{palestra}}</code>: vengono sostituiti da soli.</p>
+<p class="muted" style="margin:0">Testi pronti che la reception inserisce con un clic nella risposta al cliente. Puoi usare <code>{{nome}}</code> e <code>{{sede}}</code>: vengono sostituiti da soli.</p>
 @if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
 <form method="post" asp-page-handler="Add" class="panel">
     <div class="panel-h"><h2>Nuova risposta rapida</h2></div>
@@ -18,7 +18,7 @@
     <tbody>
     @foreach (var q in Model.Items)
     {
-        <tr><td><b>@q.Title</b></td><td>@(q.GymName ?? "Tutta la catena")</td><td class="muted" style="white-space:pre-wrap">@q.Body</td>
+        <tr><td><b>@q.Title</b></td><td>@(q.GymName ?? "Tutta la struttura")</td><td class="muted" style="white-space:pre-wrap">@q.Body</td>
             <td>@if (q.GymId is not null || me.CanManageGyms) {<form method="post" asp-page-handler="Delete" asp-route-id="@q.Id"><button class="btn sm" type="submit">Elimina</button></form>}</td></tr>
     }
     @if (Model.Items.Count == 0) { <tr><td colspan="4" class="muted">Nessuna risposta rapida ancora.</td></tr> }

@@ -82,6 +82,7 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizeFolder("/Assistente", "ManageLists");
     o.Conventions.AuthorizeFolder("/Campagne", "ManageLists");
     o.Conventions.AuthorizeFolder("/RisposteRapide", "ManageLists");
+    o.Conventions.AuthorizeFolder("/Struttura", "ManageGyms");
 }).AddMvcOptions(o =>
 {
     // I campi obbligatori sono solo quelli marcati [Required], con messaggi in italiano.
@@ -168,6 +169,17 @@ app.MapGet("/jobs/tick", async (string? token, AppConfigStore cfg, Db db, Conver
     var detail = string.Join(" · ", new[] { pending.Count > 0 ? $"riprese {pending.Count} risposte" : null, run.Sent + run.Skipped + run.Errors > 0 ? $"campagne: inviati {run.Sent}, saltati {run.Skipped}, errori {run.Errors}" : null }.Where(x => x is not null));
     await db.ExecuteAsync("INSERT INTO AuditLog (Action, Detail) VALUES ('jobs.tick', @d)", new { d = detail == "" ? null : detail });
     return Results.Json(new { ok = true, at = DateTime.UtcNow, resumed = pending.Count, sent = run.Sent, skipped = run.Skipped, errors = run.Errors, notes = run.Notes });
+});
+
+// Logo caricato da una struttura: è un'immagine pubblica, servita dal database con il tipo verificato al caricamento.
+app.MapGet("/logo/{id:int}", async (int id, HttpContext ctx, AppConfigStore cfg, Repos repos) =>
+{
+    if (!cfg.Current.Installed) return Results.NotFound();
+    var logo = await repos.LogoAsync(id);
+    if (logo is null) return Results.NotFound();
+    ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    ctx.Response.Headers.CacheControl = "public, max-age=604800";
+    return Results.File(logo.Value.Data, logo.Value.Type);
 });
 
 // Webhook WhatsApp: Meta chiama questo indirizzo per consegnare messaggi e aggiornamenti di stato.

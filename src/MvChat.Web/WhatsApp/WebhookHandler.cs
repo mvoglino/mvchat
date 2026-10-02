@@ -127,7 +127,7 @@ public sealed class WebhookHandler
             var conv = await _convs.FindForInboundAsync(number.Id, phone);
             var msgId = await _repo.InsertMessageAsync(number, phone, "in", type == "text" ? "text" : type, text, null, id, "received", null, null, conv?.Id);
 
-            // Chi scrive STOP esce subito, per tutta la catena, e riceve una conferma.
+            // Chi scrive STOP esce subito, per tutta la struttura, e riceve una conferma.
             if (WaService.IsStop(text))
             {
                 await _contacts.AddOptOutAsync(number.OrganizationId, number.GymId, phone, $"Ha scritto: {text}", "whatsapp", null);

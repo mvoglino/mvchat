@@ -60,7 +60,7 @@ public class DettaglioModel : PageModel
     {
         if (C.Waiting == 0) return "Non ci sono destinatari da contattare.";
         var number = await _wa.NumberAsync(C.WaNumberId);
-        if (number is null) return "Il numero WhatsApp della palestra non è più collegato.";
+        if (number is null) return "Il numero WhatsApp della sede non è più collegato.";
         var t = await _wa.TemplateAsync(C.TemplateId);
         if (t is null || !t.IsApproved) return "Il template del primo messaggio non è approvato da Meta.";
         if (C.OfferId is int oid)

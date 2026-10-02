@@ -27,19 +27,19 @@ public class IndexModel : PageModel
     {
         await LoadAsync();
         var org = Me.IsSuperAdmin ? OrgId : Me.OrganizationId;
-        if (org is null || !Orgs.Any(o => o.Id == org)) { Error = "Scegli la catena."; return Page(); }
+        if (org is null || !Orgs.Any(o => o.Id == org)) { Error = "Scegli la struttura."; return Page(); }
         var (phone, _) = ImportRules.NormalizePhone(Phone);
         if (phone is null) { Error = "Il numero non è un cellulare valido."; return Page(); }
         await _contacts.AddOptOutAsync(org.Value, Me.GymId, phone, ImportRules.Clean(Reason, 200), "manuale", Me.UserId);
         await _repos.AuditAsync(Me, "optout.added", phone, HttpContext.Connection.RemoteIpAddress?.ToString(), org);
-        TempData["Ok"] = $"{phone} aggiunto alla lista STOP: non riceverà più messaggi da nessuna palestra della catena.";
+        TempData["Ok"] = $"{phone} aggiunto alla lista STOP: non riceverà più messaggi da nessuna sede della struttura.";
         return Redirect("/OptOuts");
     }
 
     public async Task<IActionResult> OnPostRemoveAsync(long id)
     {
         var me = User.Scope();
-        // Togliere qualcuno dalla lista STOP è una decisione delicata: solo direzione catena o MVitalia.
+        // Togliere qualcuno dalla lista STOP è una decisione delicata: solo direzione struttura o MVitalia.
         if (!me.IsSuperAdmin && !me.IsOrgAdmin) return Forbid();
         if (await _contacts.RemoveOptOutAsync(me, id) > 0)
         {

@@ -41,7 +41,7 @@ public class DettaglioModel : PageModel
     private async Task<bool> LoadAsync(long id)
     {
         Me = User.Scope();
-        var c = await _convs.GetAsync(Me, id); // il perimetro (catena/palestra) è nella query
+        var c = await _convs.GetAsync(Me, id); // il perimetro (struttura/sede) è nella query
         if (c is null) return false;
         Conv = c;
         Number = await _wa.NumberAsync(c.WaNumberId);
@@ -86,13 +86,13 @@ public class DettaglioModel : PageModel
         return Back();
     }
 
-    /// <summary>Il responsabile assegna la conversazione a un collega della palestra.</summary>
+    /// <summary>Il responsabile assegna la conversazione a un collega della sede.</summary>
     public async Task<IActionResult> OnPostAssignAsync(long id)
     {
         if (!await LoadAsync(id)) return NotFound();
         if (!Me.CanManageUsers) return Forbid();
         var who = Colleagues.FirstOrDefault(u => u.Id == AssignTo);
-        if (who is null) { Error = "Scegli un collega della palestra."; return Page(); }
+        if (who is null) { Error = "Scegli un collega della sede."; return Page(); }
         await _convs.SetStateAsync(id, "operatore", Conv.Outcome is Outcomes.InCorso ? Outcomes.Operatore : Conv.Outcome, $"assegnata a {who.FullName}", who.Id);
         await _convs.AssignAsync(id, who.Id);
         await _repos.AuditAsync(Me, "conversation.assign", $"#{id} → {who.FullName}", Ip, Conv.OrganizationId, Conv.GymId);
@@ -111,13 +111,13 @@ public class DettaglioModel : PageModel
         return Back();
     }
 
-    /// <summary>Risposta scritta da una persona della palestra.</summary>
+    /// <summary>Risposta scritta da una persona della sede.</summary>
     public async Task<IActionResult> OnPostReplyAsync(long id)
     {
         if (!await LoadAsync(id)) return NotFound();
         if (string.IsNullOrWhiteSpace(Text)) { Error = "Scrivi il messaggio."; return Page(); }
         if (Text.Length > 1000) { Error = "Il messaggio è troppo lungo (massimo 1000 caratteri)."; return Page(); }
-        if (Number is null) { Error = "Il numero WhatsApp della palestra non è più collegato."; return Page(); }
+        if (Number is null) { Error = "Il numero WhatsApp della sede non è più collegato."; return Page(); }
         if (await _contacts.IsOptedOutAsync(Conv.OrganizationId, Conv.ContactPhone)) { Error = "Il cliente è nella lista STOP: non gli si può scrivere."; return Page(); }
         if (!WindowOpen) { Error = "Sono passate più di 24 ore dall'ultimo messaggio del cliente: WhatsApp permette solo un template approvato."; return Page(); }
         var r = await _send.SendTextAsync(Number, Conv.ContactPhone, Text.Trim(), Me.UserId, id);

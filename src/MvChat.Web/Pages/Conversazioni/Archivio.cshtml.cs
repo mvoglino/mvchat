@@ -9,7 +9,7 @@ using MvChat.Web.Security;
 
 namespace MvChat.Web.Pages.Conversazioni;
 
-/// <summary>Tutti i dialoghi, divisi tra quelli gestiti solo dall'assistente AI e quelli proseguiti con una persona della palestra.</summary>
+/// <summary>Tutti i dialoghi, divisi tra quelli gestiti solo dall'assistente AI e quelli proseguiti con una persona della sede.</summary>
 public class ArchivioModel : PageModel
 {
     private readonly ArchiveRepo _archive; private readonly Repos _repos; private readonly CampaignRepo _campaigns;
@@ -52,7 +52,7 @@ public class ArchivioModel : PageModel
         var rows = await _archive.ListAsync(User.Scope(), F, 50000);
         var sb = new StringBuilder();
         static string C(string? v) => "\"" + (v ?? "").Replace("\"", "\"\"") + "\"";
-        sb.AppendLine("Data;Palestra;Cliente;Cellulare;Obiettivo;Campagna;Gestione;Operatori;Messaggi cliente;Risposte assistente;Risposte operatori;Esito;Stato");
+        sb.AppendLine("Data;Sede;Cliente;Cellulare;Obiettivo;Campagna;Gestione;Operatori;Messaggi cliente;Risposte assistente;Risposte operatori;Esito;Stato");
         foreach (var r in rows)
             sb.AppendLine(string.Join(";", C(r.CreatedAt.ToRome().ToString("dd/MM/yyyy HH:mm")), C(r.GymName), C(r.ContactName), C(r.ContactPhone), C(r.GoalName),
                 C(r.CampaignName ?? (r.IsTest ? "prova" : "")), C(r.HumanInvolved ? "Con operatore" : "Solo assistente AI"), C(r.Operators),

@@ -6,7 +6,7 @@ using MvChat.Web.Security;
 
 namespace MvChat.Web.Pages.RisposteRapide;
 
-/// <summary>Testi pronti per la reception. Il responsabile li crea per la sua palestra, la direzione anche per tutta la catena.</summary>
+/// <summary>Testi pronti per la reception. Il responsabile li crea per la sua sede, la direzione anche per tutta la struttura.</summary>
 public class IndexModel : PageModel
 {
     private readonly QuickReplyRepo _repo; private readonly Repos _repos;
@@ -27,7 +27,7 @@ public class IndexModel : PageModel
         var gyms = (await _repos.GymsAsync(me)).Where(g => g.IsActive).ToList();
         if (me.CanManageGyms)
             foreach (var org in gyms.GroupBy(g => (g.OrganizationId, g.OrganizationName)))
-                Targets.Add(($"o:{org.Key.OrganizationId}", $"Tutte le palestre di {org.Key.OrganizationName}"));
+                Targets.Add(($"o:{org.Key.OrganizationId}", $"Tutte le sedi di {org.Key.OrganizationName}"));
         Targets.AddRange(gyms.Select(g => ($"g:{g.Id}", g.Name)));
     }
 
@@ -39,7 +39,7 @@ public class IndexModel : PageModel
         var me = User.Scope();
         if (string.IsNullOrWhiteSpace(Title) || string.IsNullOrWhiteSpace(Body)) { Error = "Scrivi un titolo e il testo della risposta."; return Page(); }
         if (Title.Trim().Length > 80 || Body.Trim().Length > 1000) { Error = "Titolo massimo 80 caratteri, testo massimo 1000."; return Page(); }
-        // Palestra e catena si ricavano dalle scelte consentite all'utente, mai dal valore inviato così com'è.
+        // Sede e struttura si ricavano dalle scelte consentite all'utente, mai dal valore inviato così com'è.
         if (!Targets.Any(t => t.Value == Target)) { Error = "Scegli dove usare la risposta."; return Page(); }
         var gyms = await _repos.GymsAsync(me);
         int orgId; int? gymId = null;
@@ -56,7 +56,7 @@ public class IndexModel : PageModel
         await LoadAsync();
         var me = User.Scope();
         var q = Items.FirstOrDefault(x => x.Id == id);
-        // Il responsabile non cancella quelle comuni della catena.
+        // Il responsabile non cancella quelle comuni della struttura.
         if (q is null || (q.GymId is null && !me.CanManageGyms)) return NotFound();
         await _repo.DeleteAsync(id);
         await _repos.AuditAsync(me, "quickreply.deleted", q.Title, HttpContext.Connection.RemoteIpAddress?.ToString(), q.OrganizationId, q.GymId);

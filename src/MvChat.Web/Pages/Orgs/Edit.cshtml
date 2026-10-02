@@ -1,16 +1,15 @@
 @page "{id:int?}"
 @model MvChat.Web.Pages.Orgs.EditModel
-@{ ViewData["Title"] = Model.IsNew ? "Nuova catena" : "Modifica catena"; }
+@{ ViewData["Title"] = Model.IsNew ? "Abilita una nuova struttura" : "Modifica struttura"; }
+@section Actions { @if (!Model.IsNew) { <a class="btn" href="/Struttura/@Model.Input.Id">Dati e logo</a> } }
 <form method="post" class="panel">
     <input type="hidden" asp-for="Input.Id">
     <div class="panel-b form">
-        <div class="field"><label asp-for="Input.Name">Nome</label><input asp-for="Input.Name"><span asp-validation-for="Input.Name" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.Name">Nome</label><input asp-for="Input.Name" placeholder="es. FitActive, Hotel Langhe, Studio Dentistico Rossi"><span asp-validation-for="Input.Name" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.Sector">Tipo di attività</label><select asp-for="Input.Sector">@foreach (var s in Sectors.All) { <option value="@s.Key">@s.Label</option> }</select><small>Cambia le parole che l'assistente usa con i clienti (iscritto, ospite, paziente…).</small><span asp-validation-for="Input.Sector" class="field-error"></span></div>
         <div class="field"><label asp-for="Input.Slug">Codice breve</label><input asp-for="Input.Slug" placeholder="si crea dal nome"><small>Solo lettere minuscole, numeri e trattini.</small><span asp-validation-for="Input.Slug" class="field-error"></span></div>
-        <div class="field"><label asp-for="Input.LogoUrl">Indirizzo del logo</label><input asp-for="Input.LogoUrl" placeholder="https://..."><small>Il caricamento del file arriverà più avanti.</small><span asp-validation-for="Input.LogoUrl" class="field-error"></span></div>
-        <div class="field"><label asp-for="Input.PrimaryColor">Colore principale</label><input asp-for="Input.PrimaryColor" type="color" style="height:42px;padding:4px"><span asp-validation-for="Input.PrimaryColor" class="field-error"></span></div>
-        <div class="field"><label asp-for="Input.VatNumber">Partita IVA</label><input asp-for="Input.VatNumber"></div>
-        <div class="field"><label asp-for="Input.BillingEmail">Email per le fatture</label><input asp-for="Input.BillingEmail" type="email"><span asp-validation-for="Input.BillingEmail" class="field-error"></span></div>
-        <div class="field full"><label class="check"><input asp-for="Input.IsActive"> Catena attiva</label><small>Se la sospendi, nessun suo utente può più accedere.</small></div>
+        <div class="field"><label asp-for="Input.BillingEmail">Email per le fatture di MVitalia</label><input asp-for="Input.BillingEmail" type="email"><span asp-validation-for="Input.BillingEmail" class="field-error"></span></div>
+        <div class="field full"><label class="check"><input asp-for="Input.IsActive"> Struttura abilitata</label><small>Se la sospendi, nessun suo utente può più accedere.</small></div>
     </div>
     <div class="actions"><a class="btn" href="/Orgs">Annulla</a><button class="btn primary" type="submit">Salva</button></div>
 </form>

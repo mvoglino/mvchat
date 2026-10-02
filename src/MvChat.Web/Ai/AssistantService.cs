@@ -31,7 +31,8 @@ public sealed class AssistantService
         var offer = c.OfferId is int oid ? (await _catalog.OffersAsync(new MvChat.Web.Security.Scope { Role = MvChat.Web.Security.Roles.SuperAdmin }, offerId: oid)).FirstOrDefault() : null;
         var profile = await _catalog.ProfileAsync(c.GymId);
         var who = new Recipient(c.ContactName, null, c.Membership, c.ExpiresOn);
-        var system = PromptBuilder.Build(model, c.GymName, profile, offer, who, DateTime.UtcNow.ToRome().Date);
+        var org = await _catalog.OrgInfoAsync(c.OrganizationId);
+        var system = PromptBuilder.Build(model, c.GymName, profile, offer, who, DateTime.UtcNow.ToRome().Date, org);
         if (!string.IsNullOrWhiteSpace(firstMessage))
             system += $"\n## Primo messaggio già inviato al cliente\n\"{firstMessage}\"\n";
         system += "\n" + Guardrails.OutputFormat;

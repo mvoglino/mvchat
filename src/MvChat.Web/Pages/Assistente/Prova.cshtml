@@ -5,10 +5,10 @@
 <p class="muted" style="margin:0">Avvia una conversazione vera con l'assistente. Con un numero <b>simulato</b> scrivi tu le risposte del cliente dalla pagina della conversazione; con un numero <b>Meta</b> il primo messaggio arriva sul cellulare indicato e rispondi da WhatsApp.</p>
 @if (!Model.AiEnabled) { <div class="note warn">L'assistente AI non è ancora configurato (Impostazioni AI): le risposte del cliente passeranno a un operatore.</div> }
 @if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
-<form method="get" class="inline-form"><div class="field" style="max-width:340px"><label for="Gym">Palestra</label><select id="Gym" name="gym" onchange="this.form.submit()">@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+<form method="get" class="inline-form"><div class="field" style="max-width:340px"><label for="Gym">Sede</label><select id="Gym" name="gym" onchange="this.form.submit()">@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
 @if (Model.Number is null)
 {
-    <div class="note warn">Questa palestra non ha ancora un numero WhatsApp: collegalo dalla pagina WhatsApp (anche simulato).</div>
+    <div class="note warn">Questa sede non ha ancora un numero WhatsApp: collegalo dalla pagina WhatsApp (anche simulato).</div>
 }
 else
 {

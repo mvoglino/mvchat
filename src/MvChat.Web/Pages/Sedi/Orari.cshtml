@@ -2,7 +2,7 @@
 @model MvChat.Web.Pages.Sedi.OrariModel
 @{ ViewData["Title"] = "Orari di invio · " + Model.Gym.Name; }
 @section Actions { <a class="btn" href="/Sedi/Edit/@Model.Gym.Id">Scheda sede</a> }
-<p class="muted" style="margin:0">Quando le campagne di questa palestra possono mandare il <b>primo messaggio</b> ai clienti (ora italiana). Fuori orario l'invio si ferma e riparte da solo all'apertura successiva. Le risposte a chi scrive non sono mai bloccate.</p>
+<p class="muted" style="margin:0">Quando le campagne di questa sede possono mandare il <b>primo messaggio</b> ai clienti (ora italiana). Fuori orario l'invio si ferma e riparte da solo all'apertura successiva. Le risposte a chi scrive non sono mai bloccate.</p>
 @if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
 <form method="post" class="panel">
     <div class="panel-h"><h2>Quando inviare</h2>@if (Model.Current != "") {<span class="muted">adesso: @Model.Current</span>}</div>

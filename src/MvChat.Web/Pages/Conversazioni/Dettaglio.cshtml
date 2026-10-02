@@ -53,7 +53,7 @@
 @if (c.Outcome != Outcomes.OptOut)
 {
 <section class="panel">
-    <div class="panel-h"><h2>Rispondi come palestra</h2><span class="muted">scrivendo prendi in mano la conversazione</span></div>
+    <div class="panel-h"><h2>Rispondi come sede</h2><span class="muted">scrivendo prendi in mano la conversazione</span></div>
     @if (Model.WindowOpen)
     {
         <form method="post" asp-page-handler="Reply" class="panel-b inline-form">
@@ -83,7 +83,7 @@
     var quick = document.getElementById('Quick'), box = document.getElementById('ReplyText');
     if (quick && box) quick.addEventListener('change', function () {
         var o = quick.options[quick.selectedIndex]; if (!o.value) return;
-        box.value = o.dataset.body.replace(/\{\{\s*nome\s*\}\}/gi, @Html.Raw(System.Text.Json.JsonSerializer.Serialize(c.ContactName))).replace(/\{\{\s*palestra\s*\}\}/gi, @Html.Raw(System.Text.Json.JsonSerializer.Serialize(c.GymName)));
+        box.value = o.dataset.body.replace(/\{\{\s*nome\s*\}\}/gi, @Html.Raw(System.Text.Json.JsonSerializer.Serialize(c.ContactName))).replace(/\{\{\s*(sede|palestra)\s*\}\}/gi, @Html.Raw(System.Text.Json.JsonSerializer.Serialize(c.GymName)));
         box.focus(); quick.value = '';
     });
     var chat = document.getElementById('chat'); chat.scrollTop = chat.scrollHeight;

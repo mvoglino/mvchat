@@ -4,18 +4,18 @@ namespace MvChat.Web.Security;
 
 public static class Roles
 {
-    public const string SuperAdmin = "superadmin"; // MVitalia: vede tutte le catene
-    public const string OrgAdmin = "orgadmin";     // direzione di una catena: tutte le sue palestre
-    public const string Manager = "manager";       // responsabile di una palestra
-    public const string Operator = "operator";     // reception: solo le conversazioni della sua palestra
+    public const string SuperAdmin = "superadmin"; // MVitalia: vede tutte le strutture
+    public const string OrgAdmin = "orgadmin";     // direzione di una struttura: tutte le sue sedi
+    public const string Manager = "manager";       // responsabile di una sede
+    public const string Operator = "operator";     // reception: solo le conversazioni della sua sede
 
     public static readonly string[] All = { SuperAdmin, OrgAdmin, Manager, Operator };
 
     public static string Label(string role) => role switch
     {
         SuperAdmin => "Amministratore MVitalia",
-        OrgAdmin => "Direzione catena",
-        Manager => "Responsabile palestra",
+        OrgAdmin => "Direzione struttura",
+        Manager => "Responsabile sede",
         Operator => "Operatore",
         _ => role
     };
@@ -32,7 +32,7 @@ public static class Roles
 
 /// <summary>
 /// Chi sta usando il software e fin dove può vedere. Ogni query sui dati di lavoro
-/// passa da qui: è la regola che separa le catene e le palestre tra loro.
+/// passa da qui: è la regola che separa le strutture e le sedi tra loro.
 /// </summary>
 public sealed class Scope
 {

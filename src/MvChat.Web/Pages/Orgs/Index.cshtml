@@ -1,19 +1,20 @@
 @page
 @model MvChat.Web.Pages.Orgs.IndexModel
-@{ ViewData["Title"] = "Catene"; }
-@section Actions { <a class="btn primary" href="/Orgs/Edit">Nuova catena</a> }
-<p class="muted" style="margin:0">Ogni catena è un cliente di mvchat: ha il suo logo, il suo colore, le sue palestre e i suoi utenti, separati da tutti gli altri.</p>
+@{ ViewData["Title"] = "Strutture"; }
+@section Actions { <a class="btn primary" href="/Orgs/Edit">Abilita una struttura</a> }
+<p class="muted" style="margin:0">Ogni struttura è un cliente di mvchat, di qualsiasi settore: ha il suo nome, logo, colore e dati dell'attività, le sue sedi e i suoi utenti, separati da tutti gli altri.</p>
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Catena</th><th>Colore</th><th>Palestre</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr><th>Struttura</th><th>Attività</th><th>Colore</th><th>Sedi</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
     <tbody>
     @foreach (var o in Model.Items)
     {
         <tr><td><b>@o.Name</b><div class="muted">@o.Slug</div></td>
+            <td>@Sectors.Get(o.Sector).Label</td>
             <td><span class="swatch" style="background:@o.PrimaryColor"></span> <code>@o.PrimaryColor</code></td>
             <td>@o.Gyms</td><td>@o.Users</td>
             <td>@(o.IsActive ? Html.Raw("<span class=\"chip good\">Attiva</span>") : Html.Raw("<span class=\"chip bad\">Sospesa</span>"))</td>
-            <td><a class="btn sm" href="/Orgs/Edit/@o.Id">Modifica</a></td></tr>
+            <td><a class="btn sm" href="/Orgs/Edit/@o.Id">Modifica</a> <a class="btn sm" href="/Struttura/@o.Id">Dati e logo</a></td></tr>
     }
-    @if (Model.Items.Count == 0) { <tr><td colspan="6" class="muted">Nessuna catena. Crea la prima, ad esempio FitActive.</td></tr> }
+    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna struttura. Crea la prima, ad esempio FitActive (palestre) o un hotel.</td></tr> }
     </tbody>
 </table></div></section>

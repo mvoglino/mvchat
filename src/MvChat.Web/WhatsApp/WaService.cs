@@ -35,7 +35,7 @@ public sealed class WaService
     public async Task<SendResult> SendTemplateAsync(WaNumber n, WaTemplate t, string to, IDictionary<string, string?> values, int? userId, long? conversationId = null)
     {
         if (!t.IsApproved) return new SendResult(false, "Il template non è ancora approvato da Meta.", 0);
-        var parameters = t.Variables.Select(v => values.TryGetValue(v, out var x) && !string.IsNullOrWhiteSpace(x) ? x! : "-").ToList();
+        var parameters = t.Variables.Select(v => TemplateText.TryValue(values, v, out var x) && !string.IsNullOrWhiteSpace(x) ? x! : "-").ToList();
         var preview = TemplateText.Fill(t.Body, values);
         if (n.IsSimulated)
         {

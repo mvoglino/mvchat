@@ -16,7 +16,7 @@ public sealed class GymProfile
     public string Formality { get; set; } = "tu";
     public DateTime? UpdatedAt { get; set; }
 
-    /// <summary>Quanto è completa la scheda: serve a ricordare alla palestra cosa manca.</summary>
+    /// <summary>Quanto è completa la scheda: serve a ricordare alla sede cosa manca.</summary>
     public int Completeness => new[] { OpeningHours, Services, Classes, HowToReach, ExtraInfo }.Count(s => !string.IsNullOrWhiteSpace(s)) * 20;
 }
 
@@ -67,6 +67,11 @@ public sealed class CatalogRepo
     public CatalogRepo(Db db) => _db = db;
 
     // ---------- Scheda sede ----------
+    /// <summary>Tipo di attività e presentazione della struttura, per le istruzioni dell'assistente.</summary>
+    public Task<OrgInfo?> OrgInfoAsync(int orgId) => _db.FirstAsync(
+        "SELECT Id, Name, Sector, Description, Website, Phone FROM Organizations WHERE Id=@orgId", new { orgId },
+        r => new OrgInfo(r.Int("Id"), r.Str("Name")!, r.Str("Sector") ?? "palestra", r.Str("Description"), r.Str("Website"), r.Str("Phone")));
+
     public async Task<GymProfile> ProfileAsync(int gymId) =>
         await _db.FirstAsync("SELECT * FROM GymProfiles WHERE GymId=@gymId", new { gymId }, r => new GymProfile
         {
@@ -134,7 +139,7 @@ public sealed class CatalogRepo
     }
 
     // ---------- Modelli di obiettivo ----------
-    /// <summary>Modelli standard MVitalia più quelli della catena di chi chiede (MVitalia li vede tutti).</summary>
+    /// <summary>Modelli standard MVitalia più quelli della struttura di chi chiede (MVitalia li vede tutti).</summary>
     public Task<List<GoalModel>> ModelsAsync(Scope s, int? modelId = null, bool onlyActive = false) => _db.QueryAsync(
         @"SELECT m.*, o.Name AS OrgName FROM GoalModels m LEFT JOIN Organizations o ON o.Id=m.OrganizationId
           WHERE (m.OrganizationId IS NULL OR @All=1 OR m.OrganizationId=@Org)
@@ -165,6 +170,6 @@ public sealed class CatalogRepo
         return m.Id;
     }
 
-    /// <summary>Chi può modificare un modello: gli standard solo MVitalia, quelli di catena la direzione della catena.</summary>
+    /// <summary>Chi può modificare un modello: gli standard solo MVitalia, quelli di struttura la direzione della struttura.</summary>
     public static bool CanEdit(Scope s, GoalModel m) => s.IsSuperAdmin || (s.IsOrgAdmin && m.OrganizationId == s.OrganizationId);
 }

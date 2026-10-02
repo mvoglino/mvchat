@@ -110,7 +110,7 @@ public sealed class CampaignRepo
     /// <summary>Senza perimetro: per il lavoro automatico di invio.</summary>
     public Task<Campaign?> GetAsync(int id) => _db.FirstAsync(Select + " WHERE c.Id=@id", new { id }, Map);
 
-    /// <summary>Crea la campagna e copia i destinatari dalla lista (solo chi non è nella lista STOP della catena).</summary>
+    /// <summary>Crea la campagna e copia i destinatari dalla lista (solo chi non è nella lista STOP della struttura).</summary>
     public async Task<(int Id, int Recipients, int Excluded)> CreateAsync(Campaign c, int userId)
     {
         await using var cn = await _db.OpenAsync();
@@ -219,7 +219,7 @@ public sealed class CampaignRepo
     public Task<int> SentSinceAsync(int campaignId, DateTime sinceUtc) => _db.ScalarAsync<int>(
         "SELECT COUNT(*) FROM CampaignRecipients WHERE CampaignId=@campaignId AND Status='inviato' AND SentAt >= @sinceUtc", new { campaignId, sinceUtc });
 
-    /// <summary>Il cliente sta già parlando con la palestra (altra campagna o prova ancora aperta)?</summary>
+    /// <summary>Il cliente sta già parlando con la sede (altra campagna o prova ancora aperta)?</summary>
     public async Task<bool> HasOpenConversationAsync(int waNumberId, string phone) => await _db.ScalarAsync<int>(
         @"SELECT COUNT(*) FROM Conversations WHERE WaNumberId=@waNumberId AND ContactPhone=@phone AND Status IN ('ai','operatore')
           AND CreatedAt > UTC_TIMESTAMP() - INTERVAL 7 DAY", new { waNumberId, phone }) > 0;

@@ -56,9 +56,9 @@ public class ProvaModel : PageModel
         var model = Models.FirstOrDefault(m => m.Id == ModelId);
         var offer = Offers.FirstOrDefault(o => o.Id == OfferId);
         var (phone, _) = ImportRules.NormalizePhone(Phone);
-        if (gym is null || Number is null) Error = "La palestra scelta non ha un numero WhatsApp collegato.";
+        if (gym is null || Number is null) Error = "La sede scelta non ha un numero WhatsApp collegato.";
         else if (model is null) Error = "Scegli un modello di obiettivo.";
-        else if (model.NeedsOffer && offer is null) Error = "Questo modello ha bisogno di un'offerta attiva della palestra.";
+        else if (model.NeedsOffer && offer is null) Error = "Questo modello ha bisogno di un'offerta attiva della sede.";
         else if (phone is null) Error = "Il cellulare non è valido.";
         else if (await _contacts.IsOptedOutAsync(gym.OrganizationId, phone)) Error = "Questo numero è nella lista STOP.";
         var template = Templates.FirstOrDefault(t => t.Id == TemplateId);

@@ -14,7 +14,8 @@ public static class TemplateText
         ["cognome"] = "Rossi",
         ["abbonamento"] = "Annuale",
         ["scadenza"] = "18/10/2026",
-        ["palestra"] = "FitActive Alba",
+        ["sede"] = "FitActive Alba",
+        ["palestra"] = "FitActive Alba", // nome storico di {{sede}}: resta valido per i template già approvati
         ["offerta"] = "Rinnovo con 2 mesi omaggio",
     };
 
@@ -32,7 +33,7 @@ public static class TemplateText
         if (t.Length == 0) { errors.Add("Il testo è vuoto."); return errors; }
         if (t.Length > 1024) errors.Add("Il testo supera i 1.024 caratteri ammessi da Meta.");
         foreach (var v in Variables(t))
-            if (!Placeholders.ContainsKey(v)) errors.Add($"Segnaposto sconosciuto: {{{{{v}}}}}. Usa: {string.Join(", ", Placeholders.Keys.Select(k => "{{" + k + "}}"))}.");
+            if (!Placeholders.ContainsKey(v)) errors.Add($"Segnaposto sconosciuto: {{{{{v}}}}}. Usa: {string.Join(", ", Placeholders.Keys.Where(k => k != "palestra").Select(k => "{{" + k + "}}"))}.");
         if (Var.Match(t) is { Success: true } first && first.Index == 0) errors.Add("Il testo non può iniziare con un segnaposto (regola di Meta).");
         if (Var.Matches(t).LastOrDefault() is { } last && last.Index + last.Length == t.Length) errors.Add("Il testo non può finire con un segnaposto: aggiungi la punteggiatura o una frase (regola di Meta).");
         if (Regex.IsMatch(t, @"\n{3,}")) errors.Add("Troppe righe vuote di fila.");
@@ -43,8 +44,17 @@ public static class TemplateText
     public static string ToMeta(string body, IList<string> variables) =>
         Var.Replace(body.Trim(), m => "{{" + (variables.IndexOf(m.Groups[1].Value.ToLowerInvariant()) + 1) + "}}");
 
+    /// <summary>{{sede}} e {{palestra}} sono la stessa cosa: chi riempie i valori può usare l'uno o l'altro nome.</summary>
+    private static readonly Dictionary<string, string> Aliases = new() { ["sede"] = "palestra", ["palestra"] = "sede" };
+
+    public static bool TryValue(IDictionary<string, string?> values, string key, out string? value)
+    {
+        if (values.TryGetValue(key, out value)) return true;
+        return Aliases.TryGetValue(key, out var alias) && values.TryGetValue(alias, out value);
+    }
+
     public static string Fill(string body, IDictionary<string, string?> values) =>
-        Var.Replace(body, m => values.TryGetValue(m.Groups[1].Value.ToLowerInvariant(), out var v) ? v ?? "" : m.Value);
+        Var.Replace(body, m => TryValue(values, m.Groups[1].Value.ToLowerInvariant(), out var v) ? v ?? "" : m.Value);
 
     /// <summary>Nome tecnico per Meta: minuscole, numeri e trattino basso.</summary>
     public static string MetaName(string s)

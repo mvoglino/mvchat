@@ -58,13 +58,17 @@ else
                 <a href="/" aria-current="@(Cur("/Index"))">Panoramica</a>
                 @if (scope.IsSuperAdmin)
                 {
-                    <a href="/Orgs" aria-current="@(Cur("/Orgs"))">Catene</a>
+                    <a href="/Orgs" aria-current="@(Cur("/Orgs"))">Strutture</a>
                     <a href="/Impostazioni/WhatsApp" aria-current="@(Cur("/Impostazioni/WhatsApp"))">Impostazioni Meta</a>
                     <a href="/Impostazioni/AI" aria-current="@(Cur("/Impostazioni/AI"))">Impostazioni AI</a>
                 }
+                @if (scope.IsOrgAdmin)
+                {
+                    <a href="/Struttura" aria-current="@(Cur("/Struttura"))">La mia struttura</a>
+                }
                 @if (scope.CanManageGyms)
                 {
-                    <a href="/Gyms" aria-current="@(Cur("/Gyms"))">Palestre</a>
+                    <a href="/Gyms" aria-current="@(Cur("/Gyms"))">Sedi</a>
                 }
                 @if (scope.CanManageUsers)
                 {

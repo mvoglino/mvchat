@@ -151,3 +151,4 @@ a.stat{text-decoration:none;color:inherit}
 .toast[hidden]{display:none}
 .toast a{color:inherit;font-weight:700}
 .toast button{background:none;border:0;color:inherit;font-size:20px;cursor:pointer;line-height:1}
+.logo-preview{display:block;max-width:180px;max-height:80px;object-fit:contain;margin:4px 0 8px;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}

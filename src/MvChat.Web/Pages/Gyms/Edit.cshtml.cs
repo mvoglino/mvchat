@@ -33,15 +33,15 @@ public class EditModel : PageModel
     public async Task<IActionResult> OnPostAsync()
     {
         await LoadAsync();
-        // La catena non si sceglie liberamente: chi non è MVitalia lavora sempre nella propria.
+        // La struttura non si sceglie liberamente: chi non è MVitalia lavora sempre nella propria.
         if (!Me.IsSuperAdmin) Input.OrganizationId = Me.OrganizationId ?? 0;
-        if (!Orgs.Any(o => o.Id == Input.OrganizationId)) ModelState.AddModelError("Input.OrganizationId", "Scegli una catena valida.");
+        if (!Orgs.Any(o => o.Id == Input.OrganizationId)) ModelState.AddModelError("Input.OrganizationId", "Scegli una struttura valida.");
         if (Input.Id is int existing && await _repos.GymAsync(Me, existing) is null) return NotFound();
         if (!ModelState.IsValid) return Page();
 
         var id = await _repos.SaveGymAsync(Input.Id, Input.OrganizationId, Input.Name.Trim(), Input.City?.Trim(), Input.Address?.Trim(), Input.Phone?.Trim(), Input.IsActive);
         await _repos.AuditAsync(Me, IsNew ? "gym.created" : "gym.updated", Input.Name, HttpContext.Connection.RemoteIpAddress?.ToString(), Input.OrganizationId, id);
-        TempData["Ok"] = IsNew ? "Palestra creata." : "Palestra aggiornata.";
+        TempData["Ok"] = IsNew ? "Sede creata." : "Sede aggiornata.";
         return Redirect("/Gyms");
     }
 
@@ -51,7 +51,7 @@ public class EditModel : PageModel
     {
         public int? Id { get; set; }
         public int OrganizationId { get; set; }
-        [Required(ErrorMessage = "Indica il nome della palestra."), StringLength(150)] public string Name { get; set; } = "";
+        [Required(ErrorMessage = "Indica il nome della sede."), StringLength(150)] public string Name { get; set; } = "";
         [StringLength(100)] public string? City { get; set; }
         [StringLength(250)] public string? Address { get; set; }
         [StringLength(40)] public string? Phone { get; set; }

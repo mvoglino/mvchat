@@ -78,7 +78,7 @@ public sealed class LoginService
 
     /// <summary>
     /// A ogni richiesta (al massimo ogni 5 minuti) ricontrolla l'utente nel database:
-    /// se è stato disattivato o gli è cambiato ruolo o palestra, l'accesso si aggiorna o si chiude.
+    /// se è stato disattivato o gli è cambiato ruolo o sede, l'accesso si aggiorna o si chiude.
     /// </summary>
     public static async Task ValidateAsync(CookieValidatePrincipalContext ctx)
     {

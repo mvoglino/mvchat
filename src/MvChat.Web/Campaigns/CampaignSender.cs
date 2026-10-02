@@ -10,7 +10,7 @@ namespace MvChat.Web.Campaigns;
 public sealed record RunSummary(int Sent, int Skipped, int Errors, List<string> Notes);
 
 /// <summary>
-/// Lavora la coda delle campagne: a piccoli gruppi, rispettando orari della palestra,
+/// Lavora la coda delle campagne: a piccoli gruppi, rispettando orari della sede,
 /// limite giornaliero della campagna e limite di Meta del numero. Ogni destinatario viene
 /// "prenotato" prima dell'invio, così due giri contemporanei non scrivono mai due volte alla stessa persona.
 /// </summary>
@@ -76,7 +76,7 @@ public sealed class CampaignSender
 
         // Controlli che fermano tutta la campagna: meglio una pausa spiegata che messaggi sbagliati.
         string? stop =
-            number is null ? "il numero WhatsApp della palestra non è più collegato"
+            number is null ? "il numero WhatsApp della sede non è più collegato"
             : template is null || !template.IsApproved ? "il template del primo messaggio non è (più) approvato da Meta"
             : model is null ? "il modello di obiettivo non esiste più"
             : c.OfferId is not null && (offer is null || offer.Status != "Attiva") ? $"l'offerta collegata non è attiva ({offer?.Status ?? "eliminata"})"
@@ -89,7 +89,7 @@ public sealed class CampaignSender
         if (!SendWindows.IsOpen(windows, now))
         {
             var next = SendWindows.NextOpenRome(windows, now);
-            var note = "fuori dall'orario di invio della palestra" + (next is DateTime n ? $": si riparte {n:dd/MM} alle {n:HH:mm}" : "");
+            var note = "fuori dall'orario di invio della sede" + (next is DateTime n ? $": si riparte {n:dd/MM} alle {n:HH:mm}" : "");
             await _repo.NoteRunAsync(id, note);
             return (0, 0, 0, note);
         }
@@ -122,7 +122,7 @@ public sealed class CampaignSender
                 if (DateTime.UtcNow >= deadline) { runNote = "giro interrotto per tempo: continua al prossimo"; break; }
                 pending.Remove(r.Id);
                 if (await _contacts.IsOptedOutAsync(c.OrganizationId, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "nella lista STOP", null); skipped++; continue; }
-                if (await _repo.HasOpenConversationAsync(number.Id, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "ha già una conversazione aperta con la palestra", null); skipped++; continue; }
+                if (await _repo.HasOpenConversationAsync(number.Id, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "ha già una conversazione aperta con la sede", null); skipped++; continue; }
 
                 var values = new Dictionary<string, string?>
                 {

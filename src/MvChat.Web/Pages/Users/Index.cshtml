@@ -7,7 +7,7 @@
     <div class="note warn" role="status"><b>Password provvisoria per @TempData["TempFor"]:</b> <code>@tmp</code><br>Comunicala alla persona: al primo accesso dovrà sceglierne una sua. Non verrà più mostrata.</div>
 }
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Nome</th><th>Ruolo</th>@if (Model.Me.IsSuperAdmin) {<th>Catena</th>}<th>Palestra</th><th>Ultimo accesso</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr><th>Nome</th><th>Ruolo</th>@if (Model.Me.IsSuperAdmin) {<th>Struttura</th>}<th>Sede</th><th>Ultimo accesso</th><th>Stato</th><th></th></tr></thead>
     <tbody>
     @foreach (var u in Model.Items)
     {

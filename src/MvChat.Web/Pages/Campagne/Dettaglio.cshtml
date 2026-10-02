@@ -15,7 +15,7 @@
 </div>
 <div class="bar"><i style="width:@(c.Percent)%"></i></div>
 @if (c.PauseReason is not null && c.Status == "in_pausa") { <div class="note warn">In pausa: @c.PauseReason</div> }
-@if (c.Status is "in_corso" or "programmata" && !Model.WindowOpen) { <div class="note">Adesso la palestra non invia (orari: @Model.Windows)@(Model.NextOpen is DateTime n ? $". Si riparte da solo {n:dd/MM} alle {n:HH:mm}." : ".")</div> }
+@if (c.Status is "in_corso" or "programmata" && !Model.WindowOpen) { <div class="note">Adesso la sede non invia (orari: @Model.Windows)@(Model.NextOpen is DateTime n ? $". Si riparte da solo {n:dd/MM} alle {n:HH:mm}." : ".")</div> }
 
 <section class="panel">
     <div class="panel-h"><h2>Comandi</h2><span style="flex:1"></span>
@@ -29,7 +29,7 @@
         <div class="field full"><label>Anteprima del primo messaggio · template @c.TemplateName</label><div class="bubble" style="margin-left:0">@Model.Preview</div></div>
         <div class="field"><label>Lista</label><span>@c.ListName</span></div>
         <div class="field"><label>Partenza</label><span>@(c.StartAt is DateTime st ? st.ToRome().ToString("dd/MM/yyyy HH:mm") : "appena avviata")</span></div>
-        <div class="field"><label>Orari di invio della palestra</label><span>@Model.Windows · <a href="/Sedi/Orari/@c.GymId">modifica</a></span></div>
+        <div class="field"><label>Orari di invio della sede</label><span>@Model.Windows · <a href="/Sedi/Orari/@c.GymId">modifica</a></span></div>
         <div class="field"><label>Limiti</label><span>@(c.DailyLimit is int d ? $"massimo {d} al giorno" : "nessun limite della campagna") · Meta: @(Model.MetaLimit is int ml ? ml.ToString("N0") + " persone nuove in 24 ore" : "nessun limite")</span></div>
         <div class="field"><label>Ultimo giro di invio</label><span class="muted">@(c.LastRunAt is DateTime lr ? lr.ToRome().ToString("dd/MM HH:mm") + " · " + c.LastRunNote : "non ancora")</span></div>
         <div class="field"><label>Esiti</label><span>@c.Reached raggiunti · @c.Refused rifiuti · @c.OptOut non contattare più · @c.ToOperator aspettano la reception</span></div>

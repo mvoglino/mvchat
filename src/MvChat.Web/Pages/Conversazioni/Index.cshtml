@@ -15,10 +15,10 @@
 </nav>
 @if (many)
 {
-    <form method="get" class="inline-form"><input type="hidden" name="view" value="@Model.View"><div class="field" style="max-width:300px"><label for="gym">Palestra</label><select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+    <form method="get" class="inline-form"><input type="hidden" name="view" value="@Model.View"><div class="field" style="max-width:300px"><label for="gym">Sede</label><select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
 }
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Cliente</th>@if (many) {<th>Palestra</th>}<th>Obiettivo</th><th>Stato</th><th>In carico a</th><th>Esito</th><th>Ultimo messaggio</th><th></th></tr></thead>
+    <thead><tr><th>Cliente</th>@if (many) {<th>Sede</th>}<th>Obiettivo</th><th>Stato</th><th>In carico a</th><th>Esito</th><th>Ultimo messaggio</th><th></th></tr></thead>
     <tbody>
     @foreach (var c in Model.Items)
     {

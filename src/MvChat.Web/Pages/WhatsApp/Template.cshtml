@@ -5,7 +5,7 @@
 <p class="muted" style="margin:0">Il template è il primo messaggio di una campagna: è l'unico che si può mandare a chi non ha scritto per primo, e Meta lo deve approvare. Le risposte successive dell'assistente sono libere.</p>
 @if (Model.Number is null)
 {
-    <div class="note warn">Prima collega il numero WhatsApp della palestra.</div>
+    <div class="note warn">Prima collega il numero WhatsApp della sede.</div>
 }
 else
 {
@@ -32,7 +32,7 @@ else
         <div class="field"><label asp-for="Category">Tipo</label><select asp-for="Category"><option value="MARKETING">Marketing (promozioni, rinnovi, offerte)</option><option value="UTILITY">Servizio (avvisi senza promozioni)</option></select>
             <small>Rinnovi e promo sono sempre marketing: se un messaggio promozionale viene inviato come servizio, Meta lo rifiuta.</small></div>
         <div class="field full"><label asp-for="Body">Testo</label><textarea asp-for="Body" rows="5" id="tplBody"></textarea>
-            <small>Segnaposto: @string.Join(" ", TemplateText.Placeholders.Keys.Select(k => "{{" + k + "}}")). Non iniziare né finire con un segnaposto. Meglio chiudere con una domanda, così il cliente risponde.</small></div>
+            <small>Segnaposto: @string.Join(" ", TemplateText.Placeholders.Keys.Where(k => k != "palestra").Select(k => "{{" + k + "}}")). Non iniziare né finire con un segnaposto. Meglio chiudere con una domanda, così il cliente risponde.</small></div>
         <div class="field full"><label>Anteprima con dati di esempio</label><div class="bubble" id="tplPreview"></div></div>
     </div>
     <div class="actions"><button class="btn primary" type="submit">@(Model.Number.IsSimulated ? "Crea (approvazione simulata)" : "Invia a Meta per l'approvazione")</button></div>

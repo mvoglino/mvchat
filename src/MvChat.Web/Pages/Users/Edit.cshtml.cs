@@ -47,7 +47,7 @@ public class EditModel : PageModel
             if (existing is null || (!AssignableRoles.Contains(existing.Role) && existing.Id != Me.UserId)) return NotFound();
         }
 
-        // Su se stessi non si cambiano ruolo, catena, palestra né stato: si evita di chiudersi fuori.
+        // Su se stessi non si cambiano ruolo, struttura, sede né stato: si evita di chiudersi fuori.
         if (existing is not null && existing.Id == Me.UserId)
         {
             Input.Role = existing.Role; Input.OrganizationId = existing.OrganizationId; Input.GymId = existing.GymId; Input.IsActive = true;
@@ -55,7 +55,7 @@ public class EditModel : PageModel
         else if (!AssignableRoles.Contains(Input.Role))
             ModelState.AddModelError("Input.Role", "Non puoi assegnare questo ruolo.");
 
-        // Ogni ruolo ha il suo perimetro: catena e palestra si ricavano dalle regole, non da quello che arriva dal modulo.
+        // Ogni ruolo ha il suo perimetro: struttura e sede si ricavano dalle regole, non da quello che arriva dal modulo.
         switch (Input.Role)
         {
             case Roles.SuperAdmin:
@@ -64,11 +64,11 @@ public class EditModel : PageModel
                 Input.GymId = null;
                 if (!Me.IsSuperAdmin) Input.OrganizationId = Me.OrganizationId;
                 if (Input.OrganizationId is null || !Orgs.Any(o => o.Id == Input.OrganizationId))
-                    ModelState.AddModelError("Input.OrganizationId", "Scegli la catena.");
+                    ModelState.AddModelError("Input.OrganizationId", "Scegli la struttura.");
                 break;
             default:
                 var gym = Gyms.FirstOrDefault(g => g.Id == Input.GymId);
-                if (gym is null) ModelState.AddModelError("Input.GymId", "Scegli la palestra.");
+                if (gym is null) ModelState.AddModelError("Input.GymId", "Scegli la sede.");
                 else Input.OrganizationId = gym.OrganizationId;
                 break;
         }

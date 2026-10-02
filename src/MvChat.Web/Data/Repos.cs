@@ -4,14 +4,34 @@ using MvChat.Web.Security;
 
 namespace MvChat.Web.Data;
 
-public sealed record Organization(int Id, string Name, string Slug, string? LogoUrl, string PrimaryColor, string? VatNumber, string? BillingEmail, bool IsActive, int Gyms, int Users);
+public sealed record Organization(int Id, string Name, string Slug, string? LogoUrl, string PrimaryColor, string? VatNumber, string? BillingEmail, bool IsActive, int Gyms, int Users, string Sector);
+
+/// <summary>Dati dell'attività di una struttura: personalizzabili da MVitalia e dalla direzione della struttura.</summary>
+public sealed class OrgProfile
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Sector { get; set; } = "palestra";
+    public string PrimaryColor { get; set; } = "#F6931E";
+    public string? LegalName { get; set; }
+    public string? VatNumber { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? Phone { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? Website { get; set; }
+    public string? Description { get; set; }
+    public bool HasLogo { get; set; }
+    public string? LogoUrl { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+}
 public sealed record Gym(int Id, int OrganizationId, string OrganizationName, string Name, string? City, string? Address, string? Phone, bool IsActive, int Users);
 public sealed record UserRow(int Id, int? OrganizationId, string? OrganizationName, int? GymId, string? GymName, string Email, string FullName, string Role, bool IsActive, DateTime? LastLoginAt);
 public sealed record UserAuth(int Id, int? OrganizationId, int? GymId, string Email, string FullName, string PasswordHash, string Role, bool IsActive, int FailedLogins, DateTime? LockedUntil, bool MustChangePassword, bool OrgActive);
-public sealed record Branding(string Name, string? LogoUrl, string PrimaryColor);
+public sealed record Branding(string Name, string? LogoUrl, string PrimaryColor, string Sector);
 
 /// <summary>
-/// Query su catene, palestre e utenti. Ogni lettura riceve lo Scope di chi chiede
+/// Query su strutture, sedi e utenti. Ogni lettura riceve lo Scope di chi chiede
 /// e lo traduce in un filtro SQL: nessuna pagina può dimenticarsi di filtrare.
 /// </summary>
 public sealed class Repos
@@ -19,9 +39,10 @@ public sealed class Repos
     private readonly Db _db;
     public Repos(Db db) => _db = db;
 
-    // ---------- Catene ----------
+    // ---------- Strutture ----------
     public Task<List<Organization>> OrganizationsAsync(Scope s) => _db.QueryAsync(
-        @"SELECT o.*, (SELECT COUNT(*) FROM Gyms g WHERE g.OrganizationId=o.Id) AS GymCount,
+        @"SELECT o.Id, o.Name, o.Slug, o.LogoUrl, o.PrimaryColor, o.VatNumber, o.BillingEmail, o.IsActive, o.Sector,
+                 (SELECT COUNT(*) FROM Gyms g WHERE g.OrganizationId=o.Id) AS GymCount,
                  (SELECT COUNT(*) FROM Users u WHERE u.OrganizationId=o.Id) AS UserCount
           FROM Organizations o WHERE (@All=1 OR o.Id=@Org) ORDER BY o.Name",
         new { All = s.IsSuperAdmin ? 1 : 0, Org = s.OrganizationId ?? -1 }, MapOrg);
@@ -29,29 +50,60 @@ public sealed class Repos
     public async Task<Organization?> OrganizationAsync(Scope s, int id) =>
         (await OrganizationsAsync(s)).FirstOrDefault(o => o.Id == id);
 
-    public async Task<int> SaveOrganizationAsync(int? id, string name, string slug, string? logo, string color, string? vat, string? email, bool active)
+    /// <summary>Dati amministrativi (solo MVitalia): nome, codice, tipo di attività, email fatture, attiva/sospesa.</summary>
+    public async Task<int> SaveOrganizationAsync(int? id, string name, string slug, string sector, string? email, bool active)
     {
         if (id is null)
             return await _db.ScalarAsync<int>(
-                @"INSERT INTO Organizations (Name, Slug, LogoUrl, PrimaryColor, VatNumber, BillingEmail, IsActive)
-                  VALUES (@name, @slug, @logo, @color, @vat, @email, @active); SELECT LAST_INSERT_ID();",
-                new { name, slug, logo, color, vat, email, active });
+                @"INSERT INTO Organizations (Name, Slug, Sector, BillingEmail, IsActive)
+                  VALUES (@name, @slug, @sector, @email, @active); SELECT LAST_INSERT_ID();",
+                new { name, slug, sector, email, active });
         await _db.ExecuteAsync(
-            @"UPDATE Organizations SET Name=@name, Slug=@slug, LogoUrl=@logo, PrimaryColor=@color, VatNumber=@vat,
-              BillingEmail=@email, IsActive=@active WHERE Id=@id",
-            new { id, name, slug, logo, color, vat, email, active });
+            "UPDATE Organizations SET Name=@name, Slug=@slug, Sector=@sector, BillingEmail=@email, IsActive=@active WHERE Id=@id",
+            new { id, name, slug, sector, email, active });
         return id.Value;
     }
 
+    public Task<OrgProfile?> OrgProfileAsync(int orgId) => _db.FirstAsync(
+        @"SELECT Id, Name, Sector, PrimaryColor, LegalName, VatNumber, Address, City, Phone, ContactEmail, Website, Description, LogoUrl, UpdatedAt,
+                 LogoData IS NOT NULL AS HasLogo FROM Organizations WHERE Id=@orgId", new { orgId },
+        r => new OrgProfile
+        {
+            Id = r.Int("Id"), Name = r.Str("Name")!, Sector = r.Str("Sector") ?? "palestra", PrimaryColor = r.Str("PrimaryColor")!,
+            LegalName = r.Str("LegalName"), VatNumber = r.Str("VatNumber"), Address = r.Str("Address"), City = r.Str("City"), Phone = r.Str("Phone"),
+            ContactEmail = r.Str("ContactEmail"), Website = r.Str("Website"), Description = r.Str("Description"), LogoUrl = r.Str("LogoUrl"),
+            UpdatedAt = r.Date("UpdatedAt"), HasLogo = Convert.ToInt32(r.GetValue(r.GetOrdinal("HasLogo"))) == 1
+        });
+
+    /// <summary>Dati dell'attività e aspetto: li cura MVitalia o la direzione della struttura. Il tipo di attività lo cambia solo MVitalia.</summary>
+    public Task SaveOrgProfileAsync(OrgProfile p, bool canChangeSector) => _db.ExecuteAsync(
+        @"UPDATE Organizations SET Name=@Name, PrimaryColor=@PrimaryColor, LegalName=@LegalName, VatNumber=@VatNumber, Address=@Address, City=@City,
+            Phone=@Phone, ContactEmail=@ContactEmail, Website=@Website, Description=@Description,
+            Sector=CASE WHEN @canChangeSector=1 THEN @Sector ELSE Sector END, UpdatedAt=UTC_TIMESTAMP() WHERE Id=@Id",
+        new { p.Id, p.Name, p.PrimaryColor, p.LegalName, p.VatNumber, p.Address, p.City, p.Phone, p.ContactEmail, p.Website, p.Description, p.Sector,
+              canChangeSector = canChangeSector ? 1 : 0 });
+
+    public Task SaveLogoAsync(int orgId, byte[]? data, string? type) => _db.ExecuteAsync(
+        "UPDATE Organizations SET LogoData=@data, LogoType=@type, LogoUrl=NULL, UpdatedAt=UTC_TIMESTAMP() WHERE Id=@orgId", new { orgId, data, type });
+
+    public async Task<(byte[] Data, string Type, DateTime? At)?> LogoAsync(int orgId)
+    {
+        var rows = await _db.QueryAsync("SELECT LogoData, LogoType, UpdatedAt FROM Organizations WHERE Id=@orgId AND LogoData IS NOT NULL", new { orgId },
+            r => ((byte[])r.GetValue(0), r.Str("LogoType") ?? "image/png", r.Date("UpdatedAt")));
+        return rows.Count == 0 ? null : rows[0];
+    }
+
     public Task<Branding?> BrandingAsync(int orgId) => _db.FirstAsync(
-        "SELECT Name, LogoUrl, PrimaryColor FROM Organizations WHERE Id=@orgId", new { orgId },
-        r => new Branding(r.Str("Name")!, r.Str("LogoUrl"), r.Str("PrimaryColor")!));
+        @"SELECT Id, Name, PrimaryColor, Sector, LogoUrl, LogoData IS NOT NULL AS HasLogo, UpdatedAt FROM Organizations WHERE Id=@orgId", new { orgId },
+        r => new Branding(r.Str("Name")!,
+            Convert.ToInt32(r.GetValue(r.GetOrdinal("HasLogo"))) == 1 ? $"/logo/{r.Int("Id")}?v={(r.Date("UpdatedAt") ?? DateTime.MinValue).Ticks}" : r.Str("LogoUrl"),
+            r.Str("PrimaryColor")!, r.Str("Sector") ?? "palestra"));
 
     private static Organization MapOrg(DbDataReader r) => new(
         r.Int("Id"), r.Str("Name")!, r.Str("Slug")!, r.Str("LogoUrl"), r.Str("PrimaryColor")!, r.Str("VatNumber"),
-        r.Str("BillingEmail"), r.Bool("IsActive"), Convert.ToInt32(r["GymCount"]), Convert.ToInt32(r["UserCount"]));
+        r.Str("BillingEmail"), r.Bool("IsActive"), Convert.ToInt32(r["GymCount"]), Convert.ToInt32(r["UserCount"]), r.Str("Sector") ?? "palestra");
 
-    // ---------- Palestre ----------
+    // ---------- Sedi ----------
     private const string GymSelect =
         @"SELECT g.*, o.Name AS OrgName, (SELECT COUNT(*) FROM Users u WHERE u.GymId=g.Id) AS UserCount
           FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId

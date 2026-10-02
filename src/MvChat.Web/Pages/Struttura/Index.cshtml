@@ -1,0 +1,31 @@
+@page "{id:int?}"
+@model MvChat.Web.Pages.Struttura.IndexModel
+@{ ViewData["Title"] = "Dati e logo · " + Model.P.Name; var sector = Sectors.Get(Model.P.Sector); var logo = Model.P.HasLogo ? $"/logo/{Model.P.Id}?v={(Model.P.UpdatedAt ?? DateTime.MinValue).Ticks}" : Model.P.LogoUrl; }
+<p class="muted" style="margin:0">Come la struttura appare in mvchat e cosa l'assistente sa dell'attività. Le informazioni delle singole sedi (orari, servizi, come arrivare) si scrivono nella <a href="/Sedi">scheda sede</a>.</p>
+<form method="post" enctype="multipart/form-data" class="panel">
+    <div class="panel-h"><h2>Aspetto</h2></div>
+    <div class="panel-b form">
+        <div class="field"><label asp-for="Input.Name">Nome mostrato</label><input asp-for="Input.Name"><span asp-validation-for="Input.Name" class="field-error"></span></div>
+        <div class="field"><label asp-for="Input.PrimaryColor">Colore principale</label><input asp-for="Input.PrimaryColor" type="color" style="height:42px;padding:4px"><span asp-validation-for="Input.PrimaryColor" class="field-error"></span></div>
+        <div class="field"><label for="Logo">Logo</label>
+            @if (!string.IsNullOrEmpty(logo)) { <img src="@logo" alt="Logo di @Model.P.Name" class="logo-preview"> }
+            <input id="Logo" name="Logo" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG o WebP, massimo 300 KB. Meglio quadrato o orizzontale su fondo trasparente.</small><span asp-validation-for="Logo" class="field-error"></span>
+            @if (Model.P.HasLogo) { <label class="check"><input type="checkbox" name="RemoveLogo" value="true"> Togli il logo</label> }</div>
+        <div class="field"><label asp-for="Input.Sector">Tipo di attività</label>
+            @if (Model.CanChangeSector) { <select asp-for="Input.Sector">@foreach (var s in Sectors.All) { <option value="@s.Key">@s.Label</option> }</select> }
+            else { <input value="@sector.Label" disabled><input type="hidden" asp-for="Input.Sector"> }
+            <small>Con i clienti l'assistente parla di «@sector.Customer», «@sector.Membership», «@sector.Activities.ToLowerInvariant()».@(Model.CanChangeSector ? "" : " Per cambiarlo scrivi a MVitalia.")</small></div>
+    </div>
+    <div class="panel-h" style="border-top:1px solid var(--line)"><h2>Dati dell'attività</h2></div>
+    <div class="panel-b form">
+        <div class="field"><label asp-for="Input.LegalName">Ragione sociale</label><input asp-for="Input.LegalName"></div>
+        <div class="field"><label asp-for="Input.VatNumber">Partita IVA</label><input asp-for="Input.VatNumber"></div>
+        <div class="field"><label asp-for="Input.Address">Indirizzo della sede legale</label><input asp-for="Input.Address"></div>
+        <div class="field"><label asp-for="Input.City">Città</label><input asp-for="Input.City"></div>
+        <div class="field"><label asp-for="Input.Phone">Telefono</label><input asp-for="Input.Phone"></div>
+        <div class="field"><label asp-for="Input.ContactEmail">Email</label><input asp-for="Input.ContactEmail" type="email"><span asp-validation-for="Input.ContactEmail" class="field-error"></span></div>
+        <div class="field full"><label asp-for="Input.Website">Sito internet</label><input asp-for="Input.Website" placeholder="https://"><span asp-validation-for="Input.Website" class="field-error"></span></div>
+        <div class="field full"><label asp-for="Input.Description">Chi siamo</label><textarea asp-for="Input.Description" rows="5" placeholder="Due o tre frasi su cosa fa l'attività, in cosa è diversa, a chi si rivolge. L'assistente le usa per presentarla ai clienti."></textarea><small>Niente prezzi qui: si scrivono nelle offerte.</small></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
+</form>

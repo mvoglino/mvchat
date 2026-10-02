@@ -1,10 +1,10 @@
 @page
 @model MvChat.Web.Pages.Gyms.IndexModel
-@{ ViewData["Title"] = "Palestre"; }
-@section Actions { <a class="btn primary" href="/Gyms/Edit">Nuova palestra</a> }
-<p class="muted" style="margin:0">Ogni palestra avrà la sua area di lavoro, il suo numero WhatsApp (Passo 4) e le sue liste. Nessuna palestra vede i dati di un'altra.</p>
+@{ ViewData["Title"] = "Sedi"; }
+@section Actions { <a class="btn primary" href="/Gyms/Edit">Nuova sede</a> }
+<p class="muted" style="margin:0">Ogni sede avrà la sua area di lavoro, il suo numero WhatsApp (Passo 4) e le sue liste. Nessuna sede vede i dati di un'altra.</p>
 <section class="panel"><div class="tbl"><table>
-    <thead><tr>@if (Model.Me.IsSuperAdmin) {<th>Catena</th>}<th>Palestra</th><th>Città</th><th>Telefono</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr>@if (Model.Me.IsSuperAdmin) {<th>Struttura</th>}<th>Sede</th><th>Città</th><th>Telefono</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
     <tbody>
     @foreach (var g in Model.Items)
     {
@@ -13,6 +13,6 @@
             <td>@(g.IsActive ? Html.Raw("<span class=\"chip good\">Attiva</span>") : Html.Raw("<span class=\"chip\">Disattivata</span>"))</td>
             <td><a class="btn sm" href="/Gyms/Edit/@g.Id">Modifica</a></td></tr>
     }
-    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna palestra ancora.</td></tr> }
+    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna sede ancora.</td></tr> }
     </tbody>
 </table></div></section>

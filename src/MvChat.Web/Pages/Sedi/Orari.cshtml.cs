@@ -6,7 +6,7 @@ using MvChat.Web.Security;
 
 namespace MvChat.Web.Pages.Sedi;
 
-/// <summary>Orari in cui la palestra permette l'invio dei primi messaggi delle campagne. Di base: sempre.</summary>
+/// <summary>Orari in cui la sede permette l'invio dei primi messaggi delle campagne. Di base: sempre.</summary>
 public class OrariModel : PageModel
 {
     private readonly Repos _repos; private readonly CampaignRepo _campaigns;

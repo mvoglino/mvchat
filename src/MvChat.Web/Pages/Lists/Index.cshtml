@@ -4,7 +4,7 @@
 @section Actions { <a class="btn primary" href="/Lists/New">Carica una lista</a> }
 <p class="muted" style="margin:0">Ogni lista nasce da un file Excel. Entrano solo le persone con il consenso, un cellulare valido e che non hanno chiesto di essere escluse.</p>
 <section class="panel"><div class="tbl"><table>
-    <thead><tr><th>Lista</th>@if (many) {<th>Palestra</th>}<th>Caricata</th><th>Righe lette</th><th>Contattabili</th><th>Scartate</th><th></th></tr></thead>
+    <thead><tr><th>Lista</th>@if (many) {<th>Sede</th>}<th>Caricata</th><th>Righe lette</th><th>Contattabili</th><th>Scartate</th><th></th></tr></thead>
     <tbody>
     @foreach (var l in Model.Items)
     {

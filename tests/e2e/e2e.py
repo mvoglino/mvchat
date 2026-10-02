@@ -16,7 +16,7 @@ class Client:
         body = urllib.parse.urlencode(data).encode() if data is not None else None
         try:
             r = self.op.open(urllib.request.Request(BASE + path, data=body))
-            return r.status, html_lib.unescape(r.read().decode()), r.headers.get("Location")
+            return r.status, html_lib.unescape(r.read().decode(errors="replace")), r.headers.get("Location")
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode(errors="ignore"), e.headers.get("Location")
     def token(self, path):
@@ -33,6 +33,20 @@ class Client:
             body = e.read().decode(errors="ignore")
             try: return e.code, json.loads(body)
             except Exception: return e.code, {"raw": body[:300]}
+    def post_multipart(self, path, fields, files, form_path=None):
+        import uuid
+        b = uuid.uuid4().hex; parts = []
+        fields = dict(fields); fields["__RequestVerificationToken"] = self.token(form_path or path)
+        for k, v in fields.items():
+            parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+        for k, (fname, ctype, data) in files.items():
+            parts.append(f'--{b}\r\nContent-Disposition: form-data; name="{k}"; filename="{fname}"\r\nContent-Type: {ctype}\r\n\r\n'.encode() + data + b"\r\n")
+        body = b"".join(parts) + f"--{b}--\r\n".encode()
+        req = urllib.request.Request(BASE + path, data=body, headers={"Content-Type": f"multipart/form-data; boundary={b}"})
+        try:
+            r = self.op.open(req); return r.status, html_lib.unescape(r.read().decode()), r.headers.get("Location")
+        except urllib.error.HTTPError as e:
+            return e.code, html_lib.unescape(e.read().decode(errors="ignore")), e.headers.get("Location")
     def post(self, path, data, form_path=None):
         data = dict(data); data["__RequestVerificationToken"] = self.token(form_path or path)
         return self.req(path, data)
@@ -56,18 +70,18 @@ check("login superadmin", s == 302 and loc == "/", f"{s} {loc}")
 def mk_org(name):
     s,_,loc = sa.post("/Orgs/Edit", {"Input.Name":name,"Input.Slug":"","Input.PrimaryColor":"#F6931E","Input.IsActive":"true"})
     return s == 302
-check("crea catena FitActive", mk_org("FitActive"))
-check("crea catena Altra", mk_org("Altra Catena"))
+check("crea struttura FitActive", mk_org("FitActive"))
+check("crea struttura Altra", mk_org("Altra Struttura"))
 s,html,_ = sa.req("/Orgs"); orgs = dict((n, int(i)) for i, n in re.findall(r'href="/Orgs/Edit/(\d+)".*?', html) and re.findall(r'/Orgs/Edit/(\d+)', html) and [])
 ids = [int(x) for x in re.findall(r'/Orgs/Edit/(\d+)', html)]
 names = re.findall(r"<td><b>([^<]+)</b><div class=\"muted\">", html)
-org = dict(zip(names, ids)); check("elenco catene", "FitActive" in org and "Altra Catena" in org, str(org))
+org = dict(zip(names, ids)); check("elenco strutture", "FitActive" in org and "Altra Struttura" in org, str(org))
 def mk_gym(orgname, name):
     s,_,_ = sa.post("/Gyms/Edit", {"Input.OrganizationId":org[orgname],"Input.Name":name,"Input.City":"X","Input.IsActive":"true"}); return s == 302
-check("crea palestre", mk_gym("FitActive","FitActive Alba") and mk_gym("FitActive","FitActive Bra") and mk_gym("Altra Catena","Altra Palestra"))
+check("crea sedi", mk_gym("FitActive","FitActive Alba") and mk_gym("FitActive","FitActive Bra") and mk_gym("Altra Struttura","Altra Sede"))
 s,html,_ = sa.req("/Gyms")
 gids = re.findall(r'/Gyms/Edit/(\d+)', html); gnames = re.findall(r"<td><b>([^<]+)</b><div class=\"muted\">", html)
-gym = dict(zip(gnames, map(int, gids))); check("elenco palestre superadmin = 3", len(gym) == 3, str(gym))
+gym = dict(zip(gnames, map(int, gids))); check("elenco sedi superadmin = 3", len(gym) == 3, str(gym))
 
 def mk_user(client, email, role, orgid="", gymid="", form="/Users/Edit"):
     s, html, loc = client.post("/Users/Edit", {"Input.FullName":email.split("@")[0],"Input.Email":email,"Input.Role":role,"Input.OrganizationId":orgid,"Input.GymId":gymid,"Input.IsActive":"true"})
@@ -75,7 +89,7 @@ def mk_user(client, email, role, orgid="", gymid="", form="/Users/Edit"):
     _, lst, _ = client.req("/Users"); return temp_pwd(lst), lst
 pw_dir,_ = mk_user(sa, "direzione@fitactive.test", "orgadmin", org["FitActive"])
 pw_mgr,_ = mk_user(sa, "alba@fitactive.test", "manager", "", gym["FitActive Alba"])
-pw_oth,_ = mk_user(sa, "altra@altra.test", "manager", "", gym["Altra Palestra"])
+pw_oth,_ = mk_user(sa, "altra@altra.test", "manager", "", gym["Altra Sede"])
 check("utenti creati con password provvisoria", all([pw_dir, pw_mgr, pw_oth]), str([pw_dir,pw_mgr,pw_oth]))
 _, lst, _ = sa.req("/Users"); check("password provvisoria mostrata una sola volta", temp_pwd(lst) is None)
 
@@ -87,28 +101,28 @@ s,_,loc = d.req("/Gyms"); check("finché non cambia password non usa il pannello
 s,_,loc = d.post("/Account/Password", {"Current":pw_dir,"New":"Direzione2026x","New2":"Direzione2026x"})
 check("cambio password", s == 302 and loc == "/", f"{s} {loc}")
 s,html,_ = d.req("/Gyms")
-check("direzione vede solo le sue palestre", "FitActive Alba" in html and "FitActive Bra" in html and "Altra Palestra" not in html)
-s,_,_ = d.req(f"/Gyms/Edit/{gym['Altra Palestra']}"); check("direzione non apre palestra di altra catena", s == 404, str(s))
-s,_,_ = d.req("/Orgs"); check("direzione non vede le catene", s in (302, 403), str(s))
+check("direzione vede solo le sue sedi", "FitActive Alba" in html and "FitActive Bra" in html and "Altra Sede" not in html)
+s,_,_ = d.req(f"/Gyms/Edit/{gym['Altra Sede']}"); check("direzione non apre sede di altra struttura", s == 404, str(s))
+s,_,_ = d.req("/Orgs"); check("direzione non vede le strutture", s in (302, 403), str(s))
 s,html,_ = d.post("/Users/Edit", {"Input.FullName":"x","Input.Email":"hack@x.test","Input.Role":"superadmin","Input.IsActive":"true"})
 check("direzione non può creare superadmin", s == 200 and "Non puoi assegnare" in html)
-s,html,_ = d.post("/Users/Edit", {"Input.FullName":"x","Input.Email":"op@x.test","Input.Role":"operator","Input.GymId":gym["Altra Palestra"],"Input.IsActive":"true"})
-check("direzione non assegna palestre di altre catene", s == 200 and "Scegli la palestra" in html)
-s,html,_ = d.post("/Gyms/Edit", {"Input.OrganizationId":org["Altra Catena"],"Input.Name":"Intrusa","Input.IsActive":"true"})
-_,html2,_ = sa.req("/Gyms"); check("palestra creata dalla direzione finisce nella sua catena", re.search(r"FitActive</td>\s*<td><b>Intrusa", html2) is not None)
+s,html,_ = d.post("/Users/Edit", {"Input.FullName":"x","Input.Email":"op@x.test","Input.Role":"operator","Input.GymId":gym["Altra Sede"],"Input.IsActive":"true"})
+check("direzione non assegna sedi di altre strutture", s == 200 and "Scegli la sede" in html)
+s,html,_ = d.post("/Gyms/Edit", {"Input.OrganizationId":org["Altra Struttura"],"Input.Name":"Intrusa","Input.IsActive":"true"})
+_,html2,_ = sa.req("/Gyms"); check("sede creata dalla direzione finisce nella sua struttura", re.search(r"FitActive</td>\s*<td><b>Intrusa", html2) is not None)
 
 # 4. Responsabile Alba
 m = Client()
 m.post("/Login", {"Email":"alba@fitactive.test","Password":pw_mgr})
 m.post("/Account/Password", {"Current":pw_mgr,"New":"Alba2026xyz1","New2":"Alba2026xyz1"})
-s,_,_ = m.req("/Gyms"); check("responsabile non gestisce palestre", s in (302,403), str(s))
-s,html,_ = m.req("/"); check("responsabile vede solo la sua palestra", "FitActive Alba" in html and "FitActive Bra" not in html)
+s,_,_ = m.req("/Gyms"); check("responsabile non gestisce sedi", s in (302,403), str(s))
+s,html,_ = m.req("/"); check("responsabile vede solo la sua sede", "FitActive Alba" in html and "FitActive Bra" not in html)
 s,html,_ = m.post("/Users/Edit", {"Input.FullName":"Op Bra","Input.Email":"opbra@x.test","Input.Role":"operator","Input.GymId":gym["FitActive Bra"],"Input.IsActive":"true"})
-check("responsabile non crea operatori in altre palestre", s == 200)
+check("responsabile non crea operatori in altre sedi", s == 200)
 s,html,_ = m.post("/Users/Edit", {"Input.FullName":"Op Alba","Input.Email":"opalba@x.test","Input.Role":"operator","Input.GymId":gym["FitActive Alba"],"Input.IsActive":"true"})
-check("responsabile crea operatore nella sua palestra", s == 302)
+check("responsabile crea operatore nella sua sede", s == 302)
 _,lst,_ = m.req("/Users"); pw_op = temp_pwd(lst)
-check("responsabile vede solo utenti della sua palestra", "direzione@fitactive.test" not in lst and "opalba@x.test" in lst)
+check("responsabile vede solo utenti della sua sede", "direzione@fitactive.test" not in lst and "opalba@x.test" in lst)
 
 # 5. Operatore
 o = Client(); o.post("/Login", {"Email":"opalba@x.test","Password":pw_op}); o.post("/Account/Password", {"Current":pw_op,"New":"Operatore2026","New2":"Operatore2026"})
@@ -144,12 +158,12 @@ check("numeri salvati in formato internazionale", all(x in html for x in ["+3933
 check("nomi sistemati (GIULIA ROSSI -> Giulia Rossi)", "Giulia Rossi" in html and "Anna Verdi" in html)
 check("scarti con motivo e riga Excel", all(x in html for x in ["Numero fisso","Manca il consenso","Ha chiesto di non essere contattato","Numero ripetuto","Manca il nome","<td>6</td>"]))
 s,res2 = m.post_json("/Lists/New?handler=Import", {"GymId":gym["FitActive Bra"],"Name":"x","Map":mp,"Rows":rows}, "/Lists/New")
-check("responsabile non importa in un'altra palestra", s == 400, str(s))
+check("responsabile non importa in un'altra sede", s == 400, str(s))
 s,res3 = m.post_json("/Lists/New?handler=Import", {"GymId":gym["FitActive Alba"],"Name":"x","Map":dict(mp, Consent=-1),"Rows":rows}, "/Lists/New")
 check("import rifiutato senza colonna del consenso", s == 400 and "consenso" in res3.get("error",""), str(res3))
-s,html,_ = m.req("/Lists/New"); check("abbinamento colonne ricordato per la palestra", "Consenso Marketing" in html and "Cell." in html)
-s,html,_ = d.req("/Lists"); check("direzione vede la lista della palestra", "Scadenze ottobre" in html)
-s,html,_ = d.req("/OptOuts"); check("direzione vede la lista STOP della catena", "+393470001111" in html, str(s) + " " + str(re.findall(r"<code>([^<]+)</code>", html)) + html[html.find("<tbody>"):html.find("<tbody>")+300])
+s,html,_ = m.req("/Lists/New"); check("abbinamento colonne ricordato per la sede", "Consenso Marketing" in html and "Cell." in html)
+s,html,_ = d.req("/Lists"); check("direzione vede la lista della sede", "Scadenze ottobre" in html)
+s,html,_ = d.req("/OptOuts"); check("direzione vede la lista STOP della struttura", "+393470001111" in html, str(s) + " " + str(re.findall(r"<code>([^<]+)</code>", html)) + html[html.find("<tbody>"):html.find("<tbody>")+300])
 optid = re.search(r'handler=Remove&id=(\d+)', html) or re.search(r'id=(\d+)&handler=Remove', html)
 s,_,loc = m.post(f"/OptOuts?handler=Remove&id={optid.group(1) if optid else 0}", {}, form_path="/OptOuts")
 check("responsabile non toglie numeri dalla lista STOP", s == 403 or (s == 302 and "/Error/403" in (loc or "")), f"{s} {loc}")
@@ -169,7 +183,7 @@ check("responsabile crea un'offerta con prezzo", s == 302, str(s))
 s,html,_ = m.post("/Offerte/Edit", {"Input.GymId":gym["FitActive Alba"],"Input.Title":"x","Input.Price":"abc","Input.ValidFrom":"2026-12-01","Input.ValidTo":"2026-11-01","Input.IsActive":"true"})
 check("offerta con prezzo e date sbagliati rifiutata", s == 200 and "Scrivi un importo" in html and "prima dell'inizio" in html)
 s,html,_ = m.post("/Offerte/Edit", {"Input.GymId":gym["FitActive Bra"],"Input.Title":"Intrusa","Input.Price":"1","Input.IsActive":"true"})
-check("responsabile non crea offerte per un'altra sede", s == 200 and "Scegli la palestra" in html)
+check("responsabile non crea offerte per un'altra sede", s == 200 and "Scegli la sede" in html)
 s,_,_ = d.post("/Offerte/Edit", {"Input.GymId":gym["FitActive Bra"],"Input.Title":"Annuale Bra","Input.Price":"1.200","Input.IsActive":"true"})
 _,html,_ = d.req("/Offerte"); check("direzione crea offerta per Bra (1.200 = milleduecento)", s == 302 and "1.200 €" in html and "399 €" in html, str(s))
 _,html,_ = m.req("/Offerte"); check("responsabile vede solo le offerte della sua sede", "399 €" in html and "Annuale Bra" not in html)
@@ -185,12 +199,38 @@ s,html,_ = m.req(f"/Modelli/Anteprima?model={rinnovo}&gym={gym['FitActive Bra']}
 check("anteprima non usa sedi fuori dal perimetro", "FitActive Bra" not in html[html.find('id="prompt"'):] if 'id="prompt"' in html else True)
 s,_,loc = m.req("/Modelli/Edit"); check("responsabile non crea modelli", s == 403 or "/Error/403" in (loc or ""), f"{s} {loc}")
 s,_,_ = d.post("/Modelli/Edit", {"Input.Name":"Prova corso Pilates","Input.Success":"Il cliente prenota una lezione di prova","Input.Instructions":"Proponi una lezione di prova gratuita di Pilates.","Input.MaxAiMessages":"6","Input.NeedsOffer":"false","Input.IsActive":"true"})
-_,html,_ = m.req("/Modelli"); check("modello della catena creato dalla direzione e visibile in catena", s == 302 and "Prova corso Pilates" in html, str(s))
+_,html,_ = m.req("/Modelli"); check("modello della struttura creato dalla direzione e visibile in struttura", s == 302 and "Prova corso Pilates" in html, str(s))
 oth = Client(); oth.post("/Login", {"Email":"altra@altra.test","Password":pw_oth}); oth.post("/Account/Password", {"Current":pw_oth,"New":"Altra2026xyz1","New2":"Altra2026xyz1"})
-_,html,_ = oth.req("/Modelli"); check("modello di una catena invisibile alle altre", "Prova corso Pilates" not in html and "Rinnovo abbonamento" in html)
+_,html,_ = oth.req("/Modelli"); check("modello di una struttura invisibile alle altre", "Prova corso Pilates" not in html and "Rinnovo abbonamento" in html)
 s,_,_ = d.req(f"/Modelli/Edit/{rinnovo}"); check("direzione non modifica i modelli standard", s == 404, str(s))
 s,_,_ = sa.req(f"/Modelli/Edit/{rinnovo}"); check("MVitalia modifica i modelli standard", s == 200, str(s))
 
+
+# 5c-bis. Strutture di qualsiasi settore: tipo di attività, dati, logo
+s,_,loc = sa.post("/Orgs/Edit", {"Input.Name":"Hotel Langhe","Input.Slug":"","Input.Sector":"hotel","Input.IsActive":"true"})
+hotel = re.search(r"/Struttura/(\d+)$", loc or ""); hotel = hotel.group(1) if hotel else "0"
+_,html,_ = sa.req("/Orgs"); check("MVitalia abilita una struttura non palestra (hotel)", s == 302 and "Hotel Langhe" in html and "Hotel / struttura ricettiva" in html, f"{s} {loc}")
+png = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a0f3b5c80000000049454e44ae426082")
+s,html,_ = d.post_multipart("/Struttura", {"Input.Name":"FitActive","Input.PrimaryColor":"#F6931E","Input.Sector":"hotel","Input.LegalName":"FitActive S.r.l.","Input.VatNumber":"01234567890",
+    "Input.Website":"www.fitactive.it","Input.Phone":"0173 000000","Input.Description":"Catena di palestre aperte tutti i giorni con prezzi accessibili."}, {"Logo":("logo.png","image/png",png)})
+_,html,_ = d.req("/Struttura")
+check("la direzione cura nome, dati e logo della sua struttura", s == 302 and "FitActive S.r.l." in html and "Catena di palestre aperte" in html and 'src="/logo/' in html, f"{s}")
+check("la direzione non cambia il tipo di attività", "Palestra / centro fitness" in html)
+s,body,_ = Client().req(f"/logo/{org['FitActive']}"); check("logo caricato servito come immagine", s == 200, str(s))
+_,html,_ = d.req("/"); check("logo della struttura nel menu", f'src="/logo/{org["FitActive"]}?v=' in html)
+s,html,_ = d.post_multipart("/Struttura", {"Input.Name":"FitActive","Input.PrimaryColor":"#F6931E"}, {"Logo":("finto.png","image/png",b"<script>alert(1)</script>")})
+check("logo che non è un'immagine rifiutato", s == 200 and "PNG, JPG o WebP" in html, str(s))
+s,_,_ = d.req(f"/Struttura/{hotel}"); check("la direzione non apre i dati di un'altra struttura", s == 404, str(s))
+s,_,_ = m.req("/Struttura"); check("il responsabile di sede non modifica la struttura", s in (302,403), str(s))
+_,html,_ = m.req(f"/Modelli/Anteprima?model={rinnovo}&gym={gym['FitActive Alba']}&offer={offer_alba}")
+pr = html[html.find('id="prompt"'):]
+check("l'assistente conosce la struttura: tipo di attività e chi siamo", "palestra / centro fitness" in pr and "a un iscritto" in pr and "## Chi siamo: FitActive" in pr and "Catena di palestre aperte" in pr, pr[:300])
+s,_,_ = sa.post("/Gyms/Edit", {"Input.OrganizationId":hotel,"Input.Name":"Hotel Langhe Alba","Input.City":"Alba","Input.IsActive":"true"})
+_,html,_ = sa.req("/Gyms"); hgym = re.search(r'/Gyms/Edit/(\d+)"[^>]*>[^<]*</a>\s*</td>\s*</tr>', html)
+hg = [g for g in re.findall(r"/Sedi/Edit/(\d+)", sa.req("/Sedi")[1])]
+_,html,_ = sa.req(f"/Modelli/Anteprima?model={rinnovo}&gym={hg[-1] if hg else 0}&abbonamento=Weekend")
+pr = html[html.find('id="prompt"'):]
+check("per un hotel l'assistente parla di ospiti e soggiorni", "a un ospite" in pr and "Soggiorno: Weekend" in pr, pr[:300])
 
 # 5d. Passo 4: WhatsApp (numero simulato e numero "Meta" verso un finto server)
 import hmac, hashlib, json as _json, sys as _sys, os as _os
@@ -260,7 +300,7 @@ check("stato 'letto' e messaggio del cliente registrati una volta sola", "Letto"
 tev = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[{"field":"message_template_status_update","value":{"event":"REJECTED","message_template_id":"tpl123","message_template_name":"rinnovo_bra","reason":"INVALID_FORMAT"}}]}]}
 raw = _json.dumps(tev).encode(); sig = "sha256=" + hmac.new(b"testsecret", raw, hashlib.sha256).hexdigest(); post_raw(sig)
 _,html,_ = d.req(tpl_b); check("avviso di Meta sul template registrato", "rifiutato" in html and "INVALID_FORMAT" in html)
-s,_,_ = oth.req(alba_wa); check("un'altra catena non vede il WhatsApp della palestra", s == 404, str(s))
+s,_,_ = oth.req(alba_wa); check("un'altra struttura non vede il WhatsApp della sede", s == 404, str(s))
 fake.shutdown()
 
 # 5e. Passo 5: assistente AI (verso un finto fornitore AI)
@@ -305,7 +345,7 @@ check("l'assistente risponde e si presenta come assistente virtuale", "Ciao, son
 req = fake_ai.REQUESTS[-1] if fake_ai.REQUESTS else {"body":{}, "headers":{}}
 sys_text = req["body"].get("system", [{}])[0].get("text", "")
 check("all'AI arrivano istruzioni con offerta, primo messaggio e formato", all(x in sys_text for x in ["399 €", "Primo messaggio già inviato", "Ciao Giulia", "Formato della tua risposta"]) and req["body"]["system"][0].get("cache_control") == {"type":"ephemeral"}, sys_text[:300])
-check("istruzioni AI senza dati di altre palestre", "1.200" not in sys_text and "Annuale Bra" not in sys_text)
+check("istruzioni AI senza dati di altre sedi", "1.200" not in sys_text and "Annuale Bra" not in sys_text)
 check("chiave AI inviata solo nell'intestazione", req["headers"].get("x-api-key") == "sk-ant-test" and "sk-ant-test" not in _json.dumps(req["body"]))
 say(m, cid, "Quanto costa?")
 check("l'assistente cita il prezzo dell'offerta", "Il rinnovo costa 399 €." in page(m, cid))
@@ -345,10 +385,10 @@ m.post(f"/Conversazioni/{cid4}?handler=Outcome", {"Outcome":"obiettivo_raggiunto
 html = page(m, cid4); check("esito cambiato a mano dalla reception", "Obiettivo raggiunto" in html and "rinnovato al banco" in html)
 
 s,_,_ = oth.req(f"/Conversazioni/{cid}"); _,lst,_ = oth.req("/Conversazioni?view=tutte")
-check("un'altra catena non vede le conversazioni", s == 404 and f"/Conversazioni/{cid}" not in lst, str(s))
-s,_,_ = oth.req(f"/Conversazioni/{cid}?handler=State"); check("un'altra catena non legge lo stato della conversazione", s == 404, str(s))
-s,_,_ = oth.post(f"/Conversazioni/{cid}?handler=Reply", {"Text":"intruso"}, form_path="/Account/Password"); check("un'altra catena non scrive nella conversazione", s == 404, str(s))
-_,lst,_ = d.req("/Conversazioni?view=tutte"); check("la direzione vede le conversazioni della catena", f"/Conversazioni/{cid}" in lst and "FitActive Alba" in lst)
+check("un'altra struttura non vede le conversazioni", s == 404 and f"/Conversazioni/{cid}" not in lst, str(s))
+s,_,_ = oth.req(f"/Conversazioni/{cid}?handler=State"); check("un'altra struttura non legge lo stato della conversazione", s == 404, str(s))
+s,_,_ = oth.post(f"/Conversazioni/{cid}?handler=Reply", {"Text":"intruso"}, form_path="/Account/Password"); check("un'altra struttura non scrive nella conversazione", s == 404, str(s))
+_,lst,_ = d.req("/Conversazioni?view=tutte"); check("la direzione vede le conversazioni della struttura", f"/Conversazioni/{cid}" in lst and "FitActive Alba" in lst)
 
 def bench(sc):
     s,body,_ = m.post("/Assistente/Banco?handler=Run", {"gym":gym["FitActive Alba"],"modelId":rinnovo,"offerId":offer_alba,"scenario":sc}, form_path=f"/Assistente/Banco?gym={gym['FitActive Alba']}")
@@ -395,8 +435,8 @@ check("orari sbagliati rifiutati con spiegazione", s == 200 and "la fine dopo l'
 now_rome = _dt.now(_Zone("Europe/Rome"))
 closed_from, closed_to = ("13:00","14:00") if now_rome.hour < 12 else ("08:00","09:00")
 s,_,_ = m.post(orari, dict(week, Mode="fasce", **{f"Days[{i}].From":closed_from for i in range(7)}, **{f"Days[{i}].To":closed_to for i in range(7)}))
-_,html,_ = m.req(orari); check("orari di invio salvati dalla palestra", s == 302 and f"Lun–Dom {closed_from}–{closed_to}" in html, html[html.find("adesso"):][:120])
-s,_,_ = oth.post(orari, {"Mode":"sempre"}, form_path="/Account/Password"); check("un'altra catena non cambia gli orari della palestra", s == 404, str(s))
+_,html,_ = m.req(orari); check("orari di invio salvati dalla sede", s == 302 and f"Lun–Dom {closed_from}–{closed_to}" in html, html[html.find("adesso"):][:120])
+s,_,_ = oth.post(orari, {"Mode":"sempre"}, form_path="/Account/Password"); check("un'altra struttura non cambia gli orari della sede", s == 404, str(s))
 
 lid_a = import_list(m, alba, "Campagna ottobre", [("Anna","320 000 0001"),("Bruno","320 000 0002"),("Carla","320 000 0003"),("Dario","320 000 0004"),("Sara","333 111 6677")])
 base = {"Name":"Rinnovi ottobre","ListId":lid_a,"ModelId":rinnovo,"OfferId":offer_alba,"TemplateId":tid,"When":"subito","DailyLimit":""}
@@ -407,7 +447,7 @@ html = cpage(m, cA) if cA else html
 check("campagna creata come bozza con anteprima del primo messaggio", cA is not None and "Bozza" in html and "Ciao Anna, il tuo abbonamento Annuale in FitActive Alba scade il 31/10/2026" in html and "Avvia l'invio a 5 persone" in html, (html or "")[:300])
 m.post("/OptOuts?handler=Add", {"Phone":"320 000 0004","Reason":"chiesto in reception"}, form_path="/OptOuts")
 act(m, cA, "Start"); html = cpage(m, cA)
-check("fuori orario la campagna aspetta e dice quando riparte", "In invio" in html and "Adesso la palestra non invia" in html and "Si riparte da solo" in html and "Inviati (0)" in html)
+check("fuori orario la campagna aspetta e dice quando riparte", "In invio" in html and "Adesso la sede non invia" in html and "Si riparte da solo" in html and "Inviati (0)" in html)
 m.post(orari, {"Mode":"sempre"}); act(m, cA, "Run"); _time.sleep(0.5); html = cpage(m, cA)
 check("con orario aperto la campagna invia e si completa", "Inviati (3)" in html and "Completata" in html, html[html.find('class="stats"'):][:400])
 check("saltati: chi è entrato nella lista STOP e chi ha già una conversazione aperta", "Saltati (2)" in html and "nella lista STOP" in html and "già una conversazione aperta" in html)
@@ -432,9 +472,9 @@ tomorrow = (now_rome + _td(days=1)).strftime("%Y-%m-%dT09:30")
 cC,_,_ = camp_post(m, dict(base, Name="Programmata", ListId=lid_b, When="data", StartAt=tomorrow), alba)
 act(m, cC, "Start"); html = cpage(m, cC)
 check("campagna programmata per domani alle 9:30", "Programmata" in html and "09:30" in html and "Inviati (0)" in html)
-s,_,_ = oth.req(f"/Campagne/{cA}"); check("un'altra catena non vede le campagne", s == 404, str(s))
-s,_,_ = oth.post(f"/Campagne/{cC}?handler=Cancel", {}, form_path="/Account/Password"); check("un'altra catena non annulla le campagne", s == 404, str(s))
-_,html,_ = d.req("/Campagne"); check("la direzione vede le campagne della catena", "Rinnovi ottobre" in html and "FitActive Alba" in html)
+s,_,_ = oth.req(f"/Campagne/{cA}"); check("un'altra struttura non vede le campagne", s == 404, str(s))
+s,_,_ = oth.post(f"/Campagne/{cC}?handler=Cancel", {}, form_path="/Account/Password"); check("un'altra struttura non annulla le campagne", s == 404, str(s))
+_,html,_ = d.req("/Campagne"); check("la direzione vede le campagne della struttura", "Rinnovi ottobre" in html and "FitActive Alba" in html)
 
 # Numero Meta (finto server): invio vero, errore di chiave che mette in pausa, ripresa
 fake.server_close(); fake = fake_meta.start(5079)
@@ -475,13 +515,13 @@ say(m, cid7, "Allora? Mi rispondete?", wait=False); _time.sleep(0.5)
 _,lst,_ = o.req("/Conversazioni"); check("il cliente riscrive: «il cliente aspetta» in cima", "Il cliente aspetta" in lst and lst.find(f"/Conversazioni/{cid7}") > 0)
 s,_,_ = m.post("/RisposteRapide?handler=Add", {"Target":f"g:{alba}","Title":"Orari reception","Body":"Ciao {{nome}}, ti aspettiamo in {{palestra}} dalle 9 alle 21."}, form_path="/RisposteRapide")
 s2,html,_ = m.post("/RisposteRapide?handler=Add", {"Target":f"g:{gym['FitActive Bra']}","Title":"Intrusa","Body":"x"}, form_path="/RisposteRapide")
-check("risposte rapide: il responsabile le crea solo per la sua palestra", s == 302 and s2 == 200 and "Scegli dove usare" in html, f"{s} {s2}")
+check("risposte rapide: il responsabile le crea solo per la sua sede", s == 302 and s2 == 200 and "Scegli dove usare" in html, f"{s} {s2}")
 d.post("/RisposteRapide?handler=Add", {"Target":f"o:{org['FitActive']}","Title":"Certificato medico","Body":"Ricorda di portare il certificato medico, {{nome}}."}, form_path="/RisposteRapide")
 html = page(o, cid7)
-check("l'operatore trova le risposte rapide della palestra e della catena", "Orari reception" in html and "Certificato medico" in html and 'data-body="Ciao {{nome}}, ti aspettiamo in {{palestra}} dalle 9 alle 21."' in html)
+check("l'operatore trova le risposte rapide della sede e della struttura", "Orari reception" in html and "Certificato medico" in html and 'data-body="Ciao {{nome}}, ti aspettiamo in {{palestra}} dalle 9 alle 21."' in html)
 _,html,_ = m.req("/RisposteRapide"); rid = re.search(r'handler=Delete&amp;id=(\d+)|id=(\d+)&amp;handler=Delete|/RisposteRapide\?id=(\d+)&amp;handler=Delete', html)
 s,_,_ = o.req("/RisposteRapide"); check("l'operatore non gestisce le risposte rapide", s in (302,403), str(s))
-s,html,_ = oth.req("/RisposteRapide"); check("risposte rapide invisibili alle altre catene", s == 200 and "<b>Orari reception</b>" not in html and "<b>Certificato medico</b>" not in html, str(s) + html[max(0, html.find("Orari reception")-300):][:400])
+s,html,_ = oth.req("/RisposteRapide"); check("risposte rapide invisibili alle altre strutture", s == 200 and "<b>Orari reception</b>" not in html and "<b>Certificato medico</b>" not in html, str(s) + html[max(0, html.find("Orari reception")-300):][:400])
 o.post(f"/Conversazioni/{cid7}?handler=Reply", {"Text":"Ciao Teresa, ti aspettiamo in FitActive Alba dalle 9 alle 21."}, form_path=f"/Conversazioni/{cid7}")
 o.post(f"/Conversazioni/{cid7}?handler=Release", {}, form_path=f"/Conversazioni/{cid7}")
 html = page(m, cid7); check("l'operatore lascia la conversazione ai colleghi", "in carico a" not in html)
@@ -503,9 +543,9 @@ _,html,_ = o.req(f"/Conversazioni/Archivio?esito=obiettivo_raggiunto&q=Anna")
 check("archivio: filtri per esito e cliente", anna_link in html and "Bruno" not in html)
 check("archivio: numeri per tipo di gestione", re.search(r"<b>\d+ <small[^>]*>\d+%</small></b><span>solo assistente AI", html) is not None)
 s,csv,_ = o.req("/Conversazioni/Archivio?handler=Csv&tipo=operatore&prove=true")
-check("archivio scaricabile per Excel", s == 200 and "Data;Palestra;Cliente" in csv and "Teresa" in csv and "Con operatore" in csv and "Anna" not in csv, csv[:200])
-_,html,_ = oth.req("/Conversazioni/Archivio?prove=true"); check("archivio: le altre catene non vedono i dialoghi", "Teresa" not in html and "Anna" not in html)
-check("avvisi: le altre catene non vedono nulla", badge(oth).get("count") == 0, str(badge(oth)))
+check("archivio scaricabile per Excel", s == 200 and "Data;Sede;Cliente" in csv and "Teresa" in csv and "Con operatore" in csv and "Anna" not in csv, csv[:200])
+_,html,_ = oth.req("/Conversazioni/Archivio?prove=true"); check("archivio: le altre strutture non vedono i dialoghi", "Teresa" not in html and "Anna" not in html)
+check("avvisi: le altre strutture non vedono nulla", badge(oth).get("count") == 0, str(badge(oth)))
 fai.shutdown()
 
 # 6. Blocco dopo 5 tentativi sbagliati
@@ -514,10 +554,10 @@ for i in range(5): x.post("/Login", {"Email":"altra@altra.test","Password":"sbag
 s,html,_ = x.post("/Login", {"Email":"altra@altra.test","Password":"Altra2026xyz1"})
 check("blocco dopo 5 tentativi sbagliati", "Troppi tentativi" in html)
 
-# 7. Catena sospesa: i suoi utenti non entrano
+# 7. Struttura sospesa: i suoi utenti non entrano
 sa.post(f"/Orgs/Edit/{org['FitActive']}", {"Input.Id":org["FitActive"],"Input.Name":"FitActive","Input.Slug":"fitactive","Input.PrimaryColor":"#F6931E","Input.IsActive":"false"}, form_path=f"/Orgs/Edit/{org['FitActive']}")
 y = Client(); s,html,_ = y.post("/Login", {"Email":"alba@fitactive.test","Password":"Alba2026xyz1"})
-check("catena sospesa blocca l'accesso", "disattivato" in html)
+check("struttura sospesa blocca l'accesso", "disattivato" in html)
 
 # 8. Tick
 s,_,_ = Client().req("/jobs/tick?token=sbagliato"); check("tick rifiuta chiave sbagliata", s == 404)
