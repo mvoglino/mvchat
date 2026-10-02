@@ -1,0 +1,37 @@
+@page
+@model MvChat.Web.Pages.Conversazioni.IndexModel
+@{ ViewData["Title"] = "Conversazioni"; var many = Model.Gyms.Count > 1; }
+@section Actions { @if (Model.Me.CanManageUsers) { <a class="btn" href="/Assistente/Prova">Prova l'assistente</a> } }
+<div class="stats">
+    <a class="stat @(Model.Counts.GetValueOrDefault("operatore") > 0 ? "ko" : "")" href="?status=operatore&gym=@Model.Gym"><b>@Model.Counts.GetValueOrDefault("operatore")</b><span>aspettano una persona</span></a>
+    <a class="stat" href="?status=ai&gym=@Model.Gym"><b>@Model.Counts.GetValueOrDefault("ai")</b><span>seguite dall'assistente</span></a>
+    <a class="stat" href="?status=chiusa&gym=@Model.Gym"><b>@Model.Counts.GetValueOrDefault("chiusa")</b><span>chiuse</span></a>
+</div>
+<form method="get" class="inline-form">
+    @if (many)
+    {
+        <div class="field" style="max-width:300px"><label for="gym">Palestra</label><select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div>
+    }
+    <div class="field" style="max-width:240px"><label for="status">Stato</label><select id="status" name="status" onchange="this.form.submit()">
+        <option value="">Tutte</option>
+        @foreach (var s in new[] { "operatore", "ai", "chiusa" }) { <option value="@s" selected="@(s == Model.Status)">@IndexModel.StatusLabel(s)</option> }
+    </select></div>
+</form>
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Cliente</th>@if (many) {<th>Palestra</th>}<th>Obiettivo</th><th>Stato</th><th>Esito</th><th>Ultimo messaggio</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var c in Model.Items)
+    {
+        <tr>
+            <td><b>@c.ContactName</b>@if (c.IsTest) {<span class="chip" style="margin-left:6px">prova</span>}<div class="muted">@c.ContactPhone</div></td>
+            @if (many) {<td>@c.GymName</td>}
+            <td>@c.GoalName</td>
+            <td>@if (c.Status == "operatore") {<span class="chip warn">@IndexModel.StatusLabel(c.Status)</span>} else {<span class="muted">@IndexModel.StatusLabel(c.Status)</span>}</td>
+            <td><span class="chip @Outcomes.Css(c.Outcome)">@Outcomes.Label(c.Outcome)</span></td>
+            <td class="muted">@(c.LastMessageAt?.ToRome().ToString("dd/MM HH:mm") ?? "—")</td>
+            <td><a class="btn sm" href="/Conversazioni/@c.Id">Apri</a></td>
+        </tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessuna conversazione. Le conversazioni nascono dalle campagne o da una prova dell'assistente.</td></tr> }
+    </tbody>
+</table></div></section>

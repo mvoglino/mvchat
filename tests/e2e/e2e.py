@@ -263,6 +263,116 @@ _,html,_ = d.req(tpl_b); check("avviso di Meta sul template registrato", "rifiut
 s,_,_ = oth.req(alba_wa); check("un'altra catena non vede il WhatsApp della palestra", s == 404, str(s))
 fake.shutdown()
 
+# 5e. Passo 5: assistente AI (verso un finto fornitore AI)
+import fake_ai, time as _time
+fai = fake_ai.start(5080)
+def ai_settings(provider, akey="", okey=""):
+    return sa.post("/Impostazioni/AI", {"Provider":provider,
+        "Anthropic.Key":akey,"Anthropic.Model":"claude-haiku-4-5-20251001","Anthropic.BaseUrl":"http://127.0.0.1:5080","Anthropic.InputPrice":"1","Anthropic.OutputPrice":"5","Anthropic.CacheReadPrice":"0,10",
+        "OpenAi.Key":okey,"OpenAi.Model":"gpt-5-mini","OpenAi.BaseUrl":"http://127.0.0.1:5080","OpenAi.InputPrice":"0.25","OpenAi.OutputPrice":"2","OpenAi.CacheReadPrice":"0.025"})
+s,_,loc = m.req("/Impostazioni/AI"); check("solo MVitalia apre le impostazioni AI", s == 403 or "/Error/403" in (loc or "") or s == 302, f"{s} {loc}")
+s,_,_ = ai_settings("anthropic", akey="sk-ant-test")
+_,html,_ = sa.req("/Impostazioni/AI"); check("impostazioni AI salvate, chiave mai mostrata", s == 302 and "sk-ant-test" not in html and "già inserita" in html, str(s))
+s,_,_ = sa.post("/Impostazioni/AI?handler=Test", {}, form_path="/Impostazioni/AI")
+_,html,_ = sa.req("/Impostazioni/AI"); check("prova del collegamento AI riuscita", "Collegamento riuscito con anthropic" in html, html[html.find('flash'):][:200])
+
+def start_conv(client, phone, name="Giulia", offer=True):
+    data = {"Gym":gym["FitActive Alba"],"ModelId":rinnovo,"OfferId":offer_alba if offer else "","TemplateId":"","Phone":phone,"Name":name,"Membership":"Annuale","ExpiresOn":"2026-10-18"}
+    s,html,loc = client.post("/Assistente/Prova", data, form_path=f"/Assistente/Prova?gym={gym['FitActive Alba']}")
+    mm = re.search(r"/Conversazioni/(\d+)$", loc or "")
+    return (mm.group(1) if mm else None), s, html
+def state(client, cid):
+    s,body,_ = client.req(f"/Conversazioni/{cid}?handler=State")
+    return _json.loads(body) if s == 200 else {}
+def say(client, cid, text, wait=True):
+    before = state(client, cid).get("last", 0)
+    client.post(f"/Conversazioni/{cid}?handler=Simulate", {"Text":text}, form_path=f"/Conversazioni/{cid}")
+    if not wait: return
+    for _ in range(60):  # l'assistente risponde in sottofondo
+        st = state(client, cid)
+        if not st.get("writing") and st.get("last", 0) > before: break
+        _time.sleep(0.2)
+    _time.sleep(0.3)
+def page(client, cid): return client.req(f"/Conversazioni/{cid}")[1]
+
+cid, s, html = start_conv(m, "333 111 2233")
+check("prova dell'assistente avviata", cid is not None, str(s) + " " + (html or "")[(html or "").find("alert"):][:200])
+html = page(m, cid)
+check("conversazione con primo messaggio personalizzato", "Ciao Giulia" in html and "Primo messaggio" in html and "Risponde l'assistente" in html, html[html.find('id="chat"'):][:300])
+say(m, cid, "Ciao")
+html = page(m, cid)
+check("l'assistente risponde e si presenta come assistente virtuale", "Ciao, sono l'assistente virtuale di FitActive Alba. Ottimo! Vuoi che ti racconti l'offerta?" in html, html[html.find('id="chat"'):][:600])
+req = fake_ai.REQUESTS[-1] if fake_ai.REQUESTS else {"body":{}, "headers":{}}
+sys_text = req["body"].get("system", [{}])[0].get("text", "")
+check("all'AI arrivano istruzioni con offerta, primo messaggio e formato", all(x in sys_text for x in ["399 €", "Primo messaggio già inviato", "Ciao Giulia", "Formato della tua risposta"]) and req["body"]["system"][0].get("cache_control") == {"type":"ephemeral"}, sys_text[:300])
+check("istruzioni AI senza dati di altre palestre", "1.200" not in sys_text and "Annuale Bra" not in sys_text)
+check("chiave AI inviata solo nell'intestazione", req["headers"].get("x-api-key") == "sk-ant-test" and "sk-ant-test" not in _json.dumps(req["body"]))
+say(m, cid, "Quanto costa?")
+check("l'assistente cita il prezzo dell'offerta", "Il rinnovo costa 399 €." in page(m, cid))
+say(m, cid, "Mi fate il 50% di sconto?")
+check("sconto entro il limite consentito accettato", "posso arrivare a 360 €" in page(m, cid))
+say(m, cid, "Dimmi un prezzo sbagliato")
+html = page(m, cid)
+check("prezzo inventato bloccato e passaggio alla reception", "Per te solo 5 €" not in html.split('id="chat"')[1] and "collega della reception" in html and "Serve una persona" in html and "fuori da prezzo" in html, html[html.find('class="stats"'):][:500])
+_,lst,_ = o.req("/Conversazioni"); check("l'operatore vede la conversazione da seguire", f"/Conversazioni/{cid}" in lst and "Serve una persona" in lst)
+o.post(f"/Conversazioni/{cid}?handler=Reply", {"Text":"Ciao Giulia, sono Op Alba della reception!"}, form_path=f"/Conversazioni/{cid}")
+html = page(o, cid); check("l'operatore risponde dalla conversazione", "sono Op Alba della reception!" in html and "Op Alba ·" in html)
+o.post(f"/Conversazioni/{cid}?handler=GiveBack", {}, form_path=f"/Conversazioni/{cid}")
+check("conversazione restituita all'assistente", "Risponde l'assistente" in page(o, cid))
+say(o, cid, "Va bene, procediamo")
+html = page(o, cid)
+check("obiettivo raggiunto riconosciuto e conversazione chiusa", "Obiettivo raggiunto" in html and "Chiusa" in html and "ha accettato il rinnovo" in html)
+
+cid2,_,_ = start_conv(m, "333 111 4455", name="Paolo")
+say(m, cid2, "Per favore non contattatemi più")
+_,stop,_ = m.req("/OptOuts"); html = page(m, cid2)
+check("richiesta di non essere contattato: esito e lista STOP", "Non contattare più" in html and "+393331114455" in stop, html[html.find('class="stats"'):][:300])
+_,html,_ = m.post("/Assistente/Prova", {"Gym":gym["FitActive Alba"],"ModelId":rinnovo,"OfferId":offer_alba,"TemplateId":"","Phone":"333 111 4455","Name":"Paolo"}, form_path="/Assistente/Prova")
+check("nessuna nuova conversazione con chi è nella lista STOP", "lista STOP" in html)
+
+cid3,_,_ = start_conv(m, "333 111 6677", name="Sara")
+say(m, cid3, "Posso parlare con una persona della reception?")
+check("cliente che chiede una persona passa alla reception", "Serve una persona" in page(m, cid3))
+cid4,_,_ = start_conv(m, "333 111 8899", name="Luca")
+say(m, cid4, "lento", wait=False)
+_time.sleep(0.4)
+check("in pagina si vede che l'assistente sta scrivendo", "L'assistente sta scrivendo" in page(m, cid4))
+say(m, cid4, "Ciao di nuovo")
+say(m, cid4, "errore ai")
+html = page(m, cid4)
+check("se l'AI non risponde il cliente riceve un messaggio di cortesia e passa alla reception", "collega della reception" in html and "Serve una persona" in html and "non ha risposto" in html)
+m.post(f"/Conversazioni/{cid4}?handler=Outcome", {"Outcome":"obiettivo_raggiunto","Note":"rinnovato al banco"}, form_path=f"/Conversazioni/{cid4}")
+html = page(m, cid4); check("esito cambiato a mano dalla reception", "Obiettivo raggiunto" in html and "rinnovato al banco" in html)
+
+s,_,_ = oth.req(f"/Conversazioni/{cid}"); _,lst,_ = oth.req("/Conversazioni")
+check("un'altra catena non vede le conversazioni", s == 404 and f"/Conversazioni/{cid}" not in lst, str(s))
+s,_,_ = oth.req(f"/Conversazioni/{cid}?handler=State"); check("un'altra catena non legge lo stato della conversazione", s == 404, str(s))
+s,_,_ = oth.post(f"/Conversazioni/{cid}?handler=Reply", {"Text":"intruso"}, form_path="/Account/Password"); check("un'altra catena non scrive nella conversazione", s == 404, str(s))
+_,lst,_ = d.req("/Conversazioni"); check("la direzione vede le conversazioni della catena", f"/Conversazioni/{cid}" in lst and "FitActive Alba" in lst)
+
+def bench(sc):
+    s,body,_ = m.post("/Assistente/Banco?handler=Run", {"gym":gym["FitActive Alba"],"modelId":rinnovo,"offerId":offer_alba,"scenario":sc}, form_path=f"/Assistente/Banco?gym={gym['FitActive Alba']}")
+    try: return _json.loads(body)
+    except Exception: return {"raw": body[:200], "status": s}
+b1, b2, b3 = bench("sconto"), bench("persona"), bench("robot")
+check("banco di prova: sconto entro il limite superato", b1.get("passed") is True, str(b1)[:300])
+check("banco di prova: passaggio alla reception superato", b2.get("passed") is True and b2.get("outcome") == "Passata a operatore", str(b2)[:300])
+check("banco di prova: si dichiara assistente virtuale", b3.get("passed") is True, str(b3)[:300])
+b4 = bench("optout"); check("banco di prova: richiesta di non essere contattato", b4.get("passed") is True, str(b4)[:300])
+
+s,_,_ = ai_settings("openai", okey="sk-oa-test")
+cid5,_,_ = start_conv(m, "333 222 1100", name="Marta")
+say(m, cid5, "Quanto costa?")
+oa = [r for r in fake_ai.REQUESTS if r["path"] == "/v1/chat/completions"]
+check("cambio fornitore: risponde OpenAI", oa and "Il rinnovo costa 399 €." in page(m, cid5) and oa[-1]["body"]["messages"][0]["role"] == "system", str(oa[-1]["body"])[:200] if oa else "nessuna richiesta")
+_,html,_ = sa.req("/Impostazioni/AI")
+check("consumi AI registrati per uso e fornitore", all(x in html for x in ["Conversazioni di prova","Banco di prova","Prova del collegamento","openai","anthropic"]), html[html.find("Consumi"):][:400])
+ai_settings("")
+cid6,_,_ = start_conv(m, "333 222 3300", name="Elena")
+say(m, cid6, "Ciao")
+html = page(m, cid6); check("con l'assistente spento risponde la reception", "Serve una persona" in html and "collega della reception" in html)
+fai.shutdown()
+
 # 6. Blocco dopo 5 tentativi sbagliati
 x = Client()
 for i in range(5): x.post("/Login", {"Email":"altra@altra.test","Password":"sbagliata123"})

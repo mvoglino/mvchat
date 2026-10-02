@@ -1,0 +1,42 @@
+@page
+@model MvChat.Web.Pages.Impostazioni.AIModel
+@{ ViewData["Title"] = "Impostazioni AI"; }
+<p class="muted" style="margin:0">Il fornitore AI che scrive le risposte su WhatsApp. Si può cambiare in qualsiasi momento: le conversazioni già aperte continuano con il nuovo fornitore. Se l'assistente è spento, i messaggi dei clienti passano agli operatori.</p>
+<form method="post" class="panel">
+    <div class="panel-h"><h2>Fornitore attivo</h2></div>
+    <div class="panel-b">
+        <label class="check"><input type="radio" name="Provider" value="anthropic" checked="@(Model.Provider == "anthropic")"> Anthropic (Claude)</label>
+        <label class="check"><input type="radio" name="Provider" value="openai" checked="@(Model.Provider == "openai")"> OpenAI</label>
+        <label class="check"><input type="radio" name="Provider" value="" checked="@(Model.Provider == "")"> Spento: rispondono solo gli operatori</label>
+    </div>
+    @foreach (var (name, label, hasKey, url) in new[] { ("Anthropic", "Anthropic (Claude) · console.anthropic.com", Model.AnthropicHasKey, "https://api.anthropic.com"), ("OpenAi", "OpenAI · platform.openai.com", Model.OpenAiHasKey, "https://api.openai.com") })
+    {
+        var p = name == "Anthropic" ? Model.Anthropic : Model.OpenAi;
+        <div class="panel-h" style="border-top:1px solid var(--line)"><h2>@label</h2></div>
+        <div class="panel-b form">
+            <div class="field full"><label for="@(name)_Key">Chiave API</label><input id="@(name)_Key" name="@(name).Key" type="password" autocomplete="off" placeholder="@(hasKey ? "già inserita · lascia vuoto per non cambiarla" : "non ancora inserita")"><small>Viene salvata cifrata e non si rivede più.</small></div>
+            <div class="field"><label for="@(name)_Model">Modello</label><input id="@(name)_Model" name="@(name).Model" value="@p.Model"><small>Il nome esatto si trova nella documentazione del fornitore.</small></div>
+            <div class="field"><label for="@(name)_BaseUrl">Indirizzo API</label><input id="@(name)_BaseUrl" name="@(name).BaseUrl" value="@p.BaseUrl"><small>Da non toccare: @url</small></div>
+            <div class="field"><label for="@(name)_InputPrice">Prezzo testo letto ($ per milione di token)</label><input id="@(name)_InputPrice" name="@(name).InputPrice" value="@p.InputPrice" inputmode="decimal"></div>
+            <div class="field"><label for="@(name)_OutputPrice">Prezzo testo scritto ($ per milione di token)</label><input id="@(name)_OutputPrice" name="@(name).OutputPrice" value="@p.OutputPrice" inputmode="decimal"></div>
+            <div class="field"><label for="@(name)_CacheReadPrice">Prezzo testo dalla cache ($ per milione di token)</label><input id="@(name)_CacheReadPrice" name="@(name).CacheReadPrice" value="@p.CacheReadPrice" inputmode="decimal"><small>I prezzi servono a calcolare i consumi da rifatturare: copiali dal listino del fornitore.</small></div>
+        </div>
+    }
+    <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
+</form>
+<form method="post" asp-page-handler="Test" class="panel"><div class="panel-b inline-form"><span class="muted" style="flex:1">Manda una domanda di prova al fornitore attivo per controllare chiave e modello (costa una frazione di centesimo).</span><button class="btn" type="submit">Prova il collegamento</button></div></form>
+
+<section class="panel">
+    <div class="panel-h"><h2>Consumi AI degli ultimi 30 giorni</h2><span class="muted">tutte le catene · la rifatturazione per palestra arriva con il Passo 9</span></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Uso</th><th>Fornitore</th><th>Chiamate</th><th>Non riuscite</th><th>Token letti</th><th>Token scritti</th><th>Token da cache</th><th>Costo</th></tr></thead>
+        <tbody>
+        @foreach (var u in Model.Usage)
+        {
+            var uso = u.Purpose switch { "chat" => "Conversazioni con i clienti", "prova" => "Conversazioni di prova", "banco" => "Banco di prova", "test" => "Prova del collegamento", _ => u.Purpose };
+            <tr><td>@uso</td><td>@u.Provider</td><td>@u.Calls</td><td>@u.Failed</td><td>@u.InputTokens.ToString("N0")</td><td>@u.OutputTokens.ToString("N0")</td><td>@u.CacheTokens.ToString("N0")</td><td><b>$ @u.CostUsd.ToString("0.0000")</b></td></tr>
+        }
+        @if (Model.Usage.Count == 0) { <tr><td colspan="8" class="muted">Nessun consumo ancora.</td></tr> }
+        </tbody>
+    </table></div>
+</section>

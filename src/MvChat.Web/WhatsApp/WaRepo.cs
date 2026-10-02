@@ -125,11 +125,14 @@ public sealed class WaRepo
         "UPDATE WaTemplates SET Status=@status, RejectReason=@reason WHERE MetaTemplateId=@metaId", new { metaId, status, reason });
 
     // ---------- Messaggi ----------
-    public Task<long> InsertMessageAsync(WaNumber n, string phone, string direction, string kind, string? body, string? template, string? metaId, string status, string? error, int? userId) =>
+    public Task<long> InsertMessageAsync(WaNumber n, string phone, string direction, string kind, string? body, string? template, string? metaId, string status, string? error, int? userId, long? conversationId = null) =>
         _db.ScalarAsync<long>(
-            @"INSERT INTO WaMessages (OrganizationId, GymId, WaNumberId, ContactPhone, Direction, Kind, Body, TemplateName, MetaMessageId, Status, Error, SentBy, StatusAt)
-              VALUES (@org, @gym, @num, @phone, @direction, @kind, @body, @template, @metaId, @status, @error, @userId, UTC_TIMESTAMP()); SELECT LAST_INSERT_ID();",
-            new { org = n.OrganizationId, gym = n.GymId, num = n.Id, phone, direction, kind, body, template, metaId, status, error, userId });
+            @"INSERT INTO WaMessages (OrganizationId, GymId, WaNumberId, ContactPhone, Direction, Kind, Body, TemplateName, MetaMessageId, Status, Error, SentBy, StatusAt, ConversationId)
+              VALUES (@org, @gym, @num, @phone, @direction, @kind, @body, @template, @metaId, @status, @error, @userId, UTC_TIMESTAMP(), @conversationId); SELECT LAST_INSERT_ID();",
+            new { org = n.OrganizationId, gym = n.GymId, num = n.Id, phone, direction, kind, body, template, metaId, status, error, userId, conversationId });
+
+    public Task SetMessageConversationAsync(long messageId, long conversationId) =>
+        _db.ExecuteAsync("UPDATE WaMessages SET ConversationId=@conversationId WHERE Id=@messageId", new { messageId, conversationId });
 
     public async Task<bool> MessageExistsAsync(string metaId) =>
         await _db.ScalarAsync<long>("SELECT COUNT(*) FROM WaMessages WHERE MetaMessageId=@metaId", new { metaId }) > 0;

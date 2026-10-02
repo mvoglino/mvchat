@@ -1,0 +1,60 @@
+@page
+@model MvChat.Web.Pages.Assistente.BancoModel
+@{ ViewData["Title"] = "Banco di prova dell'assistente"; }
+@section Actions { <a class="btn" href="/Assistente/Prova">Prova una conversazione</a> }
+<p class="muted" style="margin:0">L'assistente dialoga con @Bench.Scenarios.Length clienti simulati (interessato, chi chiede sconti, chi vuole una persona, chi non vuole più messaggi…) e mvchat controlla da solo che rispetti le regole. Nessun messaggio esce su WhatsApp; il consumo AI viene contato come "banco di prova".</p>
+@if (!Model.AiEnabled) { <div class="note warn">L'assistente AI non è ancora configurato: inserisci la chiave in <a href="/Impostazioni/AI">Impostazioni AI</a> (solo amministratore MVitalia).</div> }
+<form method="get" class="inline-form"><div class="field" style="max-width:340px"><label for="gym">Palestra</label><select id="gym" name="gym" onchange="this.form.submit()">@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+<form id="bench" class="panel" onsubmit="return false">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="gym" value="@Model.Gym">
+    <div class="panel-b form">
+        <div class="field"><label for="modelId">Obiettivo</label><select id="modelId" name="modelId">@foreach (var m in Model.Models) { <option value="@m.Id">@m.Name</option> }</select></div>
+        <div class="field"><label for="offerId">Offerta</label><select id="offerId" name="offerId"><option value="">Nessuna</option>@foreach (var o in Model.Offers) { <option value="@o.Id">@o.Title @(o.Price is decimal p ? "· " + PromptBuilder.Money(p) : "")</option> }</select></div>
+    </div>
+    <div class="actions"><span class="muted" id="summary">@(Model.AiEnabled ? "Fornitore: " + Model.AiName : "")</span><span style="flex:1"></span><button class="btn primary" id="runAll" type="button" disabled="@(!Model.AiEnabled)">Esegui tutti gli scenari</button></div>
+</form>
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Scenario</th><th>Cosa deve fare</th><th>Risultato</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var s in Bench.Scenarios)
+    {
+        <tr class="bench-row" data-key="@s.Key">
+            <td><b>@s.Title</b><div class="muted">«@string.Join(" » · « ", s.Lines)»</div></td>
+            <td class="muted">@s.Why</td>
+            <td class="res"><span class="muted">—</span></td>
+            <td><button class="btn sm run" type="button" disabled="@(!Model.AiEnabled)">Esegui</button></td>
+        </tr>
+    }
+    </tbody>
+</table></div></section>
+<script>
+(function () {
+    var form = document.getElementById('bench');
+    function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+    function run(row) {
+        var res = row.querySelector('.res');
+        res.innerHTML = '<span class="muted">in corso…</span>';
+        var data = new FormData(form); data.append('scenario', row.dataset.key);
+        return fetch('?handler=Run', { method: 'POST', body: data })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (x) {
+                if (!x.ok) { res.innerHTML = '<span class="chip bad">' + esc(x.j.error || 'errore') + '</span>'; return false; }
+                var j = x.j, h = '<span class="chip ' + (j.passed ? 'good' : 'bad') + '">' + (j.passed ? 'Superato' : 'Da rivedere') + '</span> <span class="muted">' + esc(j.outcome) + ' · $' + j.cost + '</span><ul style="margin:6px 0 0;padding-left:18px">';
+                j.checks.forEach(function (c) { h += '<li class="' + (c.level === 'ko' ? 'msg-e' : c.level === 'warn' ? 'muted' : '') + '">' + esc(c.text) + '</li>'; });
+                h += '</ul><details><summary class="muted">Dialogo</summary><div class="transcript">';
+                j.transcript.forEach(function (t) { h += '<div class="msg ' + (t.role === 'user' ? 'in' : 'ai') + '"><div class="msg-b">' + esc(t.text) + '</div></div>'; });
+                res.innerHTML = h + '</div></details>';
+                return j.passed;
+            })
+            .catch(function () { res.innerHTML = '<span class="chip bad">errore di rete</span>'; return false; });
+    }
+    document.querySelectorAll('.run').forEach(function (b) { b.addEventListener('click', function () { run(b.closest('tr')); }); });
+    document.getElementById('runAll').addEventListener('click', async function () {
+        var rows = Array.from(document.querySelectorAll('.bench-row')), ok = 0, btn = this;
+        btn.disabled = true;
+        for (var i = 0; i < rows.length; i++) { if (await run(rows[i])) ok++; document.getElementById('summary').textContent = 'Superati ' + ok + ' su ' + (i + 1); }
+        btn.disabled = false;
+    });
+})();
+</script>

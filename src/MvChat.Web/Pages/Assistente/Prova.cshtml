@@ -1,0 +1,30 @@
+@page
+@model MvChat.Web.Pages.Assistente.ProvaModel
+@{ ViewData["Title"] = "Prova l'assistente"; }
+@section Actions { <a class="btn" href="/Assistente/Banco">Banco di prova</a> }
+<p class="muted" style="margin:0">Avvia una conversazione vera con l'assistente. Con un numero <b>simulato</b> scrivi tu le risposte del cliente dalla pagina della conversazione; con un numero <b>Meta</b> il primo messaggio arriva sul cellulare indicato e rispondi da WhatsApp.</p>
+@if (!Model.AiEnabled) { <div class="note warn">L'assistente AI non è ancora configurato (Impostazioni AI): le risposte del cliente passeranno a un operatore.</div> }
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<form method="get" class="inline-form"><div class="field" style="max-width:340px"><label for="Gym">Palestra</label><select id="Gym" name="gym" onchange="this.form.submit()">@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+@if (Model.Number is null)
+{
+    <div class="note warn">Questa palestra non ha ancora un numero WhatsApp: collegalo dalla pagina WhatsApp (anche simulato).</div>
+}
+else
+{
+<form method="post" class="panel">
+    <input type="hidden" name="Gym" value="@Model.Gym">
+    <div class="panel-b form">
+        <div class="field"><label for="ModelId">Obiettivo</label><select id="ModelId" name="ModelId">@foreach (var m in Model.Models) { <option value="@m.Id" selected="@(m.Id == Model.ModelId)">@m.Name</option> }</select></div>
+        <div class="field"><label for="OfferId">Offerta</label><select id="OfferId" name="OfferId"><option value="">Nessuna</option>@foreach (var o in Model.Offers) { <option value="@o.Id" selected="@(o.Id == Model.OfferId)">@o.Title @(o.Price is decimal p ? "· " + PromptBuilder.Money(p) : "")</option> }</select></div>
+        <div class="field"><label for="TemplateId">Primo messaggio</label><select id="TemplateId" name="TemplateId">
+            @if (Model.Number.IsSimulated) { <option value="">Testo suggerito dal modello (solo simulato)</option> }
+            @foreach (var t in Model.Templates) { <option value="@t.Id">Template: @t.Name</option> }</select></div>
+        <div class="field"><label for="Phone">Cellulare del cliente di prova</label><input id="Phone" name="Phone" value="@Model.Phone" placeholder="il tuo cellulare" required></div>
+        <div class="field"><label for="Name">Nome</label><input id="Name" name="Name" value="@Model.Name"></div>
+        <div class="field"><label for="Membership">Abbonamento</label><input id="Membership" name="Membership" value="@Model.Membership"></div>
+        <div class="field"><label for="ExpiresOn">Scadenza</label><input id="ExpiresOn" name="ExpiresOn" type="date" value="@Model.ExpiresOn?.ToString("yyyy-MM-dd")"></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Avvia la conversazione</button></div>
+</form>
+}

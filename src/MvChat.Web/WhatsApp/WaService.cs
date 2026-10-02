@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.DataProtection;
-using MvChat.Web.Contacts;
 
 namespace MvChat.Web.WhatsApp;
 
@@ -33,35 +32,35 @@ public sealed class WaService
         : token is null ? "Manca la chiave di accesso del numero, oppure va reinserita."
         : null;
 
-    public async Task<SendResult> SendTemplateAsync(WaNumber n, WaTemplate t, string to, IDictionary<string, string?> values, int? userId)
+    public async Task<SendResult> SendTemplateAsync(WaNumber n, WaTemplate t, string to, IDictionary<string, string?> values, int? userId, long? conversationId = null)
     {
         if (!t.IsApproved) return new SendResult(false, "Il template non è ancora approvato da Meta.", 0);
         var parameters = t.Variables.Select(v => values.TryGetValue(v, out var x) && !string.IsNullOrWhiteSpace(x) ? x! : "-").ToList();
         var preview = TemplateText.Fill(t.Body, values);
         if (n.IsSimulated)
         {
-            var id = await _repo.InsertMessageAsync(n, to, "out", "template", preview, t.Name, "sim-" + Guid.NewGuid().ToString("N"), "delivered", null, userId);
+            var id = await _repo.InsertMessageAsync(n, to, "out", "template", preview, t.Name, "sim-" + Guid.NewGuid().ToString("N"), "delivered", null, userId, conversationId);
             return new SendResult(true, null, id);
         }
         var token = Token(n);
         if (NotReady(n, token) is { } why) return new SendResult(false, why, 0);
         var r = await _api.SendTemplateAsync(n.PhoneNumberId!, token!, to, t.Name, t.Language, parameters);
-        var mid = await _repo.InsertMessageAsync(n, to, "out", "template", preview, t.Name, r.Id, r.Ok ? "sent" : "failed", r.Error, userId);
+        var mid = await _repo.InsertMessageAsync(n, to, "out", "template", preview, t.Name, r.Id, r.Ok ? "sent" : "failed", r.Error, userId, conversationId);
         return new SendResult(r.Ok, r.Error, mid);
     }
 
     /// <summary>Messaggio libero: Meta lo consegna solo entro 24 ore dall'ultimo messaggio del cliente.</summary>
-    public async Task<SendResult> SendTextAsync(WaNumber n, string to, string text, int? userId)
+    public async Task<SendResult> SendTextAsync(WaNumber n, string to, string text, int? userId, long? conversationId = null)
     {
         if (n.IsSimulated)
         {
-            var id = await _repo.InsertMessageAsync(n, to, "out", "text", text, null, "sim-" + Guid.NewGuid().ToString("N"), "delivered", null, userId);
+            var id = await _repo.InsertMessageAsync(n, to, "out", "text", text, null, "sim-" + Guid.NewGuid().ToString("N"), "delivered", null, userId, conversationId);
             return new SendResult(true, null, id);
         }
         var token = Token(n);
         if (NotReady(n, token) is { } why) return new SendResult(false, why, 0);
         var r = await _api.SendTextAsync(n.PhoneNumberId!, token!, to, text);
-        var mid = await _repo.InsertMessageAsync(n, to, "out", "text", text, null, r.Id, r.Ok ? "sent" : "failed", r.Error, userId);
+        var mid = await _repo.InsertMessageAsync(n, to, "out", "text", text, null, r.Id, r.Ok ? "sent" : "failed", r.Error, userId, conversationId);
         return new SendResult(r.Ok, r.Error, mid);
     }
 

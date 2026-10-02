@@ -52,7 +52,8 @@ else
                 @if (scope.IsSuperAdmin)
                 {
                     <a href="/Orgs" aria-current="@(Cur("/Orgs"))">Catene</a>
-                    <a href="/Impostazioni/WhatsApp" aria-current="@(Cur("/Impostazioni"))">Impostazioni Meta</a>
+                    <a href="/Impostazioni/WhatsApp" aria-current="@(Cur("/Impostazioni/WhatsApp"))">Impostazioni Meta</a>
+                    <a href="/Impostazioni/AI" aria-current="@(Cur("/Impostazioni/AI"))">Impostazioni AI</a>
                 }
                 @if (scope.CanManageGyms)
                 {
@@ -68,11 +69,12 @@ else
                     <a href="/Sedi" aria-current="@(Cur("/Sedi"))">Scheda sede</a>
                     <a href="/Offerte" aria-current="@(Cur("/Offerte"))">Offerte</a>
                     <a href="/Modelli" aria-current="@(Cur("/Modelli"))">Modelli di obiettivo</a>
+                    <a href="/Assistente/Prova" aria-current="@(Cur("/Assistente"))">Prova l'assistente</a>
                     <a href="/Lists" aria-current="@(Cur("/Lists"))">Liste contatti</a>
                     <a href="/OptOuts" aria-current="@(Cur("/OptOuts"))">Lista STOP</a>
                 }
                 <span class="nav-soon" title="In arrivo nei prossimi passi">Campagne</span>
-                <span class="nav-soon" title="In arrivo nei prossimi passi">Conversazioni</span>
+                <a href="/Conversazioni" aria-current="@(Cur("/Conversazioni"))">Conversazioni</a>
             </nav>
             <div class="rail-foot">
                 <span>@scope.Name</span>

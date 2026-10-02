@@ -1,0 +1,85 @@
+@page "/Conversazioni/{id:long}"
+@model MvChat.Web.Pages.Conversazioni.DettaglioModel
+@{
+    var c = Model.Conv;
+    ViewData["Title"] = c.ContactName;
+    var statusText = c.Status switch { "ai" => "Risponde l'assistente", "operatore" => "Serve una persona", _ => "Chiusa" };
+}
+@section Actions { <a class="btn" href="/Conversazioni">Tutte le conversazioni</a> }
+<div class="stats">
+    <div class="stat @(c.Status == "operatore" ? "ko" : "")"><b style="font-size:17px">@statusText</b><span>@c.GymName · @c.GoalName</span></div>
+    <div class="stat"><b style="font-size:17px"><span class="chip @Outcomes.Css(c.Outcome)">@Outcomes.Label(c.Outcome)</span></b><span>@(c.OutcomeNote ?? "esito")</span></div>
+    <div class="stat"><b style="font-size:17px">@c.ContactPhone</b><span>@(c.Membership ?? "abbonamento non indicato")@(c.ExpiresOn is DateTime e ? " · scade il " + e.ToString("dd/MM/yyyy") : "")@(c.IsTest ? " · prova" : "")</span></div>
+</div>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+
+<section class="panel">
+    <div class="panel-h"><h2>Chat</h2><span class="muted">@c.AiReplies risposte dell'assistente</span><span style="flex:1"></span>
+        @if (c.Status == "ai") { <form method="post" asp-page-handler="Take"><button class="btn sm" type="submit">Prendi in mano</button></form> }
+        else if (c.Outcome != Outcomes.OptOut) { <form method="post" asp-page-handler="GiveBack"><button class="btn sm" type="submit">Restituisci all'assistente</button></form> }
+    </div>
+    <div class="panel-b chat" id="chat">
+        @foreach (var m in Model.Messages)
+        {
+            var who = m.Direction == "in" ? c.ContactName : m.Kind == "template" ? "Primo messaggio" : m.SentBy is null ? "Assistente" : m.SentByName ?? "Operatore";
+            <div class="msg @(m.Direction == "in" ? "in" : m.Kind == "template" || m.SentBy is not null ? "out" : "ai")">
+                <div class="msg-h">@who · @m.CreatedAt.ToRome().ToString("dd/MM HH:mm")@if (m.Direction == "out") {<text> · @WaService.StatusLabel(m.Status)</text>}</div>
+                <div class="msg-b">@m.Body</div>
+                @if (!string.IsNullOrEmpty(m.Error)) { <div class="msg-e">@m.Error</div> }
+            </div>
+        }
+        @if (Model.Messages.Count == 0) { <p class="muted">Nessun messaggio.</p> }
+        @if (c.AiWriting) { <div class="msg ai writing" id="writing"><div class="msg-b">L'assistente sta scrivendo…</div></div> }
+    </div>
+</section>
+
+@if (Model.Number?.IsSimulated == true && c.Outcome != Outcomes.OptOut)
+{
+<section class="panel">
+    <div class="panel-h"><h2>Rispondi come se fossi il cliente</h2><span class="muted">numero simulato · prova anche "quanto costa?", "voglio parlare con qualcuno" o STOP</span></div>
+    <form method="post" asp-page-handler="Simulate" class="panel-b inline-form">
+        <div class="field" style="flex:3"><label for="SimText">Messaggio del cliente</label><input id="SimText" name="Text" autocomplete="off" required autofocus></div>
+        <button class="btn primary" type="submit">Invia come cliente</button>
+    </form>
+</section>
+}
+
+@if (c.Outcome != Outcomes.OptOut)
+{
+<section class="panel">
+    <div class="panel-h"><h2>Rispondi come palestra</h2><span class="muted">scrivendo prendi in mano la conversazione</span></div>
+    @if (Model.WindowOpen)
+    {
+        <form method="post" asp-page-handler="Reply" class="panel-b inline-form">
+            <div class="field" style="flex:3"><label for="ReplyText">Messaggio</label><textarea id="ReplyText" name="Text" rows="2" maxlength="1000" required></textarea></div>
+            <button class="btn" type="submit">Invia</button>
+        </form>
+    }
+    else { <div class="panel-b muted">Sono passate più di 24 ore dall'ultimo messaggio del cliente: WhatsApp consente solo un template approvato.</div> }
+</section>
+}
+
+<section class="panel">
+    <div class="panel-h"><h2>Esito</h2><span class="muted">ad esempio quando il cliente rinnova alla reception</span></div>
+    <form method="post" asp-page-handler="Outcome" class="panel-b inline-form">
+        <div class="field"><label for="Outcome">Esito</label><select id="Outcome" name="Outcome">@foreach (var o in Outcomes.All) { <option value="@o" selected="@(o == c.Outcome)">@Outcomes.Label(o)</option> }</select></div>
+        <div class="field" style="flex:2"><label for="Note">Nota per i colleghi</label><input id="Note" name="Note" maxlength="480"></div>
+        <button class="btn" type="submit">Salva esito</button>
+    </form>
+</section>
+
+<script>
+(function () {
+    var chat = document.getElementById('chat'); chat.scrollTop = chat.scrollHeight;
+    // Controlla ogni 3 secondi se è arrivato qualcosa di nuovo; mentre l'utente scrive non ricarica.
+    var last = @Model.LastMessageId, writing = @(c.AiWriting ? "true" : "false"), status = '@c.Status';
+    setInterval(function () {
+        var a = document.activeElement;
+        if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT') && a.value) return;
+        fetch('/Conversazioni/@c.Id?handler=State', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (s) { if (s && (s.last !== last || s.writing !== writing || s.status !== status)) location.reload(); })
+            .catch(function () { });
+    }, 3000);
+})();
+</script>

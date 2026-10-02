@@ -138,30 +138,7 @@ public class NumeroModel : PageModel
         if (!Number.IsSimulated) return BadRequest();
         var (phone, _) = ImportRules.NormalizePhone(To);
         if (phone is null || string.IsNullOrWhiteSpace(Text)) { Error = "Indica un cellulare valido e il testo del messaggio."; return Page(); }
-        var payload = new JsonObject
-        {
-            ["object"] = "whatsapp_business_account",
-            ["entry"] = new JsonArray(new JsonObject
-            {
-                ["id"] = "sim",
-                ["changes"] = new JsonArray(new JsonObject
-                {
-                    ["field"] = "messages",
-                    ["value"] = new JsonObject
-                    {
-                        ["messaging_product"] = "whatsapp",
-                        ["metadata"] = new JsonObject { ["phone_number_id"] = Number.PhoneNumberId },
-                        ["messages"] = new JsonArray(new JsonObject
-                        {
-                            ["from"] = phone.TrimStart('+'), ["id"] = "sim-in-" + Guid.NewGuid().ToString("N"),
-                            ["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ["type"] = "text",
-                            ["text"] = new JsonObject { ["body"] = Text.Trim() }
-                        })
-                    }
-                })
-            })
-        };
-        await _hook.ProcessAsync(payload.ToJsonString());
+        await _hook.ProcessAsync(WebhookHandler.SimulatedInbound(Number.PhoneNumberId!, phone, Text));
         TempData["Ok"] = "Messaggio simulato ricevuto.";
         return Redirect($"/WhatsApp/Numero/{id}");
     }

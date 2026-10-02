@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using MvChat.Web.Ai;
 using MvChat.Web.Contacts;
 using MvChat.Web.Infrastructure;
 
@@ -16,10 +17,12 @@ public sealed class WebhookHandler
     private readonly WaRepo _repo;
     private readonly WaService _wa;
     private readonly ContactsRepo _contacts;
+    private readonly ConversationRepo _convs;
+    private readonly AiQueue _queue;
     private readonly ILogger<WebhookHandler> _log;
 
-    public WebhookHandler(AppConfigStore config, WaRepo repo, WaService wa, ContactsRepo contacts, ILogger<WebhookHandler> log)
-    { _config = config; _repo = repo; _wa = wa; _contacts = contacts; _log = log; }
+    public WebhookHandler(AppConfigStore config, WaRepo repo, WaService wa, ContactsRepo contacts, ConversationRepo convs, AiQueue queue, ILogger<WebhookHandler> log)
+    { _config = config; _repo = repo; _wa = wa; _contacts = contacts; _convs = convs; _queue = queue; _log = log; }
 
     /// <summary>Conferma iniziale dell'indirizzo: Meta manda una parola d'ordine e si aspetta indietro il "challenge".</summary>
     public string? Verify(string? mode, string? token, string? challenge)
@@ -64,6 +67,31 @@ public sealed class WebhookHandler
         }
     }
 
+    /// <summary>Lo stesso pacchetto che manderebbe Meta per un messaggio di testo: lo usa il simulatore dei numeri finti.</summary>
+    public static string SimulatedInbound(string phoneNumberId, string phone, string text) => new JsonObject
+    {
+        ["object"] = "whatsapp_business_account",
+        ["entry"] = new JsonArray(new JsonObject
+        {
+            ["id"] = "sim",
+            ["changes"] = new JsonArray(new JsonObject
+            {
+                ["field"] = "messages",
+                ["value"] = new JsonObject
+                {
+                    ["messaging_product"] = "whatsapp",
+                    ["metadata"] = new JsonObject { ["phone_number_id"] = phoneNumberId },
+                    ["messages"] = new JsonArray(new JsonObject
+                    {
+                        ["from"] = phone.TrimStart('+'), ["id"] = "sim-in-" + Guid.NewGuid().ToString("N"),
+                        ["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ["type"] = "text",
+                        ["text"] = new JsonObject { ["body"] = text.Trim() }
+                    })
+                }
+            })
+        })
+    }.ToJsonString();
+
     private async Task MessagesAsync(JsonNode value)
     {
         var phoneNumberId = value["metadata"]?["phone_number_id"]?.GetValue<string>();
@@ -96,15 +124,29 @@ public sealed class WebhookHandler
                 "interactive" => m["interactive"]?["button_reply"]?["title"]?.GetValue<string>() ?? m["interactive"]?["list_reply"]?["title"]?.GetValue<string>(),
                 _ => $"[{type}]"
             };
-            await _repo.InsertMessageAsync(number, phone, "in", type == "text" ? "text" : type, text, null, id, "received", null, null);
+            var conv = await _convs.FindForInboundAsync(number.Id, phone);
+            var msgId = await _repo.InsertMessageAsync(number, phone, "in", type == "text" ? "text" : type, text, null, id, "received", null, null, conv?.Id);
 
             // Chi scrive STOP esce subito, per tutta la catena, e riceve una conferma.
             if (WaService.IsStop(text))
             {
                 await _contacts.AddOptOutAsync(number.OrganizationId, number.GymId, phone, $"Ha scritto: {text}", "whatsapp", null);
-                await _wa.SendTextAsync(number, phone, $"Fatto: non riceverai più messaggi promozionali da {number.GymName}. Per qualsiasi cosa puoi sempre contattare la reception.", null);
+                await _wa.SendTextAsync(number, phone, $"Fatto: non riceverai più messaggi promozionali da {number.GymName}. Per qualsiasi cosa puoi sempre contattare la reception.", null, conv?.Id);
+                if (conv is not null) await _convs.SetStateAsync(conv.Id, "chiusa", Outcomes.OptOut, $"Ha scritto: {text}");
+                continue;
             }
-            // Dal Passo 5 qui risponderà l'assistente AI.
+            if (conv is null || conv.Outcome == Outcomes.OptOut) continue; // messaggio fuori da campagne: lo vede chi consulta il registro
+
+            if (conv.Status == "ai")
+            {
+                await _convs.InboundAsync(conv.Id, needsReply: true, reopenAs: null);
+                _queue.Enqueue(conv.Id); // risponde l'assistente AI
+            }
+            else
+            {
+                // Se la conversazione era chiusa e il cliente riscrive, la riprende una persona.
+                await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: conv.Status == "chiusa" ? "operatore" : null);
+            }
         }
     }
 

@@ -17,6 +17,36 @@ public sealed class AppConfig
     public string JobToken { get; set; } = "";
     public DateTime? InstalledAt { get; set; }
     public MetaSettings Meta { get; set; } = new();
+    public AiSettings Ai { get; set; } = new();
+}
+
+/// <summary>Fornitore AI scelto da MVitalia. Le chiavi sono salvate cifrate.</summary>
+public sealed class AiSettings
+{
+    /// <summary>"anthropic", "openai" oppure "" (assistente spento: le risposte passano agli operatori).</summary>
+    public string Provider { get; set; } = "";
+    public AiProviderSettings Anthropic { get; set; } = new()
+    {
+        Model = "claude-haiku-4-5-20251001", BaseUrl = "https://api.anthropic.com", InputPrice = 1m, OutputPrice = 5m, CacheReadPrice = 0.10m
+    };
+    public AiProviderSettings OpenAi { get; set; } = new()
+    {
+        Model = "gpt-5-mini", BaseUrl = "https://api.openai.com"
+    };
+    [System.Text.Json.Serialization.JsonIgnore]
+    public AiProviderSettings Current => Provider == "openai" ? OpenAi : Anthropic;
+}
+
+public sealed class AiProviderSettings
+{
+    public string KeyEnc { get; set; } = "";
+    public string Model { get; set; } = "";
+    /// <summary>Cambia solo nelle prove automatiche, dove il fornitore è sostituito da un finto server.</summary>
+    public string BaseUrl { get; set; } = "";
+    /// <summary>Prezzi in dollari per milione di token, presi dal listino del fornitore: servono a calcolare i consumi.</summary>
+    public decimal InputPrice { get; set; }
+    public decimal OutputPrice { get; set; }
+    public decimal CacheReadPrice { get; set; }
 }
 
 /// <summary>Dati dell'app Meta di MVitalia. Si inseriscono dalla pagina Impostazioni WhatsApp.</summary>
