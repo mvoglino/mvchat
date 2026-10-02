@@ -7,9 +7,9 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per catene di palestre, con un a
 - Testi dell'interfaccia, messaggi di errore e commenti nel codice in italiano.
 
 ## Decisioni prese
-- .NET 8, ASP.NET Core Razor Pages, nessun ORM: ADO.NET con `Infrastructure/Db.cs` e query parametrizzate.
+- .NET 10 (LTS, supporto fino a novembre 2028), ASP.NET Core Razor Pages, nessun ORM: ADO.NET con `Infrastructure/Db.cs` e query parametrizzate.
 - Database MySQL / MariaDB tramite il pacchetto `MySqlConnector`.
-- Hosting: Aruba Windows condiviso (IIS in-process). Niente processi sempre attivi: il lavoro in coda parte da `/jobs/tick?token=…`, richiamato dall'operazione pianificata di Aruba.
+- Hosting: Aruba Windows condiviso (IIS in-process). Sul server Aruba (verificato ottobre 2026): .NET 9.0.20 e 10.0.12, ASP.NET Core Module V2: niente .NET 8. Niente processi sempre attivi: il lavoro in coda parte da `/jobs/tick?token=…`, richiamato dall'operazione pianificata di Aruba.
 - Configurazione in `App_Data/mvchat.json`, scritta dall'installazione guidata (`/Install`). Mai segreti nel repository.
 - Modifiche al database solo con nuovi script `Data/Schema/NNN_nome.sql` (numerati, mai modificare quelli già rilasciati). Separatore tra istruzioni: riga `GO`. Usare `IF NOT EXISTS` dove possibile: in MySQL le istruzioni DDL non sono transazionali.
 - Prezzi solo nelle offerte, definiti da ogni palestra: la scheda sede non contiene prezzi e l'assistente può citare solo il prezzo dell'offerta collegata.
@@ -23,7 +23,7 @@ Piattaforma SaaS di MVitalia: campagne WhatsApp per catene di palestre, con un a
 - Catena e palestra di un record si ricavano dalle regole lato server, mai da campi del modulo non verificati.
 
 ## Compilare e provare
-- In questo ambiente NuGet può essere bloccato: `dotnet build -p:OfflineBuild=true` compila senza il driver MySQL (solo controllo sintassi).
+- In questo ambiente NuGet può essere bloccato e c'è solo l'SDK .NET 8: `dotnet build -p:OfflineBuild=true -p:TargetFramework=net8.0` compila senza il driver MySQL (solo controllo sintassi). La build vera su .NET 10 la fa GitHub Actions.
 - GitHub Actions (`.github/workflows/build.yml`) compila, avvia MariaDB, esegue `tests/e2e/e2e.py` e pubblica lo zip per Aruba come artifact.
 - Ogni nuovo passo aggiunge le sue prove in `tests/e2e`.
 

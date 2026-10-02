@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MvChat.Web</RootNamespace>
     <AssemblyName>MvChat.Web</AssemblyName>
     <Version>0.1.0</Version>
-    <!-- Aruba Windows hosting: IIS in-process, framework-dependent -->
+    <!-- Aruba Windows hosting: IIS in-process (ASP.NET Core Module V2), framework-dependent: sul server ci sono .NET 9 e 10 -->
     <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
   </PropertyGroup>
 
