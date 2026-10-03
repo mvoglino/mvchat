@@ -24,7 +24,7 @@ public class FatturazioneModel : PageModel
     public string? Error { get; private set; }
 
     private static decimal? Num(string? s, decimal max) =>
-        decimal.TryParse((s ?? "").Trim().Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var v) && v >= 0 && v <= max ? v : null;
+        MvChat.Web.Infrastructure.Money.Parse(s) is decimal v && v >= 0 && v <= max ? v : null;
 
     public void OnGet()
     {

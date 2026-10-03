@@ -45,6 +45,13 @@ public class IndexModel : PageModel
         if (!await LoadAsync(mese)) return Forbid();
         if (!Me.IsSuperAdmin) return Forbid();
         if (!IsPastMonth) { TempData["Err"] = "Si può chiudere solo un mese già finito."; return Redirect($"/Fatturazione?mese={Month}"); }
+        // Senza ragione sociale e partita IVA il rendiconto non si può fatturare: prima si completano i dati.
+        var missing = (await _billing.MonthAsync(Me, Month)).Where(x => !x.Closed && x.MissingData).Select(x => x.RecipientName).ToList();
+        if (missing.Count > 0)
+        {
+            TempData["Err"] = "Prima di chiudere il mese completa ragione sociale e partita IVA di: " + string.Join(", ", missing) + ".";
+            return Redirect($"/Fatturazione?mese={Month}");
+        }
         var n = await _billing.CloseAsync(Me, Month, Me.UserId);
         await _repos.AuditAsync(Me, "billing.closed", $"{Month}: {n} rendiconti", HttpContext.Connection.RemoteIpAddress?.ToString());
         TempData["Ok"] = n == 0 ? "Nessun rendiconto da chiudere." : $"Mese chiuso: {n} rendiconti salvati. Da adesso non cambiano più.";

@@ -16,11 +16,17 @@ public sealed class RetentionService
 
     public Task<DateTime?> LastRunAsync() => _db.ScalarAsync<DateTime?>("SELECT MAX(At) FROM AuditLog WHERE Action='privacy.cleanup'");
 
+    // Un solo giro di pulizia alla volta (operazione pianificata e lavoro automatico possono partire insieme).
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+    private DateTime _deadline = DateTime.MaxValue;
+    private bool _unfinished;
+
     private async Task<int> InBlocksAsync(string sql, object args)
     {
         var total = 0;
         for (var i = 0; i < 200; i++)
         {
+            if (DateTime.UtcNow >= _deadline) { _unfinished = true; break; } // il resto al prossimo giro
             var n = await _db.ExecuteAsync(sql + " LIMIT 1000", args);
             total += n;
             if (n < 1000) break;
@@ -28,30 +34,47 @@ public sealed class RetentionService
         return total;
     }
 
-    public async Task<CleanupResult> RunAsync(bool force = false)
+    /// <param name="budget">Tempo massimo: dall'operazione pianificata si resta nei limiti di Aruba; se non basta, si finisce al giro dopo.</param>
+    public async Task<CleanupResult> RunAsync(bool force = false, TimeSpan? budget = null)
     {
-        if (!force && await LastRunAsync() is DateTime last && last > DateTime.UtcNow.AddHours(-20))
-            return new(0, 0, 0, 0, 0, 0, true);
-        var p = _config.Current.Privacy;
-        var cutoff = DateTime.UtcNow.AddMonths(-Math.Clamp(p.RetentionMonths, 1, 120));
-        var hooks = DateTime.UtcNow.AddDays(-Math.Clamp(p.WebhookDays, 1, 365));
+        if (!await Gate.WaitAsync(TimeSpan.Zero)) return new(0, 0, 0, 0, 0, 0, true);
+        try
+        {
+            if (!force && await LastRunAsync() is DateTime last && last > DateTime.UtcNow.AddHours(-20))
+                return new(0, 0, 0, 0, 0, 0, true);
+            _deadline = DateTime.UtcNow + (budget ?? TimeSpan.FromMinutes(10));
+            _unfinished = false;
+            var p = _config.Current.Privacy;
+            var cutoff = DateTime.UtcNow.AddMonths(-Math.Clamp(p.RetentionMonths, 1, 120));
+            var hooks = DateTime.UtcNow.AddDays(-Math.Clamp(p.WebhookDays, 1, 365));
 
-        // Conversazioni ferme da più del periodo: prima si staccano i collegamenti, poi si cancellano messaggi e conversazioni.
-        var old = "SELECT Id FROM Conversations WHERE COALESCE(LastMessageAt, CreatedAt) < @cutoff";
-        await _db.ExecuteAsync($"UPDATE AiUsage SET ConversationId=NULL WHERE ConversationId IN (SELECT Id FROM ({old}) x)", new { cutoff });
-        await _db.ExecuteAsync($"UPDATE CampaignRecipients SET ConversationId=NULL WHERE ConversationId IN (SELECT Id FROM ({old}) x)", new { cutoff });
-        var msgs = await InBlocksAsync($"DELETE FROM WaMessages WHERE ConversationId IN (SELECT Id FROM ({old}) x)", new { cutoff });
-        var convs = await InBlocksAsync("DELETE FROM Conversations WHERE COALESCE(LastMessageAt, CreatedAt) < @cutoff", new { cutoff });
-        msgs += await InBlocksAsync("DELETE FROM WaMessages WHERE ConversationId IS NULL AND CreatedAt < @cutoff", new { cutoff });
-        var recipients = await InBlocksAsync("DELETE FROM CampaignRecipients WHERE CampaignId IN (SELECT Id FROM (SELECT Id FROM Campaigns WHERE CreatedAt < @cutoff) x)", new { cutoff });
-        var lists = await _db.ExecuteAsync("DELETE FROM ContactLists WHERE CreatedAt < @cutoff", new { cutoff }); // contatti e scarti vanno via con la lista
-        var events = await InBlocksAsync("DELETE FROM WaWebhookEvents WHERE ReceivedAt < @hooks", new { hooks });
-        var audit = await InBlocksAsync("DELETE FROM AuditLog WHERE At < @cutoff", new { cutoff });
+            // Conversazioni ferme da più del periodo: prima si staccano i collegamenti, poi si cancellano messaggi e conversazioni.
+            // (Scritto senza COALESCE così il database può usare gli indici sulle date.)
+            const string oldWhere = "(LastMessageAt < @cutoff OR (LastMessageAt IS NULL AND CreatedAt < @cutoff))";
+            var old = $"SELECT Id FROM Conversations WHERE {oldWhere}";
+            await _db.ExecuteAsync($"UPDATE AiUsage SET ConversationId=NULL WHERE ConversationId IN (SELECT Id FROM ({old}) x)", new { cutoff });
+            await _db.ExecuteAsync($"UPDATE CampaignRecipients SET ConversationId=NULL WHERE ConversationId IN (SELECT Id FROM ({old}) x)", new { cutoff });
+            var msgs = await InBlocksAsync($"DELETE FROM WaMessages WHERE ConversationId IN (SELECT Id FROM ({old}) x)", new { cutoff });
+            // Le conversazioni si cancellano solo dopo i loro messaggi: se il tempo finisce prima, restano per il giro successivo.
+            var convs = _unfinished ? 0 : await InBlocksAsync(
+                $"DELETE FROM Conversations WHERE {oldWhere} AND NOT EXISTS (SELECT 1 FROM WaMessages w WHERE w.ConversationId=Conversations.Id)", new { cutoff });
+            // Messaggi vecchi senza conversazione (o con una conversazione che non esiste più).
+            msgs += await InBlocksAsync(
+                "DELETE FROM WaMessages WHERE CreatedAt < @cutoff AND (ConversationId IS NULL OR NOT EXISTS (SELECT 1 FROM Conversations c WHERE c.Id=WaMessages.ConversationId))", new { cutoff });
+            var recipients = await InBlocksAsync("DELETE FROM CampaignRecipients WHERE CampaignId IN (SELECT Id FROM (SELECT Id FROM Campaigns WHERE CreatedAt < @cutoff) x)", new { cutoff });
+            var lists = _unfinished ? 0 : await _db.ExecuteAsync("DELETE FROM ContactLists WHERE CreatedAt < @cutoff", new { cutoff }); // contatti e scarti vanno via con la lista
+            var events = await InBlocksAsync("DELETE FROM WaWebhookEvents WHERE ReceivedAt < @hooks", new { hooks });
+            // Il registro si accorcia, ma restano le righe di fatturazione e privacy: servono come prova di cosa è stato fatto.
+            var audit = await InBlocksAsync("DELETE FROM AuditLog WHERE At < @cutoff AND Action NOT LIKE 'billing.%' AND Action NOT LIKE 'privacy.%'", new { cutoff });
 
-        var r = new CleanupResult(convs, msgs, lists, recipients, events, audit, false);
-        await _db.ExecuteAsync("INSERT INTO AuditLog (Action, Detail) VALUES ('privacy.cleanup', @d)",
-            new { d = $"conversazioni {convs}, messaggi {msgs}, liste {lists}, destinatari {recipients}, avvisi Meta {events}, registro {audit}" });
-        return r;
+            var r = new CleanupResult(convs, msgs, lists, recipients, events, audit, false);
+            // Se il tempo non è bastato, non si segna come fatta: riparte al prossimo giro e finisce il lavoro.
+            if (!_unfinished)
+                await _db.ExecuteAsync("INSERT INTO AuditLog (Action, Detail) VALUES ('privacy.cleanup', @d)",
+                    new { d = $"conversazioni {convs}, messaggi {msgs}, liste {lists}, destinatari {recipients}, avvisi Meta {events}, registro {audit}" });
+            return r;
+        }
+        finally { Gate.Release(); }
     }
 }
 

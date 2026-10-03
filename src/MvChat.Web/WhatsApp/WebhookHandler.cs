@@ -48,16 +48,7 @@ public sealed class WebhookHandler
         var eventId = await _repo.LogEventAsync(payload);
         try
         {
-            var root = JsonNode.Parse(payload);
-            foreach (var entry in root?["entry"]?.AsArray() ?? new())
-            foreach (var change in entry?["changes"]?.AsArray() ?? new())
-            {
-                var field = change?["field"]?.GetValue<string>();
-                var value = change?["value"];
-                if (value is null) continue;
-                if (field == "message_template_status_update") await TemplateStatusAsync(value);
-                else await MessagesAsync(value);
-            }
+            await DispatchAsync(payload);
             await _repo.MarkEventAsync(eventId, null);
         }
         catch (Exception ex)
@@ -65,6 +56,42 @@ public sealed class WebhookHandler
             _log.LogError(ex, "Evento WhatsApp {Id} non elaborato", eventId);
             await _repo.MarkEventAsync(eventId, ex.Message.Length > 480 ? ex.Message[..480] : ex.Message);
         }
+    }
+
+    private async Task DispatchAsync(string payload)
+    {
+        var root = JsonNode.Parse(payload);
+        foreach (var entry in root?["entry"]?.AsArray() ?? new())
+        foreach (var change in entry?["changes"]?.AsArray() ?? new())
+        {
+            var field = change?["field"]?.GetValue<string>();
+            var value = change?["value"];
+            if (value is null) continue;
+            if (field == "message_template_status_update") await TemplateStatusAsync(value);
+            else if (field is "phone_number_quality_update" or "phone_number_name_update" or "account_update") await NumberUpdateAsync(value);
+            else await MessagesAsync(value);
+        }
+    }
+
+    /// <summary>Riprova gli avvisi rimasti non elaborati (dall'operazione pianificata). I messaggi già registrati non si ripetono.</summary>
+    public async Task<int> RetryFailedAsync()
+    {
+        var n = 0;
+        foreach (var (id, payload) in await _repo.RetryEventsAsync(20))
+        {
+            try
+            {
+                await DispatchAsync(payload);
+                await _repo.MarkEventAsync(id, null);
+                n++;
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Evento WhatsApp {Id}: nuovo tentativo non riuscito", id);
+                await _repo.MarkEventAsync(id, ex.Message);
+            }
+        }
+        return n;
     }
 
     /// <summary>Lo stesso pacchetto che manderebbe Meta per un messaggio di testo: lo usa il simulatore dei numeri finti.</summary>
@@ -98,58 +125,171 @@ public sealed class WebhookHandler
         if (phoneNumberId is null) return;
         var number = await _repo.NumberByPhoneNumberIdAsync(phoneNumberId);
         if (number is null) { _log.LogWarning("Messaggio per un numero sconosciuto: {Id}", phoneNumberId); return; }
-        // Un numero Meta riceve i messaggi solo dopo che Meta ha confermato la chiave: nessuno può "prenotare" il numero di un altro.
-        if (!number.IsSimulated && number.Status != "attivo") { _log.LogWarning("Messaggio per un numero non verificato: {Id}", phoneNumberId); return; }
+        // Un numero Meta riceve i messaggi solo se Meta ha confermato almeno una volta numero e chiave:
+        // nessuno può "prenotare" il numero di un altro. Se poi la chiave scade, i messaggi (e gli STOP) continuano ad arrivare.
+        if (!number.IsSimulated && number.VerifiedAt is null) { _log.LogWarning("Messaggio per un numero mai verificato: {Id}", phoneNumberId); return; }
 
+        Exception? failure = null;
         foreach (var st in value["statuses"]?.AsArray() ?? new())
         {
-            var id = st?["id"]?.GetValue<string>();
-            var status = st?["status"]?.GetValue<string>();
-            if (id is null || status is null) continue;
-            var err = st!["errors"]?[0];
-            var error = err is null ? null : $"{err["title"]?.GetValue<string>() ?? err["message"]?.GetValue<string>()} (codice {err["code"]})";
-            await _repo.UpdateStatusAsync(id, status, error);
+            try { await StatusAsync(number, st); }
+            catch (Exception ex) { failure ??= ex; }
         }
-
+        // Ogni messaggio per conto suo: se uno dà errore, gli altri vengono lavorati lo stesso e l'avviso si riprova più tardi.
         foreach (var m in value["messages"]?.AsArray() ?? new())
         {
-            var id = m?["id"]?.GetValue<string>();
-            var from = m?["from"]?.GetValue<string>();
-            if (id is null || from is null) continue;
-            if (await _repo.MessageExistsAsync(id)) continue; // Meta a volte manda due volte lo stesso messaggio
-            var phone = "+" + from.TrimStart('+');
-            var type = m!["type"]?.GetValue<string>() ?? "text";
-            var text = type switch
-            {
-                "text" => m["text"]?["body"]?.GetValue<string>(),
-                "button" => m["button"]?["text"]?.GetValue<string>(),
-                "interactive" => m["interactive"]?["button_reply"]?["title"]?.GetValue<string>() ?? m["interactive"]?["list_reply"]?["title"]?.GetValue<string>(),
-                _ => $"[{type}]"
-            };
-            var conv = await _convs.FindForInboundAsync(number.Id, phone);
-            var msgId = await _repo.InsertMessageAsync(number, phone, "in", type == "text" ? "text" : type, text, null, id, "received", null, null, conv?.Id);
+            try { await InboundAsync(number, m); }
+            catch (Exception ex) { failure ??= ex; }
+        }
+        if (failure is not null) throw failure;
+    }
 
-            // Chi scrive STOP esce subito, per tutto il gruppo, e riceve una conferma.
-            if (WaService.IsStop(text))
+    /// <summary>Stato di un messaggio inviato. Se Meta non è riuscita a consegnarlo, lo si riporta su destinatario e conversazione.</summary>
+    private async Task StatusAsync(WaNumber number, JsonNode? st)
+    {
+        var id = st?["id"]?.GetValue<string>();
+        var status = st?["status"]?.GetValue<string>();
+        if (id is null || status is null) return;
+        var err = st!["errors"]?[0];
+        var code = err?["code"]?.ToString();
+        var error = err is null ? null : $"{err["title"]?.GetValue<string>() ?? err["message"]?.GetValue<string>()} (codice {code})";
+        await _repo.UpdateStatusAsync(id, status, error);
+        if (status != "failed") return;
+
+        var sent = await _repo.SentMessageAsync(id);
+        if (sent is null) return;
+        // 131050: il cliente ha bloccato i messaggi promozionali di questa attività su WhatsApp → va in lista STOP.
+        if (code == "131050")
+            await _contacts.AddOptOutAsync(sent.OrganizationId, sent.GymId, sent.Phone, "Ha disattivato i messaggi promozionali su WhatsApp (Meta 131050)", "meta", null);
+        if (sent.ConversationId is long cid && sent.Kind == "template")
+        {
+            // Il primo messaggio della campagna non è arrivato: il destinatario risulta in errore e la conversazione si chiude.
+            await _convs.TemplateFailedAsync(cid, WaRepo.Clip("messaggio non consegnato: " + (FriendlyError(code) ?? error), 300)!);
+        }
+    }
+
+    /// <summary>Spiegazione in italiano semplice degli errori di consegna più frequenti.</summary>
+    public static string? FriendlyError(string? code) => code switch
+    {
+        "131026" => "il numero non usa WhatsApp o non può ricevere il messaggio",
+        "131049" => "Meta ha limitato i messaggi promozionali verso questo cliente (troppi ricevuti di recente): riprovare più avanti",
+        "131050" => "il cliente ha bloccato i messaggi promozionali: aggiunto alla lista STOP",
+        "131047" => "sono passate più di 24 ore dall'ultimo messaggio del cliente",
+        "131042" => "problema di pagamento dell'account WhatsApp su Meta",
+        "130472" => "il cliente fa parte di un test di Meta e non riceve messaggi promozionali",
+        _ => null
+    };
+
+    private static readonly Dictionary<string, string> MediaLabels = new()
+    {
+        ["image"] = "[immagine]", ["audio"] = "[messaggio vocale]", ["voice"] = "[messaggio vocale]", ["video"] = "[video]", ["document"] = "[documento]",
+        ["sticker"] = "[adesivo]", ["location"] = "[posizione]", ["contacts"] = "[contatto]", ["order"] = "[ordine]"
+    };
+
+    private async Task InboundAsync(WaNumber number, JsonNode? m)
+    {
+        var id = m?["id"]?.GetValue<string>();
+        var from = m?["from"]?.GetValue<string>();
+        if (id is null || from is null) return;
+        if (await _repo.MessageExistsAsync(id)) return; // Meta a volte manda due volte lo stesso messaggio
+        var phone = "+" + from.TrimStart('+');
+        var type = m!["type"]?.GetValue<string>() ?? "text";
+        if (type is "system" or "unsupported" or "ephemeral") return; // avvisi tecnici di WhatsApp, non scritti dal cliente
+        var isText = type is "text" or "button" or "interactive";
+        var text = type switch
+        {
+            "text" => m["text"]?["body"]?.GetValue<string>(),
+            "button" => m["button"]?["text"]?.GetValue<string>(),
+            "interactive" => m["interactive"]?["button_reply"]?["title"]?.GetValue<string>() ?? m["interactive"]?["list_reply"]?["title"]?.GetValue<string>(),
+            "reaction" => m["reaction"]?["emoji"]?.GetValue<string>() is { Length: > 0 } e ? $"[reazione {e}]" : "[reazione tolta]",
+            _ => (MediaLabels.GetValueOrDefault(type, $"[{type}]")) + (m[type]?["caption"]?.GetValue<string>() is { Length: > 0 } cap ? " " + cap : "")
+        };
+        var conv = await _convs.FindForInboundAsync(number.Id, phone);
+
+        // Chi scrive STOP esce subito, per tutto il gruppo: prima si aggiorna la lista STOP, poi tutto il resto.
+        var stop = isText && WaService.IsStop(text);
+        if (stop)
+        {
+            await _contacts.AddOptOutAsync(number.OrganizationId, number.GymId, phone, WaRepo.Clip($"Ha scritto: {text}", 200), "whatsapp", null);
+            if (conv is not null) await _convs.SetStateAsync(conv.Id, "chiusa", Outcomes.OptOut, WaRepo.Clip($"Ha scritto: {text}", 480));
+        }
+
+        var msgId = await _repo.InsertMessageAsync(number, phone, "in", isText ? "text" : type, text, null, id, "received", null, null, conv?.Id);
+        try
+        {
+            if (stop)
             {
-                await _contacts.AddOptOutAsync(number.OrganizationId, number.GymId, phone, $"Ha scritto: {text}", "whatsapp", null);
                 await _wa.SendTextAsync(number, phone, $"Fatto: non riceverai più messaggi promozionali da {number.GymName}. Per qualsiasi cosa puoi sempre contattare la reception.", null, conv?.Id);
-                if (conv is not null) await _convs.SetStateAsync(conv.Id, "chiusa", Outcomes.OptOut, $"Ha scritto: {text}");
-                continue;
+                return;
             }
-            if (conv is null || conv.Outcome == Outcomes.OptOut) continue; // messaggio fuori da campagne: lo vede chi consulta il registro
+            if (type == "reaction") return; // una reazione (👍) non chiede una risposta
+
+            if (conv is null)
+            {
+                // Messaggio fuori da campagne: lo vede la reception, come conversazione da gestire.
+                var name = await _contacts.NameForPhoneAsync(number.GymId, phone);
+                var newId = await _convs.CreateSpontaneousAsync(number, phone, name ?? phone);
+                await _repo.SetMessageConversationAsync(msgId, newId);
+                return;
+            }
+            if (conv.Outcome == Outcomes.OptOut) return; // ha chiesto STOP: il messaggio resta registrato, l'assistente non risponde
 
             if (conv.Status == "ai")
             {
-                await _convs.InboundAsync(conv.Id, needsReply: true, reopenAs: null);
-                _queue.Enqueue(conv.Id); // risponde l'assistente AI
+                if (!isText)
+                {
+                    // L'assistente legge solo testo: foto, vocali e documenti li guarda una persona.
+                    await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: null);
+                    await _wa.SendTextAsync(number, phone, Ai.Guardrails.HoldingMessage, null, conv.Id);
+                    await _convs.SetStateAsync(conv.Id, "operatore", Outcomes.Operatore, $"il cliente ha mandato {text}: serve una persona");
+                }
+                else if (string.IsNullOrWhiteSpace(text)) await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: null);
+                else
+                {
+                    await _convs.InboundAsync(conv.Id, needsReply: true, reopenAs: null);
+                    _queue.Enqueue(conv.Id); // risponde l'assistente AI
+                }
             }
             else
             {
-                // Se la conversazione era chiusa e il cliente riscrive, la riprende una persona.
-                await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: conv.Status == "chiusa" ? "operatore" : null);
+                // Se la conversazione era chiusa e il cliente riscrive, la riprende una persona (non per un semplice «grazie»).
+                var reopen = conv.Status == "chiusa" && !(isText && IsCourtesy(text)) ? "operatore" : null;
+                await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: reopen);
             }
         }
+        catch
+        {
+            // Il messaggio si toglie, così quando l'avviso viene riprovato si rifà tutto il lavoro.
+            await _repo.DeleteMessageAsync(msgId);
+            throw;
+        }
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex Courtesy = new(
+        @"^(ok+|okay|va bene|perfetto|grazie( mille| ancora| a te| anche a te)?|buona (giornata|serata)|a presto|ricevuto|d'accordo)[\s!.,]*$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>«Grazie», «ok», un'emoji: un saluto finale che non chiede di riaprire la conversazione.</summary>
+    public static bool IsCourtesy(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return true;
+        var t = text.Trim();
+        if (!t.Any(char.IsLetterOrDigit)) return true; // solo emoji o punteggiatura
+        if (t.Length > 40) return false;
+        // Toglie le emoji in fondo («Grazie 🙏»).
+        t = new string(t.Where(ch => char.IsLetterOrDigit(ch) || char.IsWhiteSpace(ch) || ".,!'".Contains(ch)).ToArray()).Trim();
+        return Courtesy.IsMatch(t);
+    }
+
+    /// <summary>Meta avvisa quando cambia la qualità o il limite di invio di un numero: si aggiornano subito i dati.</summary>
+    private async Task NumberUpdateAsync(JsonNode value)
+    {
+        var display = value["display_phone_number"]?.ToString();
+        if (string.IsNullOrEmpty(display)) return;
+        var digits = new string(display.Where(char.IsDigit).ToArray());
+        foreach (var n in await _repo.MetaNumbersAsync())
+            if (new string(n.DisplayPhone.Where(char.IsDigit).ToArray()).EndsWith(digits.Length > 9 ? digits[^9..] : digits))
+                await _wa.CheckNumberAsync(n);
     }
 
     private async Task TemplateStatusAsync(JsonNode value)

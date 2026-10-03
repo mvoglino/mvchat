@@ -68,7 +68,9 @@ Quando ti avviso che c'è una nuova versione:
 3. Carica i nuovi file sovrascrivendo i vecchi. **Non toccare la cartella App_Data.**
 4. Cancella **app_offline.htm**.
 
-Al primo avvio mvchat aggiorna da solo il database, se serve.
+Al primo avvio mvchat aggiorna da solo il database, se serve: non c'è niente da lanciare a mano. Se l'aggiornamento si interrompe (per esempio per un riavvio dell'hosting), al prossimo avvio riprende dal punto in cui si era fermato. Se non riesce, MVitalia lo vede in rosso nel pannello di controllo e su `/health`.
+
+**Prima di ogni aggiornamento** fai una copia del database dal pannello Aruba: è il modo più semplice per tornare indietro.
 
 ## Se qualcosa non va
 
@@ -79,6 +81,6 @@ Al primo avvio mvchat aggiorna da solo il database, se serve.
 | "Non riesco a raggiungere il server del database" | Controlla host e porta del database |
 | "Il database ha rifiutato utente o password" | Ricontrolla utente e password nel pannello Aruba |
 
-Lo stato del programma si controlla anche aprendo `https://tuodominio.it/health`.
+Lo stato del programma si controlla anche aprendo `https://tuodominio.it/health`: risponde «ok» se il database è raggiungibile e aggiornato, altrimenti un errore (codice 503). Conviene farlo controllare ogni 5 minuti da un servizio gratuito di monitoraggio (per esempio UptimeRobot), che manda un'email se mvchat non risponde.
 
 **Backup**: fai salvare ogni giorno il database (pannello Aruba) e tieni una copia della cartella **App_Data** (configurazione e chiavi): senza le chiavi le password dei numeri WhatsApp e dell'AI salvate cifrate non si possono più leggere.

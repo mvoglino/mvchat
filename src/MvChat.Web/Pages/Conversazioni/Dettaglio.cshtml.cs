@@ -70,6 +70,9 @@ public class DettaglioModel : PageModel
     public async Task<IActionResult> OnPostTakeAsync(long id)
     {
         if (!await LoadAsync(id)) return NotFound();
+        // Una conversazione già in carico a un collega la può spostare solo il responsabile (con «Assegna»).
+        if (Conv.AssignedUserId is int other && other != Me.UserId && Conv.Status != "chiusa" && !Me.CanManageUsers)
+        { TempData["Err"] = $"La conversazione è già in carico a {Conv.AssignedName}: chiedi a lui o al responsabile."; return Back(); }
         await _convs.SetStateAsync(id, "operatore", Conv.Outcome is Outcomes.InCorso ? Outcomes.Operatore : Conv.Outcome, $"presa in carico da {Me.Name}", Me.UserId);
         await _repos.AuditAsync(Me, "conversation.take", $"#{id} {Conv.ContactPhone}", Ip, Conv.OrganizationId, Conv.GymId);
         TempData["Ok"] = Conv.Status == "ai" ? "Ora la conversazione è tua: l'assistente non risponde più." : "Conversazione presa in carico.";
@@ -103,7 +106,7 @@ public class DettaglioModel : PageModel
     public async Task<IActionResult> OnPostGiveBackAsync(long id)
     {
         if (!await LoadAsync(id)) return NotFound();
-        if (Conv.Outcome == Outcomes.OptOut) { TempData["Err"] = "Il cliente ha chiesto di non essere più contattato: la conversazione resta chiusa."; return Back(); }
+        if (Conv.Outcome == Outcomes.OptOut || await _contacts.IsOptedOutAsync(Conv.OrganizationId, Conv.ContactPhone)) { TempData["Err"] = "Il cliente ha chiesto di non essere più contattato: la conversazione resta chiusa."; return Back(); }
         await _convs.GiveBackToAiAsync(id);
         _queue.Enqueue(id); // se c'è un messaggio del cliente in attesa, l'assistente risponde subito
         await _repos.AuditAsync(Me, "conversation.giveback", $"#{id} {Conv.ContactPhone}", Ip, Conv.OrganizationId, Conv.GymId);

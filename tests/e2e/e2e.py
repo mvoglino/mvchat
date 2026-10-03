@@ -692,6 +692,66 @@ except ImportError:
     check("pulizia automatica (serve pymysql per la prova)", False, "pip install pymysql")
 fai.shutdown()
 
+# 5k. Controllo generale: STOP, messaggi spontanei, foto e vocali, saluti finali, dati mancanti, aggiornamenti del database
+alba_pid = f"sim-{alba}"
+_cg = [0]
+def hook(msgs):
+    p = {"object":"whatsapp_business_account","entry":[{"id":"sim","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":alba_pid},"messages":msgs}}]}]}
+    raw_ = _json.dumps(p).encode(); sig_ = "sha256=" + hmac.new(b"testsecret", raw_, hashlib.sha256).hexdigest()
+    rq = urllib.request.Request(BASE + "/webhooks/whatsapp", data=raw_, headers={"Content-Type":"application/json","X-Hub-Signature-256":sig_})
+    try: return urllib.request.urlopen(rq).status
+    except urllib.error.HTTPError as e: return e.code
+def txt(frm, body):
+    _cg[0] += 1; return {"from":frm,"id":f"wamid.CG{_cg[0]}","timestamp":"1","type":"text","text":{"body":body}}
+hook([txt("393401110001", "Per favore non scrivetemi più, grazie!")])
+hook([txt("393401110002", "Basta così, passo io in reception per gli orari")])
+_,stop_d,_ = d.req("/OptOuts")
+check("STOP riconosciuto anche scritto a parole («non scrivetemi più»)", "+393401110001" in stop_d)
+check("«basta così…» non è uno STOP", "+393401110002" not in stop_d)
+_,lst,_ = m.req("/Conversazioni?view=da_gestire")
+check("messaggio fuori da una campagna: arriva alla reception", "+393401110002" in lst and "Messaggio spontaneo" in lst, lst[lst.find("<tbody>"):][:300])
+hook([{"from":"393401110002","id":"wamid.CGR1","timestamp":"1","type":"reaction","reaction":{"message_id":"x","emoji":"👍"}}])
+_,lst,_ = m.req("/Conversazioni?view=tutte")
+check("una reazione 👍 non apre altre conversazioni", lst.count("<b>+393401110002</b>") == 1, str(lst.count("<b>+393401110002</b>")))
+cidm,_,_ = start_conv(m, "333 444 0099", name="Marta")
+hook([{"from":"393334440099","id":"wamid.CGI1","timestamp":"1","type":"image","image":{"id":"m1","caption":"ecco il certificato"}}])
+html = page(m, cidm)
+check("foto o vocale: l'assistente non risponde a vuoto, passa a una persona", "[immagine] ecco il certificato" in html and "Serve una persona" in html and "collega della reception" in html, html[html.find('class="stats"'):][:300])
+say(m, conv_anna, "Grazie mille 🙏", wait=False); _time.sleep(0.5)
+st1 = state(m, conv_anna).get("status")
+say(m, conv_anna, "Scusate, a che ora apre la sala domenica?", wait=False); _time.sleep(0.5)
+st2 = state(m, conv_anna).get("status")
+check("conversazione chiusa: un «grazie» non la riapre, una domanda sì", st1 == "chiusa" and st2 == "operatore", f"{st1} {st2}")
+rws = [["Nadia","Test","320 000 0031","","Annuale","","SI",""],["Omar","Test","320 000 0032","","Annuale","2026-11-30","SI",""]]
+_, res = m.post_json("/Lists/New?handler=Import", {"GymId":alba,"Name":"Senza scadenza","FileName":"x.xlsx","Map":mp,"Rows":rws}, "/Lists/New")
+cE,_,_ = camp_post(m, dict(base, Name="Dati mancanti", ListId=res.get("listId")), alba)
+act(m, cE, "Start"); _time.sleep(0.3); html = cpage(m, cE)
+check("dato mancante nel primo messaggio: il cliente viene saltato, niente trattini", "Inviati (1)" in html and "manca il dato «scadenza»" in html, html[html.find('class="stats"'):][:400])
+s,html,_ = m.post(tpl_a + "?handler=Delete", {"TemplateId":tid}, form_path=tpl_a)
+_,html,_ = m.req(tpl_a); check("un template approvato e usato non si elimina", "rinnovo_ottobre" in html and "Si possono eliminare solo" in html)
+s,body,_ = Client().req("/health"); hj = _json.loads(body) if s == 200 else {}
+check("aggiornamenti del database applicati da soli (controllo /health)", hj.get("status") == "ok" and hj.get("database") == "ok" and hj.get("schema","").split("/")[0] == hj.get("schema","x/y").split("/")[1], body[:200])
+pw_b,_ = mk_user(sa, "resp.bra@fitactive.test", "manager", "", gym["FitActive Bra"])
+def bra_active(on):
+    return sa.post(f"/Gyms/Edit/{gym['FitActive Bra']}", {"Input.Id":gym["FitActive Bra"],"Input.Name":"FitActive Bra","Input.City":"X","Input.IsActive":on,"Fee":"39,00","FeeFrom":"2026-01-01"}, form_path=f"/Gyms/Edit/{gym['FitActive Bra']}")[0]
+r_off = bra_active("false")
+y = Client(); s,html,_ = y.post("/Login", {"Email":"resp.bra@fitactive.test","Password":pw_b or ""})
+check("attività disattivata: i suoi utenti non entrano più", r_off == 302 and "disattivato" in html, f"{r_off} {pw_b}")
+bra_active("true")
+try:
+    import pymysql
+    db = pymysql.connect(host=os.environ.get("DB_HOST","127.0.0.1"), user="mv", password="Pwd12345!", database="mvchat", autocommit=True)
+    with db.cursor() as cur:
+        cur.execute("UPDATE AuditLog SET At=UTC_TIMESTAMP() - INTERVAL 13 MONTH WHERE Action IN ('billing.closed','conversation.take')")
+    sa.post("/Impostazioni/Privacy?handler=Run", {}, form_path="/Impostazioni/Privacy")
+    with db.cursor() as cur:
+        cur.execute("SELECT SUM(Action='billing.closed'), SUM(Action='conversation.take') FROM AuditLog"); kept, gone = cur.fetchone()
+        cur.execute("SELECT COUNT(*) FROM SchemaBatches WHERE Version=12"); batches = cur.fetchone()[0]
+    check("pulizia: le righe di fatturazione restano nel registro, le altre vecchie no", (kept or 0) > 0 and (gone or 0) == 0, f"{kept} {gone}")
+    check("aggiornamento del database ricordato pezzo per pezzo", batches >= 10, str(batches))
+except ImportError:
+    check("pulizia del registro (serve pymysql per la prova)", False, "pip install pymysql")
+
 # 6. Blocco dopo 5 tentativi sbagliati
 x = Client()
 for i in range(5): x.post("/Login", {"Email":"altra@altra.test","Password":"sbagliata123"})

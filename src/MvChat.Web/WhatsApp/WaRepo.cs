@@ -22,6 +22,8 @@ public sealed class WaNumber
     public string? MessagingLimit { get; set; }
     public string? LastError { get; set; }
     public DateTime? LastCheckAt { get; set; }
+    /// <summary>Quando Meta ha confermato per la prima volta numero e chiave: da lì in poi se ne accettano i messaggi.</summary>
+    public DateTime? VerifiedAt { get; set; }
     public bool HasToken => !string.IsNullOrEmpty(AccessTokenEnc);
 }
 
@@ -44,6 +46,8 @@ public sealed class WaTemplate
     public bool IsApproved => Status == "approvato";
 }
 
+public sealed record SentMsg(long Id, int OrganizationId, int GymId, string Phone, long? ConversationId, string Kind);
+
 public sealed record WaMessage(long Id, string ContactPhone, string Direction, string Kind, string? Body, string? TemplateName, string Status, string? Error, DateTime CreatedAt);
 
 public sealed class WaRepo
@@ -64,12 +68,17 @@ public sealed class WaRepo
     public Task<WaNumber?> NumberByPhoneNumberIdAsync(string phoneNumberId) =>
         _db.FirstAsync(NumberSelect + " WHERE n.PhoneNumberId=@phoneNumberId", new { phoneNumberId }, MapNumber);
 
+    /// <summary>Numeri collegati a Meta (non simulati), per aggiornare qualità e limiti.</summary>
+    public Task<List<WaNumber>> MetaNumbersAsync(int? notCheckedForHours = null) => _db.QueryAsync(
+        NumberSelect + " WHERE n.IsSimulated=0 AND n.PhoneNumberId IS NOT NULL AND (@h IS NULL OR n.LastCheckAt IS NULL OR n.LastCheckAt < UTC_TIMESTAMP() - INTERVAL @h HOUR) ORDER BY n.LastCheckAt",
+        new { h = notCheckedForHours }, MapNumber);
+
     private static WaNumber MapNumber(DbDataReader r) => new()
     {
         Id = r.Int("Id"), OrganizationId = r.Int("OrganizationId"), GymId = r.Int("GymId"), GymName = r.Str("GymName")!,
         DisplayPhone = r.Str("DisplayPhone")!, DisplayName = r.Str("DisplayName"), PhoneNumberId = r.Str("PhoneNumberId"), WabaId = r.Str("WabaId"),
         AccessTokenEnc = r.Str("AccessTokenEnc"), IsSimulated = r.Bool("IsSimulated"), Status = r.Str("Status")!, QualityRating = r.Str("QualityRating"),
-        MessagingLimit = r.Str("MessagingLimit"), LastError = r.Str("LastError"), LastCheckAt = r.Date("LastCheckAt")
+        MessagingLimit = r.Str("MessagingLimit"), LastError = r.Str("LastError"), LastCheckAt = r.Date("LastCheckAt"), VerifiedAt = r.Date("VerifiedAt")
     };
 
     public async Task<int> SaveNumberAsync(WaNumber n)
@@ -80,14 +89,17 @@ public sealed class WaRepo
                 @"INSERT INTO WaNumbers (OrganizationId, GymId, DisplayPhone, DisplayName, PhoneNumberId, WabaId, AccessTokenEnc, IsSimulated, Status)
                   VALUES (@OrganizationId, @GymId, @DisplayPhone, @DisplayName, @PhoneNumberId, @WabaId, @AccessTokenEnc, @IsSimulated, @Status); SELECT LAST_INSERT_ID();", args);
         await _db.ExecuteAsync(
-            @"UPDATE WaNumbers SET DisplayPhone=@DisplayPhone, DisplayName=@DisplayName, PhoneNumberId=@PhoneNumberId, WabaId=@WabaId,
+            // Se cambia l'identificativo del numero, la verifica di Meta va rifatta (VerifiedAt prima di PhoneNumberId: MySQL assegna in ordine).
+            @"UPDATE WaNumbers SET VerifiedAt=CASE WHEN PhoneNumberId <=> @PhoneNumberId AND IsSimulated=@IsSimulated THEN VerifiedAt ELSE NULL END,
+              DisplayPhone=@DisplayPhone, DisplayName=@DisplayName, PhoneNumberId=@PhoneNumberId, WabaId=@WabaId,
               AccessTokenEnc=@AccessTokenEnc, IsSimulated=@IsSimulated, Status=@Status, LastError=NULL WHERE Id=@Id AND GymId=@GymId", args);
         return n.Id;
     }
 
     public Task SetNumberCheckAsync(int id, string status, string? quality, string? limit, string? displayName, string? error) => _db.ExecuteAsync(
         @"UPDATE WaNumbers SET Status=@status, QualityRating=COALESCE(@quality, QualityRating), MessagingLimit=COALESCE(@limit, MessagingLimit),
-          DisplayName=COALESCE(@displayName, DisplayName), LastError=@error, LastCheckAt=UTC_TIMESTAMP() WHERE Id=@id",
+          DisplayName=COALESCE(@displayName, DisplayName), LastError=@error, LastCheckAt=UTC_TIMESTAMP(),
+          VerifiedAt=CASE WHEN @status='attivo' THEN COALESCE(VerifiedAt, UTC_TIMESTAMP()) ELSE VerifiedAt END WHERE Id=@id",
         new { id, status, quality, limit, displayName, error });
 
     // ---------- Template ----------
@@ -117,6 +129,11 @@ public sealed class WaRepo
         new { t.OrganizationId, t.GymId, t.WaNumberId, t.GoalModelId, t.Name, t.Language, t.Category, t.Body, Vars = JsonSerializer.Serialize(t.Variables),
               t.Status, t.MetaTemplateId, t.RejectReason, userId });
 
+    /// <summary>Si elimina solo un template mai approvato e non usato da nessuna campagna.</summary>
+    public Task<int> DeleteTemplateAsync(int id, int gymId) => _db.ExecuteAsync(
+        @"DELETE FROM WaTemplates WHERE Id=@id AND GymId=@gymId AND Status IN ('bozza','errore','rifiutato')
+          AND NOT EXISTS (SELECT 1 FROM Campaigns c WHERE c.TemplateId=WaTemplates.Id)", new { id, gymId });
+
     public Task SetTemplateStatusAsync(int id, string status, string? metaId, string? reason) => _db.ExecuteAsync(
         "UPDATE WaTemplates SET Status=@status, MetaTemplateId=COALESCE(@metaId, MetaTemplateId), RejectReason=@reason WHERE Id=@id",
         new { id, status, metaId, reason });
@@ -129,7 +146,16 @@ public sealed class WaRepo
         _db.ScalarAsync<long>(
             @"INSERT INTO WaMessages (OrganizationId, GymId, WaNumberId, ContactPhone, Direction, Kind, Body, TemplateName, MetaMessageId, Status, Error, SentBy, StatusAt, ConversationId)
               VALUES (@org, @gym, @num, @phone, @direction, @kind, @body, @template, @metaId, @status, @error, @userId, UTC_TIMESTAMP(), @conversationId); SELECT LAST_INSERT_ID();",
-            new { org = n.OrganizationId, gym = n.GymId, num = n.Id, phone, direction, kind, body, template, metaId, status, error, userId, conversationId });
+            new { org = n.OrganizationId, gym = n.GymId, num = n.Id, phone, direction, kind = Clip(kind, 20), body, template, metaId, status, error = Clip(error, 500), userId, conversationId });
+
+    public static string? Clip(string? s, int max) => s is null || s.Length <= max ? s : s[..max];
+
+    public Task DeleteMessageAsync(long id) => _db.ExecuteAsync("DELETE FROM WaMessages WHERE Id=@id", new { id });
+
+    /// <summary>A chi era diretto un messaggio inviato (per collegare gli errori di consegna al cliente e alla campagna).</summary>
+    public Task<SentMsg?> SentMessageAsync(string metaId) => _db.FirstAsync(
+        "SELECT Id, OrganizationId, GymId, ContactPhone, ConversationId, Kind FROM WaMessages WHERE MetaMessageId=@metaId AND Direction='out'", new { metaId },
+        r => new SentMsg(r.GetInt64(0), r.GetInt32(1), r.GetInt32(2), r.GetString(3), r.IsDBNull(4) ? null : r.GetInt64(4), r.GetString(5)));
 
     public Task SetMessageConversationAsync(long messageId, long conversationId) =>
         _db.ExecuteAsync("UPDATE WaMessages SET ConversationId=@conversationId WHERE Id=@messageId", new { messageId, conversationId });
@@ -155,5 +181,16 @@ public sealed class WaRepo
         _db.ScalarAsync<long>("INSERT INTO WaWebhookEvents (Payload) VALUES (@payload); SELECT LAST_INSERT_ID();", new { payload });
 
     public Task MarkEventAsync(long id, string? error) =>
-        _db.ExecuteAsync("UPDATE WaWebhookEvents SET Processed=@ok, Error=@error WHERE Id=@id", new { id, ok = error is null, error });
+        _db.ExecuteAsync("UPDATE WaWebhookEvents SET Processed=@ok, Error=@error WHERE Id=@id", new { id, ok = error is null, error = Clip(error, 500) });
+
+    /// <summary>Avvisi non elaborati per un problema momentaneo (database occupato, errore imprevisto): si riprovano fino a 5 volte nelle 24 ore.</summary>
+    public async Task<List<(long Id, string Payload)>> RetryEventsAsync(int limit)
+    {
+        var rows = await _db.QueryAsync(
+            @"SELECT Id, Payload FROM WaWebhookEvents WHERE Processed=0 AND Error IS NOT NULL AND Attempts < 5
+                AND ReceivedAt > UTC_TIMESTAMP() - INTERVAL 1 DAY AND ReceivedAt < UTC_TIMESTAMP() - INTERVAL 1 MINUTE ORDER BY Id LIMIT @limit",
+            new { limit }, r => (r.GetInt64(0), r.GetString(1)));
+        foreach (var (id, _) in rows) await _db.ExecuteAsync("UPDATE WaWebhookEvents SET Attempts=Attempts+1 WHERE Id=@id", new { id });
+        return rows;
+    }
 }

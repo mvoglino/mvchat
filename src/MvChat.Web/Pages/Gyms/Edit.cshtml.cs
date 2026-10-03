@@ -63,7 +63,7 @@ public class EditModel : PageModel
         decimal? feeValue = null;
         if (Me.IsSuperAdmin && !string.IsNullOrWhiteSpace(Fee))
         {
-            if (decimal.TryParse(Fee.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var fv) && fv >= 0 && fv < 100000) feeValue = Math.Round(fv, 2);
+            if (MvChat.Web.Infrastructure.Money.Parse(Fee) is decimal fv && fv >= 0 && fv < 100000) feeValue = Math.Round(fv, 2);
             else ModelState.AddModelError("Fee", "Scrivi il canone in euro, ad esempio 49,90.");
         }
         if (Me.IsSuperAdmin && FeeFrom is DateTime ff && FeeTo is DateTime ft && ft < ff) ModelState.AddModelError("FeeTo", "La fine dell'abbonamento è prima dell'inizio.");

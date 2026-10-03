@@ -274,11 +274,11 @@ public sealed class Repos
     }
 
     public Task<UserAuth?> UserForLoginAsync(string email) => _db.FirstAsync(
-        @"SELECT u.*, COALESCE(o.IsActive, 1) AS OrgActive FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId WHERE u.Email=@email",
+        @"SELECT u.*, (COALESCE(o.IsActive, 1)=1 AND COALESCE(g.IsActive, 1)=1) AS OrgActive FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId LEFT JOIN Gyms g ON g.Id=u.GymId WHERE u.Email=@email",
         new { email }, MapAuth);
 
     public Task<UserAuth?> UserForLoginAsync(int id) => _db.FirstAsync(
-        @"SELECT u.*, COALESCE(o.IsActive, 1) AS OrgActive FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId WHERE u.Id=@id",
+        @"SELECT u.*, (COALESCE(o.IsActive, 1)=1 AND COALESCE(g.IsActive, 1)=1) AS OrgActive FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId LEFT JOIN Gyms g ON g.Id=u.GymId WHERE u.Id=@id",
         new { id }, MapAuth);
 
     private static UserAuth MapAuth(DbDataReader r) => new(

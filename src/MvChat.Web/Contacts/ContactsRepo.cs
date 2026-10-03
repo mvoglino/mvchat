@@ -204,10 +204,14 @@ public sealed class ContactsRepo
         r => new OptOut(r.GetInt64(r.GetOrdinal("Id")), r.Int("OrganizationId"), r.Str("OrgName")!, r.Str("GymName"), r.Str("Phone")!,
             r.Str("Reason"), r.Str("Source")!, r.Date("CreatedAt")!.Value));
 
+    /// <summary>Nome del cliente se compare in una lista dell'attività (per i messaggi arrivati fuori da una campagna).</summary>
+    public Task<string?> NameForPhoneAsync(int gymId, string phone) => _db.ScalarAsync<string>(
+        "SELECT TRIM(CONCAT(FirstName, ' ', COALESCE(LastName, ''))) FROM Contacts WHERE GymId=@gymId AND Phone=@phone ORDER BY Id DESC LIMIT 1", new { gymId, phone });
+
     public Task<int> AddOptOutAsync(int orgId, int? gymId, string phone, string? reason, string source, int? userId) => _db.ExecuteAsync(
         @"INSERT INTO OptOuts (OrganizationId, GymId, Phone, Reason, Source, CreatedBy) VALUES (@orgId, @gymId, @phone, @reason, @source, @userId)
           ON DUPLICATE KEY UPDATE Reason=COALESCE(@reason, Reason)",
-        new { orgId, gymId, phone, reason, source, userId });
+        new { orgId, gymId, phone, reason = reason is { Length: > 200 } ? reason[..200] : reason, source, userId });
 
     public async Task<bool> IsOptedOutAsync(int orgId, string phone) =>
         await _db.ScalarAsync<long>("SELECT COUNT(*) FROM OptOuts WHERE OrganizationId=@orgId AND Phone=@phone", new { orgId, phone }) > 0;

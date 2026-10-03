@@ -59,12 +59,12 @@ public sealed class ReportRepo
 
     // I primi messaggi (template) sono quelli che Meta fattura; le conversazioni di prova non contano nei risultati.
     private const string Metrics = @"
-        (SELECT COUNT(*) FROM WaMessages m LEFT JOIN WaTemplates t ON t.WaNumberId=m.WaNumberId AND t.Name=m.TemplateName
+        (SELECT COUNT(*) FROM WaMessages m
            WHERE {M} AND m.Direction='out' AND m.Kind='template' AND m.Status<>'failed' AND m.CreatedAt>=@fromUtc AND m.CreatedAt<@toUtc
-             AND COALESCE(t.Category,'MARKETING')<>'UTILITY') AS SentMarketing,
-        (SELECT COUNT(*) FROM WaMessages m JOIN WaTemplates t ON t.WaNumberId=m.WaNumberId AND t.Name=m.TemplateName
+             AND NOT EXISTS (SELECT 1 FROM WaTemplates t WHERE t.WaNumberId=m.WaNumberId AND t.Name=m.TemplateName AND t.Category='UTILITY')) AS SentMarketing,
+        (SELECT COUNT(*) FROM WaMessages m
            WHERE {M} AND m.Direction='out' AND m.Kind='template' AND m.Status<>'failed' AND m.CreatedAt>=@fromUtc AND m.CreatedAt<@toUtc
-             AND t.Category='UTILITY') AS SentUtility,
+             AND EXISTS (SELECT 1 FROM WaTemplates t WHERE t.WaNumberId=m.WaNumberId AND t.Name=m.TemplateName AND t.Category='UTILITY')) AS SentUtility,
         (SELECT COUNT(*) FROM WaMessages m WHERE {M} AND m.Direction='out' AND m.Kind='template' AND m.Status IN ('delivered','read')
            AND m.CreatedAt>=@fromUtc AND m.CreatedAt<@toUtc) AS Delivered,
         (SELECT COUNT(*) FROM WaMessages m WHERE {M} AND m.Direction='out' AND m.Kind='template' AND m.Status='read'

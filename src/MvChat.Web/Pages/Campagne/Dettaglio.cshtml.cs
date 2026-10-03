@@ -122,6 +122,18 @@ public class DettaglioModel : PageModel
         return Back();
     }
 
+    /// <summary>Rimette in coda i destinatari a cui l'invio non è riuscito (es. Meta non raggiungibile o numero da correggere).</summary>
+    public async Task<IActionResult> OnPostRequeueAsync(int id)
+    {
+        if (!await LoadAsync(id)) return NotFound();
+        if (C.Status is not ("in_corso" or "in_pausa" or "completata")) return Back();
+        var n = await _repo.RequeueErrorsAsync(id);
+        await Audit("campaign.requeue", $"{n} destinatari");
+        TempData["Ok"] = n == 0 ? "Nessun destinatario da riprovare: quelli in errore avevano già ricevuto il messaggio o l'invio era incerto."
+            : $"{n} destinatari rimessi in coda." + (C.Status == "in_pausa" ? " Riprendi la campagna per inviare." : "");
+        return Back();
+    }
+
     /// <summary>Non serve aspettare il giro automatico: invia subito un gruppo di messaggi.</summary>
     public async Task<IActionResult> OnPostRunAsync(int id)
     {

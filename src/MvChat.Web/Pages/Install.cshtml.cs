@@ -19,6 +19,8 @@ public class InstallModel : PageModel
     public string? WriteError { get; private set; }
     public string? DbError { get; private set; }
     public bool Done { get; private set; }
+    /// <summary>Reinstallazione su un database già usato: l'amministratore esistente resta, quello scritto nel modulo no.</summary>
+    public bool ExistingAdmin { get; private set; }
     public string TickUrl { get; private set; } = "";
     public List<string> Applied { get; private set; } = new();
 
@@ -65,6 +67,7 @@ public class InstallModel : PageModel
             long admins;
             await using (var q = Db.Command(cn, "SELECT COUNT(*) FROM Users WHERE Role='superadmin'", null))
                 admins = Convert.ToInt64(await q.ExecuteScalarAsync());
+            ExistingAdmin = admins > 0;
             if (admins == 0)
             {
                 await using var ins = Db.Command(cn,

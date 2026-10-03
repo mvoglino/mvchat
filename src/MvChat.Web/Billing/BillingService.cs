@@ -64,7 +64,7 @@ public sealed class BillingService
         return closed.Values.OrderBy(x => x.RecipientName).ToList();
     }
 
-    private sealed record GymRow(int Id, string Name, int OrgId, string OrgName, bool IsGroup, decimal? Fee, DateTime? From, DateTime? To,
+    private sealed record GymRow(int Id, bool Active, string Name, int OrgId, string OrgName, bool IsGroup, decimal? Fee, DateTime? From, DateTime? To,
         string? OLegal, string? OVat, string? OAddr, string? OCity, string? OEmail, string? GLegal, string? GVat, string? GAddr, string? GCity, string? GEmail,
         decimal AiUsd, int AiCalls);
 
@@ -74,14 +74,14 @@ public sealed class BillingService
         var last = first.AddMonths(1).AddDays(-1);
         var fromUtc = first.FromRome(); var toUtc = first.AddMonths(1).FromRome();
         var rows = await _db.QueryAsync(
-            $@"SELECT g.Id, g.Name, o.Id AS OrgId, o.Name AS OrgName, o.IsGroup, g.MonthlyFeeEur, g.FeeStartsOn, g.FeeEndsOn,
+            $@"SELECT g.Id, g.IsActive AS GActive, g.Name, o.Id AS OrgId, o.Name AS OrgName, o.IsGroup, g.MonthlyFeeEur, g.FeeStartsOn, g.FeeEndsOn,
                       o.LegalName AS OLegal, o.VatNumber AS OVat, o.Address AS OAddr, o.City AS OCity, COALESCE(o.BillingEmail, o.ContactEmail) AS OEmail,
                       g.LegalName AS GLegal, g.VatNumber AS GVat, g.Address AS GAddr, g.City AS GCity, g.ContactEmail AS GEmail,
                       (SELECT COALESCE(SUM(a.CostUsd),0) FROM AiUsage a WHERE a.GymId=g.Id AND a.CreatedAt>=@fromUtc AND a.CreatedAt<@toUtc) AS AiUsd,
                       (SELECT COUNT(*) FROM AiUsage a WHERE a.GymId=g.Id AND a.Ok=1 AND a.CreatedAt>=@fromUtc AND a.CreatedAt<@toUtc) AS AiCalls
                FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId WHERE {ScopeWhere} ORDER BY o.Name, g.Name",
             new { All = s.IsSuperAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, IsOrg = s.IsOrgAdmin ? 1 : 0, IsMgr = s.IsManager ? 1 : 0, fromUtc, toUtc },
-            r => new GymRow(r.Int("Id"), r.Str("Name")!, r.Int("OrgId"), r.Str("OrgName")!, r.Bool("IsGroup"),
+            r => new GymRow(r.Int("Id"), r.Bool("GActive"), r.Str("Name")!, r.Int("OrgId"), r.Str("OrgName")!, r.Bool("IsGroup"),
                 r.IsDBNull(r.GetOrdinal("MonthlyFeeEur")) ? null : r.GetDecimal(r.GetOrdinal("MonthlyFeeEur")), r.Date("FeeStartsOn"), r.Date("FeeEndsOn"),
                 r.Str("OLegal"), r.Str("OVat"), r.Str("OAddr"), r.Str("OCity"), r.Str("OEmail"), r.Str("GLegal"), r.Str("GVat"), r.Str("GAddr"), r.Str("GCity"), r.Str("GEmail"),
                 Convert.ToDecimal(r.GetValue(r.GetOrdinal("AiUsd"))), Convert.ToInt32(r.GetValue(r.GetOrdinal("AiCalls")))));
@@ -104,13 +104,14 @@ public sealed class BillingService
             };
             foreach (var g in grp)
             {
-                var subscribed = g.From is DateTime from && from.Date <= last && (g.To is null || g.To.Value.Date >= first);
+                // Canone: attività attiva e abbonamento valido in almeno un giorno del mese. Il consumo AI si fattura comunque.
+                var subscribed = g.Active && g.From is DateTime from && from.Date <= last && (g.To is null || g.To.Value.Date >= first);
                 var fee = g.Fee ?? b.DefaultMonthlyFeeEur;
                 if (subscribed && fee > 0)
-                    st.Lines.Add(new(g.Id, g.Name, "canone", $"Abbonamento mvchat · {MonthName(month)}", Math.Round(fee, 2)));
+                    st.Lines.Add(new(g.Id, g.Name, "canone", $"Abbonamento mvchat · {MonthName(month)}", Math.Round(fee, 2, MidpointRounding.AwayFromZero)));
                 if (g.AiUsd > 0)
                 {
-                    var eur = Math.Round(g.AiUsd * b.UsdToEur * (1 + b.AiMarkupPct / 100m), 2);
+                    var eur = Math.Round(g.AiUsd * b.UsdToEur * (1 + b.AiMarkupPct / 100m), 2, MidpointRounding.AwayFromZero);
                     if (eur > 0)
                         st.Lines.Add(new(g.Id, g.Name, "ai", $"Assistente AI · {g.AiCalls} risposte", eur, g.AiCalls, Math.Round(g.AiUsd, 4)));
                 }
@@ -125,7 +126,7 @@ public sealed class BillingService
     private static void Totals(Statement st)
     {
         st.Subtotal = st.Lines.Sum(l => l.Amount);
-        st.VatAmount = Math.Round(st.Subtotal * st.VatPct / 100m, 2);
+        st.VatAmount = Math.Round(st.Subtotal * st.VatPct / 100m, 2, MidpointRounding.AwayFromZero); // arrotondamento commerciale (0,005 → 0,01)
         st.Total = st.Subtotal + st.VatAmount;
     }
 
@@ -148,7 +149,7 @@ public sealed class BillingService
         var open = (await MonthAsync(s, month)).Where(x => !x.Closed).ToList();
         foreach (var st in open)
             await _db.ExecuteAsync(
-                @"INSERT INTO BillingStatements (Month, OrganizationId, RecipientName, LegalName, VatNumber, Address, Email, LinesJson, Subtotal, VatPct, VatAmount, Total, UsdToEur, AiMarkupPct, ClosedBy)
+                @"INSERT IGNORE INTO BillingStatements (Month, OrganizationId, RecipientName, LegalName, VatNumber, Address, Email, LinesJson, Subtotal, VatPct, VatAmount, Total, UsdToEur, AiMarkupPct, ClosedBy)
                   VALUES (@Month, @OrganizationId, @RecipientName, @LegalName, @VatNumber, @Address, @Email, @LinesJson, @Subtotal, @VatPct, @VatAmount, @Total, @UsdToEur, @AiMarkupPct, @userId)",
                 new { st.Month, st.OrganizationId, st.RecipientName, st.LegalName, st.VatNumber, st.Address, st.Email, LinesJson = JsonSerializer.Serialize(st.Lines),
                       st.Subtotal, st.VatPct, st.VatAmount, st.Total, st.UsdToEur, st.AiMarkupPct, userId });

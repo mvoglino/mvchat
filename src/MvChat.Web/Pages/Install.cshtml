@@ -5,11 +5,18 @@
 @if (Model.Done)
 {
     <h1>Installazione completata</h1>
-    <p>Il database è pronto e l'amministratore è stato creato.</p>
+    @if (Model.ExistingAdmin)
+    {
+        <div class="note warn">Il database conteneva già i dati di mvchat: <b>l'amministratore che hai scritto non è stato creato</b>. Accedi con l'amministratore MVitalia già esistente. Le impostazioni di Meta e dell'AI vanno reinserite.</div>
+    }
+    else
+    {
+        <p>Il database è pronto e l'amministratore è stato creato.</p>
+    }
     <div class="note">
         <b>Ultimo passo nel pannello Aruba:</b> crea un'operazione pianificata che richiami ogni 5 minuti (o meno, se il pannello lo permette) questo indirizzo:
         <br><code>@Model.TickUrl</code>
-        <br>Conservalo: contiene una chiave segreta. Servirà dal Passo 6 per far partire gli invii in coda.
+        <br>Conservalo: contiene una chiave segreta. Fa partire gli invii delle campagne, le risposte rimaste in sospeso e la pulizia dei dati vecchi.
     </div>
     @if (Model.Applied.Count > 0)
     {

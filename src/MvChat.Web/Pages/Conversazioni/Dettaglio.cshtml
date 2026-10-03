@@ -16,7 +16,7 @@
 <section class="panel">
     <div class="panel-h"><h2>Chat</h2><span class="muted">@c.AiReplies risposte dell'assistente@(c.AssignedName is null ? "" : " · in carico a " + c.AssignedName)</span><span style="flex:1"></span>
         @if (c.Status == "ai") { <form method="post" asp-page-handler="Take"><button class="btn sm" type="submit">Prendi in mano</button></form> }
-        @if (c.Status == "operatore" && c.AssignedUserId != Model.Me.UserId) { <form method="post" asp-page-handler="Take"><button class="btn primary sm" type="submit">Prendi in carico</button></form> }
+        @if (c.Status == "operatore" && c.AssignedUserId != Model.Me.UserId && (c.AssignedUserId is null || Model.Me.CanManageUsers)) { <form method="post" asp-page-handler="Take"><button class="btn primary sm" type="submit">Prendi in carico</button></form> }
         @if (c.AssignedUserId == Model.Me.UserId && c.Status != "chiusa") { <form method="post" asp-page-handler="Release"><button class="btn sm" type="submit">Lascia ai colleghi</button></form> }
         @if (c.Status != "ai" && c.Outcome != Outcomes.OptOut) { <form method="post" asp-page-handler="GiveBack"><button class="btn sm" type="submit">Restituisci all'assistente</button></form> }
         @if (Model.Colleagues.Count > 0 && c.Status != "chiusa")

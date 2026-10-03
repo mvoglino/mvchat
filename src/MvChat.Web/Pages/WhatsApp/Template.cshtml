@@ -16,7 +16,10 @@ else
     @foreach (var t in Model.Items)
     {
         <tr><td><code>@t.Name</code></td><td style="white-space:pre-wrap;max-width:460px">@t.Body</td><td>@(t.Category == "UTILITY" ? "Servizio" : "Marketing")</td>
-            <td><span class="chip @(t.IsApproved ? "good" : t.Status is "rifiutato" or "errore" ? "bad" : "")">@t.Status</span>@if (t.RejectReason is not null) {<div class="muted">@t.RejectReason</div>}</td></tr>
+            <td><span class="chip @(t.IsApproved ? "good" : t.Status is "rifiutato" or "errore" ? "bad" : "")">@t.Status</span>@if (t.RejectReason is not null) {<div class="muted">@t.RejectReason</div>}
+                @if (t.Status == "errore") { <form method="post" asp-page-handler="Resubmit" style="margin-top:6px"><input type="hidden" name="TemplateId" value="@t.Id"><button class="btn sm" type="submit">Rimanda a Meta</button></form> }
+                @if (t.Status is "errore" or "rifiutato" or "bozza") { <form method="post" asp-page-handler="Delete" style="margin-top:6px" onsubmit="return confirm('Eliminare il template?')"><input type="hidden" name="TemplateId" value="@t.Id"><button class="btn sm" type="submit">Elimina</button></form> }
+            </td></tr>
     }
     @if (Model.Items.Count == 0) { <tr><td colspan="4" class="muted">Nessun template ancora.</td></tr> }
     </tbody>

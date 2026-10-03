@@ -17,6 +17,11 @@ public static class Time
         TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), Rome);
 
     /// <summary>Un orario scritto in pagina (ora italiana) convertito in UTC per il database.</summary>
-    public static DateTime FromRome(this DateTime local) =>
-        TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), Rome);
+    public static DateTime FromRome(this DateTime local)
+    {
+        local = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+        // L'ora che "non esiste" quando a fine marzo si spostano le lancette (02:00-03:00) vale come l'ora dopo.
+        if (Rome.IsInvalidTime(local)) local = local.AddHours(1);
+        return TimeZoneInfo.ConvertTimeToUtc(local, Rome);
+    }
 }

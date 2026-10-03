@@ -51,14 +51,14 @@ public sealed class ArchiveRepo
     }
 
     public Task<List<ArchiveRow>> ListAsync(Scope s, ArchiveFilter f, int limit) => _db.QueryAsync(
-        @"SELECT c.Id, g.Name AS GymName, c.ContactName, c.ContactPhone, m.Name AS GoalName, k.Name AS CampaignName, c.IsTest, c.HumanInvolved,
+        @"SELECT c.Id, g.Name AS GymName, c.ContactName, c.ContactPhone, COALESCE(m.Name, 'Messaggio spontaneo') AS GoalName, k.Name AS CampaignName, c.IsTest, c.HumanInvolved,
                  c.Status, c.Outcome, c.CreatedAt, c.LastMessageAt,
                  (SELECT COUNT(*) FROM WaMessages w WHERE w.ConversationId=c.Id AND w.Direction='in') AS CustomerMsgs,
                  (SELECT COUNT(*) FROM WaMessages w WHERE w.ConversationId=c.Id AND w.Direction='out' AND w.Kind='text' AND w.SentBy IS NULL) AS AiMsgs,
                  (SELECT COUNT(*) FROM WaMessages w WHERE w.ConversationId=c.Id AND w.Direction='out' AND w.Kind='text' AND w.SentBy IS NOT NULL) AS HumanMsgs,
                  (SELECT GROUP_CONCAT(DISTINCT u.FullName ORDER BY u.FullName SEPARATOR ', ') FROM WaMessages w JOIN Users u ON u.Id=w.SentBy
                     WHERE w.ConversationId=c.Id AND w.Direction='out' AND w.Kind='text') AS Operators
-          FROM Conversations c JOIN Gyms g ON g.Id=c.GymId JOIN GoalModels m ON m.Id=c.GoalModelId LEFT JOIN Campaigns k ON k.Id=c.CampaignId"
+          FROM Conversations c JOIN Gyms g ON g.Id=c.GymId LEFT JOIN GoalModels m ON m.Id=c.GoalModelId LEFT JOIN Campaigns k ON k.Id=c.CampaignId"
         + Where + @" AND (@Kind='' OR (@Kind='ai' AND c.HumanInvolved=0) OR (@Kind='operatore' AND c.HumanInvolved=1))
           ORDER BY c.CreatedAt DESC LIMIT @limit",
         Args(s, f, limit),

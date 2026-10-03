@@ -28,8 +28,14 @@ public sealed class CampaignSender
 
     // Errori di Meta che riguardano il numero o l'account: inutile continuare, la campagna va in pausa.
     private static readonly string[] AccountErrors = { "codice 190)", "codice 10)", "codice 200)", "codice 131031", "codice 132001", "codice 132015", "codice 132016", "codice 368" };
+    // Problemi del template (parametri, testo, regole Meta): ogni destinatario fallirebbe allo stesso modo, quindi pausa.
+    private static readonly string[] TemplateErrors = { "codice 132000", "codice 132005", "codice 132007", "codice 132012", "codice 132068", "codice 132069" };
     // Troppi messaggi in poco tempo: si riprova al giro successivo.
     private static readonly string[] SlowDownErrors = { "codice 130429", "codice 131048", "codice 131056", "codice 80007", "codice 4)" };
+    // Meta momentaneamente non disponibile: il destinatario torna in coda (massimo 3 tentativi).
+    private static readonly string[] TransientErrors = { "Meta non raggiungibile", "Meta ha risposto 5", "codice 1)", "codice 2)", "codice 131000", "codice 131016", "codice 133004" };
+    /// <summary>Dopo tanti errori di fila nello stesso giro qualcosa non va: meglio fermarsi e far controllare.</summary>
+    public const int MaxErrorsInARow = 5;
 
     /// <param name="waitForTurn">Da una pagina (bottone "invia adesso") si aspetta che finisca il giro automatico in corso, invece di rinunciare.</param>
     public async Task<RunSummary> RunAsync(TimeSpan budget, int? onlyCampaignId = null, bool waitForTurn = false)
@@ -112,7 +118,7 @@ public sealed class CampaignSender
         if (room == 0) { await _repo.NoteRunAsync(id, limitNote); return (0, 0, 0, limitNote); }
 
         var batch = await _repo.ClaimAsync(id, room);
-        int sent = 0, skipped = 0, errors = 0;
+        int sent = 0, skipped = 0, errors = 0, inARow = 0, done = 0;
         var pending = batch.Select(b => b.Id).ToHashSet();
         string? runNote = null;
         try
@@ -120,6 +126,8 @@ public sealed class CampaignSender
             foreach (var r in batch)
             {
                 if (DateTime.UtcNow >= deadline) { runNote = "giro interrotto per tempo: continua al prossimo"; break; }
+                // Se nel frattempo qualcuno ha messo in pausa o annullato la campagna, ci si ferma subito.
+                if (++done % 5 == 0 && await _repo.StatusAsync(id) != "in_corso") { runNote = "giro fermato: la campagna non è più in invio"; break; }
                 pending.Remove(r.Id);
                 if (await _contacts.IsOptedOutAsync(c.OrganizationId, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "nella lista STOP", null); skipped++; continue; }
                 if (await _repo.HasOpenConversationAsync(number.Id, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "ha già una conversazione aperta con l'attività", null); skipped++; continue; }
@@ -127,8 +135,12 @@ public sealed class CampaignSender
                 var values = new Dictionary<string, string?>
                 {
                     ["nome"] = r.FirstName, ["cognome"] = r.LastName, ["abbonamento"] = r.Membership,
-                    ["scadenza"] = r.ExpiresOn?.ToString("dd/MM/yyyy"), ["palestra"] = c.GymName, ["offerta"] = offer?.Title
+                    ["scadenza"] = r.ExpiresOn?.ToString("dd/MM/yyyy"), ["palestra"] = c.GymName, ["sede"] = c.GymName, ["offerta"] = offer?.Title
                 };
+                // Un dato mancante non si sostituisce con un trattino: il cliente riceverebbe un messaggio strano.
+                var missing = template!.Variables.FirstOrDefault(v => !TemplateText.TryValue(values, v, out var x) || string.IsNullOrWhiteSpace(x));
+                if (missing is not null) { await _repo.MarkAsync(r.Id, "saltato", $"manca il dato «{missing}» richiesto dal primo messaggio", null); skipped++; continue; }
+
                 var res = await _send.SendTemplateAsync(number, template!, r.Phone, values, null);
                 if (!res.Ok)
                 {
@@ -139,11 +151,29 @@ public sealed class CampaignSender
                         await Pause(id, "Meta ha rifiutato l'invio: " + err);
                         return (sent, skipped, errors, "pausa: " + err);
                     }
+                    if (TemplateErrors.Any(err.Contains))
+                    {
+                        pending.Add(r.Id);
+                        await Pause(id, "il template del primo messaggio ha un problema per Meta: " + err);
+                        return (sent, skipped, errors, "pausa: " + err);
+                    }
                     if (SlowDownErrors.Any(err.Contains)) { pending.Add(r.Id); runNote = "Meta chiede di rallentare: si continua al prossimo giro"; break; }
-                    await _repo.MarkAsync(r.Id, "errore", err.Length > 290 ? err[..290] : err, null);
+                    if (TransientErrors.Any(err.Contains))
+                    {
+                        await _repo.RetryLaterAsync(r.Id, err);
+                        runNote = "Meta momentaneamente non disponibile: si riprova al prossimo giro";
+                        break;
+                    }
+                    await _repo.MarkAsync(r.Id, "errore", err, null);
                     errors++;
+                    if (++inARow >= MaxErrorsInARow)
+                    {
+                        await Pause(id, $"{MaxErrorsInARow} errori di fila nell'invio (l'ultimo: {err}): controlla template e numero prima di riprendere");
+                        return (sent, skipped, errors, "pausa: troppi errori di fila");
+                    }
                     continue;
                 }
+                inARow = 0;
                 var conv = new Conversation
                 {
                     OrganizationId = c.OrganizationId, GymId = c.GymId, WaNumberId = number.Id, ContactPhone = r.Phone, ContactName = r.FirstName,

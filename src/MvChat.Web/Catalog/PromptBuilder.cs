@@ -36,13 +36,20 @@ public static class PromptBuilder
             .Replace("{{palestra}}", gymName)
             .Replace("{{offerta}}", offer?.Title ?? "");
 
+    /// <summary>Come si presenta l'assistente: «l'assistente virtuale» oppure «Sara, l'assistente virtuale».</summary>
+    public static string Intro(string? assistantName)
+    {
+        var n = string.IsNullOrWhiteSpace(assistantName) ? "assistente virtuale" : assistantName.Trim();
+        return n.Contains("assistente", StringComparison.OrdinalIgnoreCase) ? "l'" + n : n + ", l'assistente virtuale";
+    }
+
     public static string Build(GoalModel model, string gymName, GymProfile p, Offer? offer, Recipient r, DateTime today, OrgInfo? org = null)
     {
         var lei = p.Formality == "lei";
         var sector = org?.Sector ?? Sectors.Get("palestra");
         var membership = sector.Membership;
         var sb = new StringBuilder();
-        sb.AppendLine($"Sei l'{p.AssistantName} di {gymName} ({sector.Label.ToLowerInvariant()}) e scrivi su WhatsApp a un {sector.Customer}.");
+        sb.AppendLine($"Sei {Intro(p.AssistantName)} di {gymName} ({sector.Label.ToLowerInvariant()}) e scrivi su WhatsApp a un {sector.Customer}.");
         sb.AppendLine($"Oggi è {Day(today)}. Scrivi in italiano, {(lei ? "dando del lei" : "dando del tu")}, con tono cordiale e diretto, come una persona dello staff.");
         sb.AppendLine();
 
@@ -101,7 +108,7 @@ public static class PromptBuilder
         sb.AppendLine();
 
         sb.AppendLine("## Regole che valgono sempre");
-        sb.AppendLine($"1. Nella prima risposta presentati come {p.AssistantName} di {gymName}: il cliente deve sapere che sta scrivendo con un sistema automatico e che può chiedere di parlare con una persona.");
+        sb.AppendLine($"1. Nella prima risposta presentati come {Intro(p.AssistantName)} di {gymName}: il cliente deve sapere che sta scrivendo con un sistema automatico e che può chiedere di parlare con una persona.");
         sb.AppendLine("2. Usa solo le informazioni scritte qui sopra. Non inventare prezzi, orari, servizi, sconti o promozioni. Se non sai una cosa, dillo e proponi di farlo ricontattare da una persona dello staff.");
         sb.AppendLine("3. L'unico prezzo che puoi citare è quello dell'offerta.");
         sb.AppendLine("4. Messaggi brevi: al massimo tre frasi, niente elenchi lunghi.");

@@ -145,7 +145,33 @@ public sealed class CampaignRepo
              StartedAt=CASE WHEN @status IN ('programmata','in_corso') AND StartedAt IS NULL THEN UTC_TIMESTAMP() ELSE StartedAt END,
              CompletedAt=CASE WHEN @status IN ('completata','annullata') THEN UTC_TIMESTAMP() ELSE CompletedAt END
            WHERE Id=@id AND Status IN ({string.Join(",", from.Select(f => "'" + f + "'"))})",
-        new { id, status, reason });
+        new { id, status, reason = WhatsApp.WaRepo.Clip(reason, 300) });
+
+    /// <summary>Stato attuale della campagna (per fermare un giro se nel frattempo è stata messa in pausa o annullata).</summary>
+    public Task<string?> StatusAsync(int id) => _db.ScalarAsync<string>("SELECT Status FROM Campaigns WHERE Id=@id", new { id });
+
+    /// <summary>Errore momentaneo di Meta: il destinatario torna in coda; dopo 3 tentativi resta in errore.</summary>
+    public Task RetryLaterAsync(long id, string reason) => _db.ExecuteAsync(
+        @"UPDATE CampaignRecipients SET Attempts=Attempts+1, ClaimToken=NULL,
+            Status=CASE WHEN Attempts+1 >= 3 THEN 'errore' ELSE 'in_attesa' END,
+            Reason=CASE WHEN Attempts+1 >= 3 THEN @reason ELSE Reason END WHERE Id=@id",
+        new { id, reason = WhatsApp.WaRepo.Clip(reason, 300) });
+
+    /// <summary>Rimette in coda i destinatari in errore a cui il messaggio non è mai partito. La campagna, se finita, riparte.</summary>
+    public async Task<int> RequeueErrorsAsync(int campaignId)
+    {
+        var n = await _db.ExecuteAsync(
+            @"UPDATE CampaignRecipients SET Status='in_attesa', Reason=NULL, Attempts=0, ClaimToken=NULL WHERE CampaignId=@campaignId AND Status='errore' AND ConversationId IS NULL
+              AND (Reason IS NULL OR (Reason NOT LIKE 'Meta non ha risposto in tempo%' AND Reason NOT LIKE 'invio interrotto%'))",
+            new { campaignId });
+        if (n > 0) await _db.ExecuteAsync("UPDATE Campaigns SET Status='in_corso', CompletedAt=NULL WHERE Id=@campaignId AND Status='completata'", new { campaignId });
+        return n;
+    }
+
+    /// <summary>Il primo messaggio non è stato consegnato (avviso di Meta): il destinatario passa in errore.</summary>
+    public Task MarkUndeliveredAsync(long conversationId, string reason) => _db.ExecuteAsync(
+        "UPDATE CampaignRecipients SET Status='errore', Reason=@reason WHERE ConversationId=@conversationId AND Status='inviato'",
+        new { conversationId, reason = WhatsApp.WaRepo.Clip(reason, 300) });
 
     /// <summary>All'annullamento i destinatari non ancora contattati vengono segnati come saltati.</summary>
     public Task SkipWaitingAsync(int id, string reason) => _db.ExecuteAsync(
@@ -202,7 +228,7 @@ public sealed class CampaignRepo
     public Task MarkAsync(long id, string status, string? reason, long? conversationId) => _db.ExecuteAsync(
         @"UPDATE CampaignRecipients SET Status=@status, Reason=@reason, ConversationId=@conversationId, ClaimToken=NULL,
             SentAt=CASE WHEN @status='inviato' THEN UTC_TIMESTAMP() ELSE SentAt END WHERE Id=@id",
-        new { id, status, reason, conversationId });
+        new { id, status, reason = WhatsApp.WaRepo.Clip(reason, 300), conversationId });
 
     public Task ReleaseAsync(IEnumerable<long> ids)
     {
@@ -228,5 +254,5 @@ public sealed class CampaignRepo
         "SELECT COUNT(*) FROM CampaignRecipients WHERE CampaignId=@campaignId AND Status IN ('in_attesa','in_invio')", new { campaignId });
 
     public Task NoteRunAsync(int id, string? note) => _db.ExecuteAsync(
-        "UPDATE Campaigns SET LastRunAt=UTC_TIMESTAMP(), LastRunNote=@note WHERE Id=@id", new { id, note });
+        "UPDATE Campaigns SET LastRunAt=UTC_TIMESTAMP(), LastRunNote=@note WHERE Id=@id", new { id, note = WhatsApp.WaRepo.Clip(note, 300) });
 }

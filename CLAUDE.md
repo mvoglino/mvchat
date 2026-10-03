@@ -11,7 +11,7 @@ Piattaforma SaaS erogata da MVitalia: campagne WhatsApp per attività di qualsia
 - Database MySQL / MariaDB tramite il pacchetto `MySqlConnector`.
 - Hosting: Aruba Windows condiviso (IIS in-process). Sul server Aruba (verificato ottobre 2026): .NET 9.0.20 e 10.0.12, ASP.NET Core Module V2: niente .NET 8. Niente processi sempre attivi: il lavoro in coda parte da `/jobs/tick?token=…`, richiamato dall'operazione pianificata di Aruba.
 - Configurazione in `App_Data/mvchat.json`, scritta dall'installazione guidata (`/Install`). Mai segreti nel repository.
-- Modifiche al database solo con nuovi script `Data/Schema/NNN_nome.sql` (numerati, mai modificare quelli già rilasciati). Separatore tra istruzioni: riga `GO`. Usare `IF NOT EXISTS` dove possibile: in MySQL le istruzioni DDL non sono transazionali.
+- Modifiche al database solo con nuovi script `Data/Schema/NNN_nome.sql` (numerati, mai modificare quelli già rilasciati). Separatore tra istruzioni: riga `GO`. Usare `IF NOT EXISTS` dove possibile: in MySQL le istruzioni DDL non sono transazionali. Gli script si applicano da soli all'avvio (`Migrator.ApplyAsync` in Program.cs, con `GET_LOCK`); ogni pezzo tra due `GO` eseguito è segnato in `SchemaBatches`, così uno script interrotto riprende dal pezzo mancante. `/health` risponde 503 se il database non è raggiungibile o non aggiornato.
 - Prezzi solo nelle offerte, definiti da ogni sede: la scheda sede non contiene prezzi e l'assistente può citare solo il prezzo dell'offerta collegata.
 - Nessun collegamento al gestionale delle strutture: l'esito di una campagna è quello rilevato nella conversazione.
 - Date e ore salvate in UTC (la connessione imposta time_zone='+00:00'); in pagina si mostrano con `.ToRome()`.
@@ -31,6 +31,14 @@ Piattaforma SaaS erogata da MVitalia: campagne WhatsApp per attività di qualsia
 - Ruoli: `superadmin` (MVitalia), `orgadmin` (amministratore di gruppo), `manager` (amministratore attività), `operator` (operatore).
 - Ogni lettura di dati di lavoro passa da `Scope` (`Security/Scope.cs`) e da `Repos`: il filtro per gruppo/attività sta nella query, non nella pagina.
 - Gruppo e attività di un record si ricavano dalle regole lato server, mai da campi del modulo non verificati.
+
+## Regole emerse dal controllo generale (ottobre 2026)
+- Lista STOP: si aggiorna PRIMA di registrare il messaggio; STOP riconosciuto anche in frasi («non scrivetemi più», `WaService.IsStop`); errore Meta 131050 = cliente in lista STOP. I messaggi di un numero Meta si accettano se è stato verificato almeno una volta (`WaNumbers.VerifiedAt`), anche se poi la chiave scade.
+- Webhook: ogni messaggio lavorato da solo; se fallisce si toglie e l'avviso viene riprovato da /jobs/tick (fino a 5 volte in 24 ore). Reazioni registrate ma senza risposta; foto/vocali/documenti passano alla reception; messaggi fuori campagna aprono una conversazione «Messaggio spontaneo» (`GoalModelId` nullo); un «grazie» non riapre una conversazione chiusa.
+- Assistente: prima di inviare ricontrolla lo stato (operatore/STOP → non invia; nuovo messaggio del cliente → rifà la risposta su tutto); lavoro interrotto ripreso dopo 5 minuti; errore imprevisto → reception; niente risposte libere oltre 24 ore su numeri Meta; la presentazione deve dire «assistente virtuale» (non basta il nome); sconti in % controllati come i prezzi.
+- Campagne: errori momentanei di Meta → destinatario rimesso in coda (max 3 tentativi); errori del template → pausa; 5 errori di fila → pausa; pausa/annullamento fermano anche il giro in corso; dato mancante nel template → destinatario saltato (mai «-»); bottone «Riprova i … in errore».
+- Pulizia dati: a tempo (non blocca /jobs/tick), riprende al giro dopo; nel registro restano le righe `billing.*` e `privacy.*`. Cancellazione su richiesta: anche scarti d'import, registro (numero mascherato) e copie grezze degli avvisi Meta.
+- Accesso: gli utenti di un'attività disattivata non entrano. Fatturazione: niente canone per attività disattivate, arrotondamento commerciale, mese chiudibile solo con ragione sociale e P.IVA.
 
 ## Compilare e provare
 - In questo ambiente NuGet può essere bloccato e c'è solo l'SDK .NET 8: `dotnet build -p:OfflineBuild=true -p:TargetFramework=net8.0` compila senza il driver MySQL (solo controllo sintassi). La build vera su .NET 10 la fa GitHub Actions.

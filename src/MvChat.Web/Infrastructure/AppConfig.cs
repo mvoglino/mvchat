@@ -57,7 +57,7 @@ public sealed class AiSettings
     };
     public AiProviderSettings OpenAi { get; set; } = new()
     {
-        Model = "gpt-5-mini", BaseUrl = "https://api.openai.com"
+        Model = "gpt-5-mini", BaseUrl = "https://api.openai.com", InputPrice = 0.25m, OutputPrice = 2m, CacheReadPrice = 0.025m
     };
     [System.Text.Json.Serialization.JsonIgnore]
     public AiProviderSettings Current => Provider == "openai" ? OpenAi : Anthropic;

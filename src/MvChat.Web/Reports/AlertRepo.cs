@@ -69,11 +69,15 @@ public sealed class AlertRepo
         if (s.IsSuperAdmin)
         {
             var c = _config.Current;
+            if (MvChat.Web.Data.Migrator.LastError is string mErr)
+                list.Add(new("bad", "Aggiornamento del database non riuscito all'avvio: " + mErr, "/health"));
+            if (c.Ai.Provider != "" && c.Ai.Current.InputPrice == 0 && c.Ai.Current.OutputPrice == 0)
+                list.Add(new("warn", "Prezzi del fornitore AI a zero: i consumi da rifatturare risultano gratuiti. Inseriscili dal listino del fornitore", "/Impostazioni/AI"));
             if (c.Ai.Provider == "") list.Add(new("warn", "Assistente AI spento: le risposte dei clienti passano tutte agli operatori", "/Impostazioni/AI"));
             if (string.IsNullOrEmpty(c.Meta.AppSecret)) list.Add(new("warn", "Impostazioni Meta incomplete: senza chiave segreta dell'app i messaggi dei clienti vengono rifiutati", "/Impostazioni/WhatsApp"));
             var aiErrors = await _db.ScalarAsync<int>("SELECT COUNT(*) FROM AiUsage WHERE Ok=0 AND CreatedAt > UTC_TIMESTAMP() - INTERVAL 24 HOUR");
             if (aiErrors > 0) list.Add(new("bad", $"Il fornitore AI non ha risposto {aiErrors} {(aiErrors == 1 ? "volta" : "volte")} nelle ultime 24 ore", "/Impostazioni/AI"));
-            var hookErrors = await _db.ScalarAsync<int>("SELECT COUNT(*) FROM WaWebhookEvents WHERE Error IS NOT NULL AND ReceivedAt > UTC_TIMESTAMP() - INTERVAL 24 HOUR");
+            var hookErrors = await _db.ScalarAsync<int>("SELECT COUNT(*) FROM WaWebhookEvents WHERE Processed=0 AND Error IS NOT NULL AND ReceivedAt > UTC_TIMESTAMP() - INTERVAL 24 HOUR");
             if (hookErrors > 0) list.Add(new("bad", $"{hookErrors} avvisi di Meta non elaborati nelle ultime 24 ore", null));
             var lastTick = await _db.ScalarAsync<DateTime?>("SELECT MAX(At) FROM AuditLog WHERE Action='jobs.tick'");
             if (lastTick is null || lastTick < DateTime.UtcNow.AddHours(-1))

@@ -75,6 +75,31 @@ public class TemplateModel : PageModel
         return Redirect($"/WhatsApp/Template/{id}");
     }
 
+    [BindProperty] public int TemplateId { get; set; }
+
+    /// <summary>Il template non era arrivato a Meta (errore di collegamento): si rimanda senza cambiare nome.</summary>
+    public async Task<IActionResult> OnPostResubmitAsync(int id)
+    {
+        if (!await LoadAsync(id) || Number is null) return NotFound();
+        var t = Items.FirstOrDefault(x => x.Id == TemplateId);
+        if (t is null || t.Status != "errore") return Redirect($"/WhatsApp/Template/{id}");
+        var (ok, error) = await _service.SubmitTemplateAsync(Number, t);
+        TempData[ok ? "Ok" : "Err"] = ok ? "Template inviato di nuovo a Meta." : "Meta ha rifiutato l'invio: " + error;
+        return Redirect($"/WhatsApp/Template/{id}");
+    }
+
+    /// <summary>Elimina un template rifiutato o non inviato, così il nome si può riusare con un testo corretto.</summary>
+    public async Task<IActionResult> OnPostDeleteAsync(int id)
+    {
+        if (!await LoadAsync(id)) return NotFound();
+        var t = Items.FirstOrDefault(x => x.Id == TemplateId);
+        if (t is null) return Redirect($"/WhatsApp/Template/{id}");
+        var n = await _wa.DeleteTemplateAsync(t.Id, Gym.Id);
+        if (n > 0) await _repos.AuditAsync(User.Scope(), "wa.template.deleted", t.Name, HttpContext.Connection.RemoteIpAddress?.ToString(), Gym.OrganizationId, Gym.Id);
+        TempData[n > 0 ? "Ok" : "Err"] = n > 0 ? "Template eliminato." : "Si possono eliminare solo template non approvati e non usati da una campagna.";
+        return Redirect($"/WhatsApp/Template/{id}");
+    }
+
     public async Task<IActionResult> OnPostRefreshAsync(int id)
     {
         if (!await LoadAsync(id) || Number is null) return NotFound();

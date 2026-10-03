@@ -15,7 +15,8 @@ public sealed class Conversation
     public string ContactName { get; set; } = "";
     public string? Membership { get; set; }
     public DateTime? ExpiresOn { get; set; }
-    public int GoalModelId { get; set; }
+    /// <summary>Nullo per i messaggi spontanei (il cliente scrive senza una campagna).</summary>
+    public int? GoalModelId { get; set; }
     public string GoalName { get; set; } = "";
     public int? OfferId { get; set; }
     public int? CampaignId { get; set; }
@@ -60,14 +61,14 @@ public sealed class ConversationRepo
     public ConversationRepo(Db db) => _db = db;
 
     private const string Select =
-        @"SELECT c.*, g.Name AS GymName, m.Name AS GoalName, au.FullName AS AssignedName FROM Conversations c
-          JOIN Gyms g ON g.Id=c.GymId JOIN GoalModels m ON m.Id=c.GoalModelId LEFT JOIN Users au ON au.Id=c.AssignedUserId";
+        @"SELECT c.*, g.Name AS GymName, COALESCE(m.Name, 'Messaggio spontaneo') AS GoalName, au.FullName AS AssignedName FROM Conversations c
+          JOIN Gyms g ON g.Id=c.GymId LEFT JOIN GoalModels m ON m.Id=c.GoalModelId LEFT JOIN Users au ON au.Id=c.AssignedUserId";
 
     private static Conversation Map(DbDataReader r) => new()
     {
         Id = r.GetInt64(r.GetOrdinal("Id")), OrganizationId = r.Int("OrganizationId"), GymId = r.Int("GymId"), GymName = r.Str("GymName")!,
         WaNumberId = r.Int("WaNumberId"), ContactPhone = r.Str("ContactPhone")!, ContactName = r.Str("ContactName")!, Membership = r.Str("Membership"),
-        ExpiresOn = r.Date("ExpiresOn"), GoalModelId = r.Int("GoalModelId"), GoalName = r.Str("GoalName")!, OfferId = r.IntN("OfferId"),
+        ExpiresOn = r.Date("ExpiresOn"), GoalModelId = r.IntN("GoalModelId"), GoalName = r.Str("GoalName")!, OfferId = r.IntN("OfferId"),
         CampaignId = r.IntN("CampaignId"), IsTest = r.Bool("IsTest"), Status = r.Str("Status")!, Outcome = r.Str("Outcome")!,
         OutcomeNote = r.Str("OutcomeNote"), AiReplies = r.Int("AiReplies"), NeedsReply = r.Bool("NeedsReply"),
         ProcessingSince = r.Date("ProcessingSince"), AssignedUserId = r.IntN("AssignedUserId"),
@@ -80,6 +81,22 @@ public sealed class ConversationRepo
           VALUES (@OrganizationId, @GymId, @WaNumberId, @ContactPhone, @ContactName, @Membership, @ExpiresOn, @GoalModelId, @OfferId, @CampaignId, @IsTest, 'ai', 'in_corso', UTC_TIMESTAMP());
           SELECT LAST_INSERT_ID();",
         new { c.OrganizationId, c.GymId, c.WaNumberId, c.ContactPhone, c.ContactName, c.Membership, c.ExpiresOn, c.GoalModelId, c.OfferId, c.CampaignId, c.IsTest });
+
+    /// <summary>Un cliente scrive senza una campagna in corso: si apre una conversazione per la reception (l'assistente non risponde).</summary>
+    public Task<long> CreateSpontaneousAsync(MvChat.Web.WhatsApp.WaNumber n, string phone, string name) => _db.ScalarAsync<long>(
+        @"INSERT INTO Conversations (OrganizationId, GymId, WaNumberId, ContactPhone, ContactName, Status, Outcome, OutcomeNote, HumanInvolved, LastInboundAt, LastMessageAt)
+          VALUES (@org, @gym, @num, @phone, @name, 'operatore', 'operatore', 'messaggio arrivato fuori da una campagna', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP());
+          SELECT LAST_INSERT_ID();",
+        new { org = n.OrganizationId, gym = n.GymId, num = n.Id, phone, name = name.Length > 150 ? name[..150] : name });
+
+    /// <summary>Il primo messaggio della campagna non è stato consegnato: destinatario in errore e conversazione chiusa (se il cliente non ha mai scritto).</summary>
+    public async Task TemplateFailedAsync(long id, string reason)
+    {
+        await _db.ExecuteAsync("UPDATE CampaignRecipients SET Status='errore', Reason=@reason WHERE ConversationId=@id AND Status='inviato'", new { id, reason });
+        await _db.ExecuteAsync(
+            @"UPDATE Conversations SET Status='chiusa', Outcome='nessuna_risposta', OutcomeNote=@reason, NeedsReply=0
+              WHERE Id=@id AND Status='ai' AND AiReplies=0 AND LastInboundAt IS NULL", new { id, reason });
+    }
 
     /// <summary>Senza filtro di perimetro: per il lavoro automatico (webhook, assistente).</summary>
     public Task<Conversation?> GetAsync(long id) => _db.FirstAsync(Select + " WHERE c.Id=@id", new { id }, Map);
@@ -127,9 +144,12 @@ public sealed class ConversationRepo
         "UPDATE Conversations SET AssignedUserId=@userId, HumanInvolved=CASE WHEN @userId IS NULL THEN HumanInvolved ELSE 1 END WHERE Id=@id",
         new { id, userId });
 
-    /// <summary>La conversazione a cui appartiene un messaggio in arrivo: la più recente con quel cliente su quel numero, negli ultimi 30 giorni.</summary>
+    /// <summary>
+    /// La conversazione a cui appartiene un messaggio in arrivo: la più recente con quel cliente su quel numero.
+    /// Le conversazioni di prova passano dopo quelle vere, così una prova non "ruba" il messaggio di un cliente.
+    /// </summary>
     public Task<Conversation?> FindForInboundAsync(int waNumberId, string phone) => _db.FirstAsync(
-        Select + " WHERE c.WaNumberId=@waNumberId AND c.ContactPhone=@phone AND c.CreatedAt > UTC_TIMESTAMP() - INTERVAL 30 DAY ORDER BY c.CreatedAt DESC LIMIT 1",
+        Select + " WHERE c.WaNumberId=@waNumberId AND c.ContactPhone=@phone ORDER BY (c.IsTest=1 AND c.Status='chiusa') ASC, c.CreatedAt DESC LIMIT 1",
         new { waNumberId, phone }, Map);
 
     public Task<List<ConvMessage>> MessagesAsync(long conversationId, int limit = 200) => _db.QueryAsync(
@@ -145,26 +165,40 @@ public sealed class ConversationRepo
             Status=COALESCE(@reopenAs, Status), HumanInvolved=CASE WHEN @reopenAs='operatore' THEN 1 ELSE HumanInvolved END WHERE Id=@id",
         new { id, needsReply = needsReply ? 1 : 0, reopenAs });
 
-    /// <summary>Prende in carico la risposta: solo un processo alla volta per conversazione.</summary>
+    /// <summary>
+    /// Prende in carico la risposta: solo un processo alla volta per conversazione.
+    /// Se un lavoro si è interrotto a metà (riavvio dell'hosting), dopo 5 minuti la conversazione si può riprendere.
+    /// </summary>
     public async Task<bool> ClaimAsync(long id) => await _db.ExecuteAsync(
         @"UPDATE Conversations SET NeedsReply=0, ProcessingSince=UTC_TIMESTAMP()
-          WHERE Id=@id AND NeedsReply=1 AND (ProcessingSince IS NULL OR ProcessingSince < UTC_TIMESTAMP() - INTERVAL 2 MINUTE)", new { id }) > 0;
+          WHERE Id=@id AND Status='ai' AND (
+            (NeedsReply=1 AND (ProcessingSince IS NULL OR ProcessingSince < UTC_TIMESTAMP() - INTERVAL 5 MINUTE)) OR
+            (NeedsReply=0 AND ProcessingSince < UTC_TIMESTAMP() - INTERVAL 5 MINUTE))", new { id }) > 0;
+
+    /// <summary>Prima di mandare la risposta: la conversazione è ancora dell'assistente e non sono arrivati altri messaggi nel frattempo?</summary>
+    public async Task<(string Status, bool NeedsReply)?> FreshStateAsync(long id)
+    {
+        var row = await _db.FirstAsync("SELECT Status, NeedsReply FROM Conversations WHERE Id=@id", new { id }, r => Tuple.Create(r.GetString(0), r.GetBoolean(1)));
+        return row is null ? null : (row.Item1, row.Item2);
+    }
 
     public Task ReleaseAsync(long id) => _db.ExecuteAsync("UPDATE Conversations SET ProcessingSince=NULL WHERE Id=@id", new { id });
 
     public Task<List<long>> PendingAsync(int olderThanSeconds) => _db.QueryAsync(
-        "SELECT Id FROM Conversations WHERE NeedsReply=1 AND Status='ai' AND LastInboundAt < UTC_TIMESTAMP() - INTERVAL @olderThanSeconds SECOND LIMIT 50",
+        @"SELECT Id FROM Conversations WHERE Status='ai' AND (
+            (NeedsReply=1 AND LastInboundAt < UTC_TIMESTAMP() - INTERVAL @olderThanSeconds SECOND) OR
+            ProcessingSince < UTC_TIMESTAMP() - INTERVAL 5 MINUTE) LIMIT 50",
         new { olderThanSeconds }, r => r.GetInt64(0));
 
     public Task AfterAiReplyAsync(long id, string status, string outcome, string? note) => _db.ExecuteAsync(
         @"UPDATE Conversations SET AiReplies=AiReplies+1, Status=@status, Outcome=@outcome, OutcomeNote=COALESCE(@note, OutcomeNote),
             HumanInvolved=CASE WHEN @status='operatore' THEN 1 ELSE HumanInvolved END,
-            LastMessageAt=UTC_TIMESTAMP() WHERE Id=@id",
+            LastMessageAt=UTC_TIMESTAMP() WHERE Id=@id AND Status='ai'",
         new { id, status, outcome, note });
 
     public Task SetStateAsync(long id, string status, string outcome, string? note, int? assignedUserId = null) => _db.ExecuteAsync(
         @"UPDATE Conversations SET Status=@status, Outcome=@outcome, OutcomeNote=COALESCE(@note, OutcomeNote),
-            HumanInvolved=CASE WHEN @status='operatore' THEN 1 ELSE HumanInvolved END,
+            HumanInvolved=CASE WHEN @status='operatore' OR @assignedUserId IS NOT NULL THEN 1 ELSE HumanInvolved END,
             AssignedUserId=COALESCE(@assignedUserId, AssignedUserId), NeedsReply=CASE WHEN @status='ai' THEN NeedsReply ELSE 0 END WHERE Id=@id",
         new { id, status, outcome, note, assignedUserId });
 

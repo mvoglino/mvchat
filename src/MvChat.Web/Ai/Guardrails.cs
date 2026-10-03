@@ -39,20 +39,29 @@ Rispondi SOLO con un oggetto JSON, senza altro testo prima o dopo:
             var nota = j?["nota"]?.GetValue<string>()?.Trim();
             if (string.IsNullOrWhiteSpace(text)) return null;
             if (!new[] { Outcomes.InCorso, Outcomes.Raggiunto, Outcomes.Rifiuto, Outcomes.Operatore, Outcomes.OptOut }.Contains(esito)) esito = Outcomes.InCorso;
-            if (text.Length > 1000) text = text[..1000];
+            if (text.Length > 1000) text = text[..(char.IsHighSurrogate(text[999]) ? 999 : 1000)]; // senza spezzare un'emoji
             return new AiReply(text, esito, string.IsNullOrWhiteSpace(nota) ? null : (nota.Length > 480 ? nota[..480] : nota));
         }
         catch { return null; }
     }
 
-    private static readonly Regex Money = new(@"(?:€\s*(?<a>\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?))|(?:(?<b>\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:€|euro\b|eur\b))", RegexOptions.IgnoreCase);
+    // Importi in euro scritti in tutti i modi comuni: «€ 49», «49€», «49,90 euro», «euro 299», «EUR 1.299,00», «€1299».
+    private const string Num = @"\d{1,3}(?:[.'\u00A0\u202F]\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?";
+    private static readonly Regex Money = new(
+        $@"(?:(?:€|\beuro\b|\beur\b)\s*(?<a>{Num}))|(?:(?<b>{Num})\s*(?:€|euro\b|eur\b))", RegexOptions.IgnoreCase);
+    // Sconti in percentuale: l'assistente può citare solo lo sconto dell'offerta (o meno).
+    // Solo quando si parla di sconto: «100% soddisfatti» non è uno sconto.
+    private static readonly Regex Percent = new(
+        @"sconto\s+(?:del\s+|di\s+|pari\s+al\s+)?(?<p>\d{1,3}(?:[.,]\d{1,2})?)\s*(?:%|per\s*cento)|(?<p>\d{1,3}(?:[.,]\d{1,2})?)\s*(?:%|per\s*cento)\s+(?:di\s+)?sconto|-\s?(?<p>\d{1,3}(?:[.,]\d{1,2})?)\s*%",
+        RegexOptions.IgnoreCase);
 
     public static List<decimal> Amounts(string text)
     {
         var list = new List<decimal>();
         foreach (Match m in Money.Matches(text))
         {
-            var s = (m.Groups["a"].Success ? m.Groups["a"].Value : m.Groups["b"].Value).Replace(" ", "");
+            var s = (m.Groups["a"].Success ? m.Groups["a"].Value : m.Groups["b"].Value);
+            s = Regex.Replace(s, @"[\s'\u00A0\u202F]", "");
             if (s.Contains(',')) s = s.Replace(".", "").Replace(',', '.');
             else if (Regex.IsMatch(s, @"^\d{1,3}(\.\d{3})+$")) s = s.Replace(".", "");
             if (decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v)) list.Add(v);
@@ -78,13 +87,31 @@ Rispondi SOLO con un oggetto JSON, senza altro testo prima o dopo:
         return null;
     }
 
-    /// <summary>Prima risposta: il cliente deve sapere che scrive con un assistente virtuale (AI Act). Se l'AI se ne dimentica, lo aggiunge mvchat.</summary>
+    /// <summary>Uno sconto in percentuale è ammesso solo fino allo sconto extra concesso dall'offerta (più lo sconto già compreso nel prezzo).</summary>
+    public static string? PercentProblem(string text, Offer? offer)
+    {
+        foreach (Match m in Percent.Matches(text))
+        {
+            if (!decimal.TryParse(m.Groups["p"].Value.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var pct)) continue;
+            var allowed = offer?.MaxExtraDiscountPct ?? 0m;
+            if (offer?.Price is decimal p && offer.FullPrice is decimal f && f > 0 && p < f)
+                allowed = Math.Max(allowed, Math.Round((1 - p / f) * 100m, 0, MidpointRounding.AwayFromZero) + allowed);
+            if (pct > allowed + 0.5m) return $"l'assistente ha promesso uno sconto del {pct:0.##}%, oltre quello consentito";
+        }
+        return null;
+    }
+
+    private static readonly Regex Disclosed = new(@"assistente\s+(virtuale|digitale|automatico)|intelligenza\s+artificiale|\bchatbot\b|\bbot\b|sistema\s+automatico|risponditore\s+automatico", RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Prima risposta: il cliente deve sapere che scrive con un assistente virtuale (AI Act).
+    /// Non basta il nome dell'assistente («Sara»): serve una frase che dica chiaramente che è automatico. Se manca, la aggiunge mvchat.
+    /// </summary>
     public static string EnsureDisclosure(string text, bool firstReply, string assistantName, string gymName)
     {
-        if (!firstReply) return text;
-        var t = text.ToLowerInvariant();
-        if (t.Contains(assistantName.ToLowerInvariant()) || t.Contains("assistente") || t.Contains("virtuale")) return text;
-        return $"Ciao, sono l'{assistantName} di {gymName}. {text}";
+        if (!firstReply || Disclosed.IsMatch(text)) return text;
+        var where = string.IsNullOrWhiteSpace(gymName) ? "" : " di " + gymName;
+        return $"Ciao, sono {Catalog.PromptBuilder.Intro(assistantName)}{where}. {text}";
     }
 
     public const string HoldingMessage = "Grazie per il messaggio! Ti faccio ricontattare al più presto da un collega della reception.";

@@ -115,6 +115,21 @@ var app = builder.Build();
         c.Meta.WebhookVerifyToken = AppConfigStore.NewToken();
         store.Save(c);
     }
+    // Aggiornamenti del database: chi carica una nuova versione su Aruba non deve fare nulla,
+    // gli script nuovi (Data/Schema) si applicano da soli al primo avvio.
+    if (store.Current.Installed)
+    {
+        try
+        {
+            var done = await Migrator.ApplyAsync(store.Current.ConnectionString);
+            if (done.Count > 0) app.Logger.LogInformation("Database aggiornato: {Scripts}", string.Join(", ", done));
+        }
+        catch (Exception ex)
+        {
+            Migrator.LastError = ex.Message;
+            app.Logger.LogError(ex, "Aggiornamento del database non riuscito");
+        }
+    }
 }
 
 if (!app.Environment.IsDevelopment())
@@ -171,30 +186,65 @@ app.Use(async (ctx, next) =>
 
 app.MapRazorPages();
 
-app.MapGet("/health", (AppConfigStore cfg) => Results.Json(new
+// Controllo dello stato per un servizio di monitoraggio: risponde 503 se il database non risponde o non è aggiornato.
+app.MapGet("/health", async (AppConfigStore cfg, Db db) =>
 {
-    status = "ok",
-    installed = cfg.Current.Installed,
-    version = typeof(Program).Assembly.GetName().Version?.ToString(3)
-}));
+    var version = typeof(Program).Assembly.GetName().Version?.ToString(3);
+    if (!cfg.Current.Installed) return Results.Json(new { status = "ok", installed = false, version });
+    try
+    {
+        var (applied, expected) = await Migrator.StatusAsync(db);
+        var ok = Migrator.LastError is null && applied >= expected;
+        return Results.Json(new { status = ok ? "ok" : "schema", installed = true, version, database = "ok", schema = $"{applied}/{expected}", error = Migrator.LastError },
+            statusCode: ok ? 200 : 503);
+    }
+    catch
+    {
+        return Results.Json(new { status = "database", installed = true, version, database = "non raggiungibile" }, statusCode: 503);
+    }
+});
 
 // Indirizzo richiamato ogni pochi minuti dall'operazione pianificata di Aruba.
 // Dal Passo 6 farà partire gli invii in coda; per ora registra solo che è stato chiamato.
-app.MapGet("/jobs/tick", async (string? token, AppConfigStore cfg, Db db, ConversationRepo convs, AiQueue queue, CampaignSender sender, MvChat.Web.Privacy.RetentionService retention) =>
+app.MapGet("/jobs/tick", async (string? token, AppConfigStore cfg, Db db, ConversationRepo convs, AiQueue queue, CampaignSender sender,
+    MvChat.Web.Privacy.RetentionService retention, WebhookHandler hook, WaRepo waRepo, WaService wa, ILogger<Program> log) =>
 {
     var c = cfg.Current;
     if (!c.Installed || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(c.JobToken)
         || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes(token), System.Text.Encoding.UTF8.GetBytes(c.JobToken)))
         return Results.NotFound();
+    var started = DateTime.UtcNow;
+    var notes = new List<string>();
+    // Ogni lavoro per conto suo: se uno dà errore, gli altri partono lo stesso.
+    async Task Step(string name, Func<Task> work)
+    {
+        try { await work(); }
+        catch (Exception ex) { log.LogError(ex, "Operazione pianificata: {Step} non riuscito", name); notes.Add($"{name}: errore ({ex.Message})"); }
+    }
     // Risposte AI rimaste in sospeso (per esempio dopo un riavvio dell'hosting).
-    var pending = await convs.PendingAsync(60);
-    foreach (var id in pending) queue.Enqueue(id);
-    // Campagne: un giro di invio (l'operazione pianificata di Aruba ha un tempo massimo, quindi si resta sotto i 30 secondi).
-    var run = await sender.RunAsync(TimeSpan.FromSeconds(25));
-    await retention.RunAsync(); // pulizia giornaliera dei dati vecchi (salta se già fatta nelle ultime 20 ore)
-    var detail = string.Join(" · ", new[] { pending.Count > 0 ? $"riprese {pending.Count} risposte" : null, run.Sent + run.Skipped + run.Errors > 0 ? $"campagne: inviati {run.Sent}, saltati {run.Skipped}, errori {run.Errors}" : null }.Where(x => x is not null));
-    await db.ExecuteAsync("INSERT INTO AuditLog (Action, Detail) VALUES ('jobs.tick', @d)", new { d = detail == "" ? null : detail });
-    return Results.Json(new { ok = true, at = DateTime.UtcNow, resumed = pending.Count, sent = run.Sent, skipped = run.Skipped, errors = run.Errors, notes = run.Notes });
+    var pending = new List<long>();
+    await Step("risposte AI", async () => { pending = await convs.PendingAsync(60); foreach (var id in pending) queue.Enqueue(id); });
+    // Avvisi di Meta non elaborati per un problema momentaneo.
+    var retried = 0;
+    await Step("avvisi Meta", async () => retried = await hook.RetryFailedAsync());
+    // Campagne: un giro di invio (l'operazione pianificata di Aruba ha un tempo massimo, quindi si resta sotto i 30 secondi in tutto).
+    var run = new MvChat.Web.Campaigns.RunSummary(0, 0, 0, new());
+    await Step("campagne", async () => run = await sender.RunAsync(TimeSpan.FromSeconds(20)));
+    // Qualità e limite di invio dei numeri Meta: aggiornati ogni 6 ore (al massimo 3 numeri per giro).
+    await Step("numeri WhatsApp", async () => { foreach (var n in (await waRepo.MetaNumbersAsync(6)).Take(3)) await wa.CheckNumberAsync(n); });
+    // Pulizia giornaliera dei dati vecchi (salta se già fatta nelle ultime 20 ore; se il tempo non basta, continua al giro dopo).
+    var left = TimeSpan.FromSeconds(28) - (DateTime.UtcNow - started);
+    if (left > TimeSpan.FromSeconds(3)) await Step("pulizia dati", () => retention.RunAsync(budget: left));
+    var detail = string.Join(" · ", new[] {
+        pending.Count > 0 ? $"riprese {pending.Count} risposte" : null,
+        retried > 0 ? $"rielaborati {retried} avvisi Meta" : null,
+        run.Sent + run.Skipped + run.Errors > 0 ? $"campagne: inviati {run.Sent}, saltati {run.Skipped}, errori {run.Errors}" : null }
+        .Concat(notes).Where(x => x is not null));
+    // Il registro tiene un giro "vuoto" ogni 15 minuti (serve al pannello per sapere che l'operazione pianificata funziona), tutti quelli con del lavoro.
+    var lastLogged = await db.ScalarAsync<DateTime?>("SELECT MAX(At) FROM AuditLog WHERE Action='jobs.tick'");
+    if (detail != "" || lastLogged is null || lastLogged < DateTime.UtcNow.AddMinutes(-15))
+        await db.ExecuteAsync("INSERT INTO AuditLog (Action, Detail) VALUES ('jobs.tick', @d)", new { d = detail == "" ? null : (detail.Length > 990 ? detail[..990] : detail) });
+    return Results.Json(new { ok = true, at = DateTime.UtcNow, resumed = pending.Count, retried, sent = run.Sent, skipped = run.Skipped, errors = run.Errors, notes = run.Notes.Concat(notes) });
 });
 
 // Logo caricato da un gruppo: è un'immagine pubblica, servita dal database con il tipo verificato al caricamento.

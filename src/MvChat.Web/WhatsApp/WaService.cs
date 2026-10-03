@@ -35,7 +35,9 @@ public sealed class WaService
     public async Task<SendResult> SendTemplateAsync(WaNumber n, WaTemplate t, string to, IDictionary<string, string?> values, int? userId, long? conversationId = null)
     {
         if (!t.IsApproved) return new SendResult(false, "Il template non è ancora approvato da Meta.", 0);
-        var parameters = t.Variables.Select(v => TemplateText.TryValue(values, v, out var x) && !string.IsNullOrWhiteSpace(x) ? x! : "-").ToList();
+        // Meta rifiuta i valori con a capo, tabulazioni o più di 4 spazi di fila: si puliscono prima dell'invio.
+        var parameters = t.Variables.Select(v => TemplateText.TryValue(values, v, out var x) && !string.IsNullOrWhiteSpace(x)
+            ? System.Text.RegularExpressions.Regex.Replace(x!, @"\s+", " ").Trim() : "-").ToList();
         var preview = TemplateText.Fill(t.Body, values);
         if (n.IsSimulated)
         {
@@ -114,11 +116,11 @@ public sealed class WaService
 
     public static string MapTemplateStatus(string meta) => meta.ToUpperInvariant() switch
     {
-        "APPROVED" => "approvato",
+        "APPROVED" or "REINSTATED" or "FLAGGED" => "approvato", // FLAGGED: ancora utilizzabile, ma Meta segnala qualità bassa
         "REJECTED" => "rifiutato",
         "PENDING" or "IN_APPEAL" or "PENDING_DELETION" => "in revisione",
         "PAUSED" => "in pausa",
-        "DISABLED" => "disattivato",
+        "DISABLED" or "DELETED" => "disattivato",
         _ => "in revisione"
     };
 
@@ -129,17 +131,24 @@ public sealed class WaService
     };
 
     // ---------- Parole che significano "non scrivetemi più" ----------
-    private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "stop", "basta", "cancellami", "disiscrivimi", "unsubscribe", "non scrivetemi più", "non scrivetemi piu",
-        "non scrivermi più", "non scrivermi piu", "non voglio più messaggi", "non voglio piu messaggi", "rimuovimi"
-    };
+    // Una sola parola (STOP, basta, cancellami…) oppure una frase chiara («non scrivetemi più», «toglietemi dalla lista»).
+    private static readonly System.Text.RegularExpressions.Regex StopWord = new(
+        @"^(stop+|basta|cancellami|cancellatemi|disiscrivimi|disiscrivetemi|unsubscribe|rimuovimi|rimuovetemi|toglimi|toglietemi|annulla iscrizione|no grazie stop|stop grazie|basta messaggi|stop messaggi)( (per favore|grazie|subito))?$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex StopPhrase = new(
+        @"\bnon (mi )?(scrivete|scrivetemi|scrivermi|scrivere|contattate|contattatemi|contattarmi|mandatemi|mandate|inviatemi|inviate)\b.*\b(più|piu)\b"
+        + @"|\bnon (voglio|desidero) (più|piu) (ricevere )?(messaggi|notifiche|comunicazioni|promozioni)"
+        + @"|\b(toglietemi|toglimi|rimuovetemi|rimuovimi|cancellatemi|cancellami) (dalla|dalle|dai) (lista|liste|contatti|messaggi)"
+        + @"|\b(smettete|smettetela) di (scrivermi|contattarmi|mandarmi)",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     public static bool IsStop(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
-        var t = System.Text.RegularExpressions.Regex.Replace(text.Trim().ToLowerInvariant(), @"[!.,;\s]+$", "");
-        t = System.Text.RegularExpressions.Regex.Replace(t, @"\s+", " ");
-        return StopWords.Contains(t);
+        var t = text.Trim().ToLowerInvariant();
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"[^\p{L}\p{N}' ]+", " "); // via punteggiatura ed emoji
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"\s+", " ").Trim();
+        if (t.Length == 0) return false;
+        return StopWord.IsMatch(t) || (t.Length <= 200 && StopPhrase.IsMatch(t));
     }
 }

@@ -23,6 +23,7 @@
         @if (c.Status == "in_corso") { <form method="post" asp-page-handler="Run"><button class="btn sm" type="submit">Invia adesso un gruppo</button></form> }
         @if (c.CanPause) { <form method="post" asp-page-handler="Pause"><button class="btn sm" type="submit">Metti in pausa</button></form> }
         @if (c.CanResume) { <form method="post" asp-page-handler="Resume"><button class="btn primary sm" type="submit">Riprendi</button></form> }
+        @if (c.Errors > 0 && c.Status is "in_corso" or "in_pausa" or "completata") { <form method="post" asp-page-handler="Requeue"><button class="btn sm" type="submit" title="Rimette in coda chi non ha ricevuto il messaggio per un errore di invio">Riprova i @c.Errors in errore</button></form> }
         @if (c.CanCancel) { <form method="post" asp-page-handler="Cancel" onsubmit="return confirm('Annullare la campagna? Chi non ha ancora ricevuto il messaggio non lo riceverà.')"><button class="btn sm" type="submit">Annulla campagna</button></form> }
     </div>
     <div class="panel-b form">

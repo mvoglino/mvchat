@@ -55,19 +55,20 @@ public sealed class CloudApi
             ["text"] = new JsonObject { ["body"] = text, ["preview_url"] = true }
         }, r => r?["messages"]?[0]?["id"]?.GetValue<string>());
 
-    public Task<ApiResult> CreateTemplateAsync(string wabaId, string token, string name, string language, string category, string metaBody, IEnumerable<string> examples) =>
-        PostAsync($"{wabaId}/message_templates", token, new JsonObject
+    public Task<ApiResult> CreateTemplateAsync(string wabaId, string token, string name, string language, string category, string metaBody, IEnumerable<string> examples)
+    {
+        var body = new JsonObject { ["type"] = "BODY", ["text"] = metaBody };
+        var ex = examples.ToList();
+        // Gli esempi servono solo se il testo ha dei segnaposto: un elenco vuoto Meta lo rifiuta.
+        if (ex.Count > 0) body["example"] = new JsonObject { ["body_text"] = new JsonArray(new JsonArray(ex.Select(e => (JsonNode)JsonValue.Create(e)!).ToArray())) };
+        return PostAsync($"{wabaId}/message_templates", token, new JsonObject
         {
             ["name"] = name,
             ["language"] = language,
             ["category"] = category,
-            ["components"] = new JsonArray(new JsonObject
-            {
-                ["type"] = "BODY",
-                ["text"] = metaBody,
-                ["example"] = new JsonObject { ["body_text"] = new JsonArray(new JsonArray(examples.Select(e => (JsonNode)JsonValue.Create(e)!).ToArray())) }
-            })
+            ["components"] = new JsonArray(body)
         }, r => r?["id"]?.GetValue<string>());
+    }
 
     public Task<ApiResult> TemplatesAsync(string wabaId, string token) =>
         GetAsync($"{wabaId}/message_templates?fields=name,status,language,rejected_reason,id&limit=200", token);
@@ -106,9 +107,14 @@ public sealed class CloudApi
             var code = err?["code"]?.ToString();
             return new ApiResult(false, null, code is null ? msg : $"{msg} (codice {code})", json);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (HttpRequestException ex)
         {
             return new ApiResult(false, null, "Meta non raggiungibile: " + ex.Message, null);
+        }
+        catch (TaskCanceledException)
+        {
+            // Nessuna risposta in tempo: il messaggio potrebbe essere partito lo stesso, quindi non si riprova da soli.
+            return new ApiResult(false, null, "Meta non ha risposto in tempo: invio incerto, controlla prima di riprovare", null);
         }
     }
 }
