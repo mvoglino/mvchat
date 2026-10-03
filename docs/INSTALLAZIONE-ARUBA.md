@@ -13,26 +13,31 @@ Guida per mettere online mvchat su un hosting **Windows** di Aruba, senza usare 
 1. Apri il repository **mvoglino/mvchat** su GitHub.
 2. Vai nella scheda **Actions**.
 3. Apri l'ultima esecuzione con la spunta verde.
-4. In fondo, sotto **Artifacts**, scarica **mvchat-aruba-…**: è un file zip.
-5. Estrai lo zip sul tuo computer.
+4. In fondo, sotto **Artifacts**, scarica **mvchat-aruba-…**: è un file zip (serve essere collegati a GitHub).
+5. Estrai lo zip sul tuo computer. Dentro devono esserci direttamente `MvChat.Web.dll`, `web.config`, `appsettings.json` e la cartella `wwwroot`.
+
+**Attenzione:** non usare il bottone verde «Code → Download ZIP». Quello scarica il codice sorgente (cartelle `src`, `tests`, `docs`…), che sul server non funziona.
 
 La spunta verde vuol dire che GitHub ha compilato il programma e ha superato tutte le prove automatiche (installazione, accessi, separazione dei dati tra gruppi e attività, campagne, assistente, privacy).
 
 ## 2. Creare il database
 
-Nel pannello Aruba crea un database MySQL e annota:
+Nel pannello (Plesk: **Database → Aggiungi database**) crea un database MySQL e annota:
 
-- indirizzo del server (host)
-- nome del database
-- utente
+- indirizzo del server (host): su Aruba Business è `localhost`, porta 3306 (si legge anche in alto in phpMyAdmin)
+- nome del database: Aruba aggiunge un prefisso obbligatorio, per esempio `hu617n3v_mvchat`
+- utente (anche lui con il prefisso)
 - password
+
+Il database deve restare vuoto: le tabelle le crea mvchat durante l'installazione.
 
 ## 3. Caricare i file
 
 1. Collegati via FTP (per esempio con FileZilla) con i dati del pannello Aruba.
-2. Carica **tutto il contenuto** dello zip nella cartella principale del sito (di solito `www`).
-3. Crea una cartella vuota chiamata **App_Data** accanto ai file caricati.
-4. Nel pannello Aruba dai alla cartella **App_Data** il **permesso di scrittura**.
+2. Nella cartella principale del sito (in Plesk è la «Radice documenti», di solito `httpdocs`) cancella i file di esempio di Aruba (`index.html`, `css`, `img`, `test`, `web.config`, `.user.ini`, `favicon.ico`…).
+3. Carica **tutto il contenuto** dello zip.
+4. Crea una cartella vuota chiamata **App_Data** accanto ai file caricati.
+5. Nel pannello (Plesk: **File** → App_Data → **Modifica autorizzazioni**) dai alla cartella **App_Data** il **permesso di scrittura** per l'utente del sito.
 
 App_Data è l'unica cartella dove mvchat scrive: contiene la configurazione e le chiavi degli accessi. Non va mai cancellata.
 
@@ -48,7 +53,15 @@ Alla fine la pagina mostra un indirizzo che finisce con `/jobs/tick?token=…`. 
 
 ## 5. Operazione pianificata
 
-Nel pannello Aruba crea un'**operazione pianificata** che richiami l'indirizzo del punto 4 ogni 5 minuti, o meno se il pannello lo permette.
+Nel pannello (Plesk: **Operazioni pianificate → Aggiungi operazione → Recupera un URL**) crea un'operazione che richiami l'indirizzo del punto 4 ogni 5 minuti.
+
+Plesk su Aruba non accetta `*/5` (barra e trattino vietati): in «Stile cron» scrivi i minuti separati da virgole:
+
+```
+0,5,10,15,20,25,30,35,40,45,50,55 * * * *
+```
+
+Metti le notifiche email su «mai» o «solo errori», poi premi **Esegui ora**: la risposta deve contenere `"ok":true`.
 
 Serve a tenere sveglio il programma e a far ripartire il lavoro in coda:
 
