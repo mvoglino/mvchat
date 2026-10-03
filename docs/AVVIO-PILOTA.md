@@ -12,7 +12,7 @@ Percorso consigliato per mettere in funzione mvchat con la prima palestra FitAct
 
 | Pagina | Cosa inserire |
 |---|---|
-| Impostazioni Meta | App ID e chiave segreta dell'app Meta di MVitalia; copia su Meta l'indirizzo del webhook e la parola d'ordine mostrati |
+| Impostazioni Meta | App ID e chiave segreta dell'app Meta di MVitalia; copia su Meta l'indirizzo del webhook e la parola d'ordine mostrati; limite di campagne per cliente (di base 2 in 30 giorni, per tutto il gruppo) |
 | Impostazioni AI | Fornitore (Anthropic o OpenAI), chiave, prova del collegamento |
 | Fatturazione → Impostazioni | Canone di base, ricarico AI (20%), cambio dollaro/euro, dati di MVitalia |
 | Privacy e dati | Conservazione 12 mesi (già impostata) |
@@ -42,12 +42,13 @@ Percorso consigliato per mettere in funzione mvchat con la prima palestra FitAct
 1. **Prova l'assistente** con il proprio cellulare: rispondere come farebbe un cliente, chiedere il prezzo, chiedere una persona, scrivere STOP.
 2. **Banco di prova**: eseguire tutti gli scenari; correggere scheda o offerta se qualcosa è «da rivedere».
 3. Controllare in **Conversazioni** che gli operatori ricevano l'avviso e sappiano prendere in carico.
+4. Facoltativo: in **Campagne → Numeri di prova** inserire i cellulari di titolare e responsabile. Prima di avviare ogni campagna, il bottone «Invia una prova» manda loro il primo messaggio con dati di esempio.
 
 ## 7. Prima campagna vera
 
 1. **Liste contatti**: caricare il file Excel con **solo chi ha dato il consenso** (mvchat scarta gli altri e lo dice).
 2. **Campagne → Nuova**: partire piccoli, per esempio **limite di 20–30 invii al giorno** per la prima settimana. Meta parte da 250 persone nuove al giorno per numero e controlla la qualità: invii graduali proteggono il numero.
-3. Seguire per 2–3 giorni **Pannello** e **Report**: risposte, obiettivi raggiunti, conversazioni passate alla reception, qualità del numero.
+3. Seguire per 2–3 giorni **Pannello** e **Report** (periodi pronti come «Questo mese» o «Mese scorso» e scelta dell'attività, con i totali in fondo): risposte, obiettivi raggiunti, conversazioni passate alla reception, qualità del numero.
 4. Se tutto va bene, alzare il limite e passare alle altre palestre.
 
 ## 8. Privacy: cosa deve essere a posto

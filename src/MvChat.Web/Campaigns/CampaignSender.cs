@@ -20,9 +20,9 @@ public sealed class CampaignSender
     public const int BatchSize = 40;
 
     private readonly CampaignRepo _repo; private readonly CatalogRepo _catalog; private readonly WaRepo _wa; private readonly WaService _send;
-    private readonly ConversationRepo _convs; private readonly ContactsRepo _contacts; private readonly ILogger<CampaignSender> _log;
-    public CampaignSender(CampaignRepo repo, CatalogRepo catalog, WaRepo wa, WaService send, ConversationRepo convs, ContactsRepo contacts, ILogger<CampaignSender> log)
-    { _repo = repo; _catalog = catalog; _wa = wa; _send = send; _convs = convs; _contacts = contacts; _log = log; }
+    private readonly ConversationRepo _convs; private readonly ContactsRepo _contacts; private readonly AppConfigStore _config; private readonly ILogger<CampaignSender> _log;
+    public CampaignSender(CampaignRepo repo, CatalogRepo catalog, WaRepo wa, WaService send, ConversationRepo convs, ContactsRepo contacts, AppConfigStore config, ILogger<CampaignSender> log)
+    { _repo = repo; _catalog = catalog; _wa = wa; _send = send; _convs = convs; _contacts = contacts; _config = config; _log = log; }
 
     private static readonly Scope AllScope = new() { Role = Roles.SuperAdmin };
 
@@ -131,6 +131,10 @@ public sealed class CampaignSender
                 pending.Remove(r.Id);
                 if (await _contacts.IsOptedOutAsync(c.OrganizationId, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "nella lista STOP", null); skipped++; continue; }
                 if (await _repo.HasOpenConversationAsync(number.Id, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "ha già una conversazione aperta con l'attività", null); skipped++; continue; }
+                // Limite di campagne per cliente: chi ne ha già ricevute abbastanza negli ultimi 30 giorni non viene disturbato.
+                if (_config.Current.Meta.MaxCampaignsPerCustomer is int maxC and > 0
+                    && await _repo.RecentCampaignsAsync(c.OrganizationId, r.Phone, c.Id) >= maxC)
+                { await _repo.MarkAsync(r.Id, "saltato", $"ha già ricevuto {maxC} {(maxC == 1 ? "campagna" : "campagne")} negli ultimi 30 giorni", null); skipped++; continue; }
 
                 var values = new Dictionary<string, string?>
                 {

@@ -89,6 +89,11 @@ public sealed class MetaSettings
     /// <summary>Listino Meta per l'Italia (€ per messaggio): serve solo a stimare nei report quanto pagano le attività a Meta.</summary>
     public decimal MarketingPriceEur { get; set; } = 0.0658m;
     public decimal UtilityPriceEur { get; set; } = 0.0248m;
+    /// <summary>
+    /// Quante campagne può ricevere lo stesso cliente negli ultimi 30 giorni dallo stesso gruppo (o attività singola).
+    /// Protegge i clienti dall'insistenza e il numero WhatsApp dalle segnalazioni. 0 = nessun limite.
+    /// </summary>
+    public int MaxCampaignsPerCustomer { get; set; } = 2;
 }
 
 public sealed class AppConfigStore

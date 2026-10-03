@@ -13,8 +13,11 @@ namespace MvChat.Web.Pages.Campagne;
 public class DettaglioModel : PageModel
 {
     private readonly CampaignRepo _repo; private readonly CampaignSender _sender; private readonly WaRepo _wa; private readonly CatalogRepo _catalog; private readonly Repos _repos;
-    public DettaglioModel(CampaignRepo repo, CampaignSender sender, WaRepo wa, CatalogRepo catalog, Repos repos)
-    { _repo = repo; _sender = sender; _wa = wa; _catalog = catalog; _repos = repos; }
+    private readonly WaService _send; private readonly ConversationRepo _convs; private readonly MvChat.Web.Contacts.ContactsRepo _contacts;
+    public DettaglioModel(CampaignRepo repo, CampaignSender sender, WaRepo wa, CatalogRepo catalog, Repos repos, WaService send, ConversationRepo convs, MvChat.Web.Contacts.ContactsRepo contacts)
+    { _repo = repo; _sender = sender; _wa = wa; _catalog = catalog; _repos = repos; _send = send; _convs = convs; _contacts = contacts; }
+
+    public List<TestNumber> TestNumbers { get; private set; } = new();
 
     public Campaign C { get; private set; } = null!;
     public List<CampaignRecipient> Recipients { get; private set; } = new();
@@ -38,6 +41,7 @@ public class DettaglioModel : PageModel
         NextOpen = WindowOpen ? null : SendWindows.NextOpenRome(w, DateTime.UtcNow);
         var number = await _wa.NumberAsync(c.WaNumberId);
         MetaLimit = number is null ? null : SendWindows.MetaDailyLimit(number.MessagingLimit, number.IsSimulated);
+        TestNumbers = await _repo.TestNumbersAsync(c.GymId);
         var t = await _wa.TemplateAsync(c.TemplateId);
         var first = (await _repo.RecipientsAsync(id, null, 1)).FirstOrDefault();
         if (t is not null)
@@ -131,6 +135,45 @@ public class DettaglioModel : PageModel
         await Audit("campaign.requeue", $"{n} destinatari");
         TempData["Ok"] = n == 0 ? "Nessun destinatario da riprovare: quelli in errore avevano già ricevuto il messaggio o l'invio era incerto."
             : $"{n} destinatari rimessi in coda." + (C.Status == "in_pausa" ? " Riprendi la campagna per inviare." : "");
+        return Back();
+    }
+
+    /// <summary>
+    /// Prova facoltativa: il primo messaggio della campagna arriva ai numeri di prova dell'attività, con dati di esempio.
+    /// Si apre una conversazione di prova per ognuno, così si può anche rispondere e vedere l'assistente all'opera.
+    /// </summary>
+    public async Task<IActionResult> OnPostTestAsync(int id)
+    {
+        if (!await LoadAsync(id)) return NotFound();
+        if (C.Status is "completata" or "annullata") return Back();
+        if (TestNumbers.Count == 0) { TempData["Err"] = "Nessun numero di prova: aggiungili prima."; return Back(); }
+        var number = await _wa.NumberAsync(C.WaNumberId);
+        var t = await _wa.TemplateAsync(C.TemplateId);
+        if (number is null) { TempData["Err"] = "Il numero WhatsApp dell'attività non è più collegato."; return Back(); }
+        if (t is null || !t.IsApproved) { TempData["Err"] = "Il template del primo messaggio non è approvato da Meta."; return Back(); }
+        int ok = 0; var problems = new List<string>();
+        foreach (var n in TestNumbers)
+        {
+            if (await _contacts.IsOptedOutAsync(C.OrganizationId, n.Phone)) { problems.Add($"{n.Name}: è nella lista STOP"); continue; }
+            var parts = n.Name.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            var values = new Dictionary<string, string?>
+            {
+                ["nome"] = parts[0], ["cognome"] = parts.Length > 1 ? parts[1] : "Prova", ["abbonamento"] = "Annuale",
+                ["scadenza"] = DateTime.UtcNow.ToRome().Date.AddDays(30).ToString("dd/MM/yyyy"), ["palestra"] = C.GymName, ["sede"] = C.GymName, ["offerta"] = C.OfferTitle
+            };
+            var r = await _send.SendTemplateAsync(number, t, n.Phone, values, User.Scope().UserId);
+            if (!r.Ok) { problems.Add($"{n.Name}: {r.Error}"); continue; }
+            var convId = await _convs.CreateAsync(new Conversation
+            {
+                OrganizationId = C.OrganizationId, GymId = C.GymId, WaNumberId = number.Id, ContactPhone = n.Phone, ContactName = parts[0],
+                Membership = "Annuale", ExpiresOn = DateTime.UtcNow.ToRome().Date.AddDays(30), GoalModelId = C.GoalModelId, OfferId = C.OfferId, IsTest = true
+            });
+            await _wa.SetMessageConversationAsync(r.MessageId, convId);
+            ok++;
+        }
+        await Audit("campaign.test", $"prova a {ok} numeri");
+        if (ok > 0) TempData["Ok"] = $"Prova inviata a {ok} {(ok == 1 ? "numero" : "numeri")}: rispondi dal telefono per vedere l'assistente. Le conversazioni di prova sono in Conversazioni.";
+        if (problems.Count > 0) TempData["Err"] = "Non inviata a " + string.Join("; ", problems);
         return Back();
     }
 

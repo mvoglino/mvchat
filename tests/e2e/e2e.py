@@ -729,6 +729,18 @@ act(m, cE, "Start"); _time.sleep(0.3); html = cpage(m, cE)
 check("dato mancante nel primo messaggio: il cliente viene saltato, niente trattini", "Inviati (1)" in html and "manca il dato «scadenza»" in html, html[html.find('class="stats"'):][:400])
 s,html,_ = m.post(tpl_a + "?handler=Delete", {"TemplateId":tid}, form_path=tpl_a)
 _,html,_ = m.req(tpl_a); check("un template approvato e usato non si elimina", "rinnovo_ottobre" in html and "Si possono eliminare solo" in html)
+prova_url = f"/Campagne/Prova/{alba}"
+s,html,_ = m.post(prova_url + "?handler=Add", {"Name":"Maurizio Prova","Phone":"12"}, form_path=prova_url)
+check("numero di prova sbagliato rifiutato", s == 200 and "non è valido" in html, str(s))
+s,_,_ = m.post(prova_url + "?handler=Add", {"Name":"Maurizio Prova","Phone":"347 000 1111"}, form_path=prova_url)
+_,html,_ = m.req(prova_url); check("numeri di prova dell'attività", s == 302 and "+393470001111" in html and "Maurizio Prova" in html, str(s))
+s,_,_ = oth.req(prova_url); check("un altro gruppo non vede i numeri di prova", s == 404, str(s))
+cP,_,_ = camp_post(m, dict(base, Name="Con prova", ListId=lid_b), alba)
+_,html,_ = m.post(f"/Campagne/{cP}?handler=Test", {}, form_path=f"/Campagne/{cP}")
+html = cpage(m, cP); _,lst,_ = m.req("/Conversazioni?view=tutte")
+check("prova facoltativa: il primo messaggio arriva ai numeri di prova, la campagna resta in bozza", "Prova inviata a 1 numero" in html and "Bozza" in html and "Inviati (0)" in html and "+393470001111" in lst, html[html.find("flash"):][:200])
+_,html,_ = sa.req("/Report"); _,html_d,_ = d.req("/Report?dal=2026-01-01")
+check("report: periodi pronti e scelta dell'attività", "Mese scorso" in html and "Da inizio anno" in html and "Tutti i clienti" in html and "Tutto il gruppo" in html_d and "FitActive Bra" in html_d)
 s,body,_ = Client().req("/health"); hj = _json.loads(body) if s == 200 else {}
 check("aggiornamenti del database applicati da soli (controllo /health)", hj.get("status") == "ok" and hj.get("database") == "ok" and hj.get("schema","").split("/")[0] == hj.get("schema","x/y").split("/")[1], body[:200])
 pw_b,_ = mk_user(sa, "resp.bra@fitactive.test", "manager", "", gym["FitActive Bra"])
@@ -749,6 +761,18 @@ try:
         cur.execute("SELECT COUNT(*) FROM SchemaBatches WHERE Version=12"); batches = cur.fetchone()[0]
     check("pulizia: le righe di fatturazione restano nel registro, le altre vecchie no", (kept or 0) > 0 and (gone or 0) == 0, f"{kept} {gone}")
     check("aggiornamento del database ricordato pezzo per pezzo", batches >= 10, str(batches))
+    # Limite di campagne per cliente (qui 1 in 30 giorni): Omar ha già ricevuto «Dati mancanti»
+    with db.cursor() as cur:
+        cur.execute("UPDATE Conversations SET Status='chiusa' WHERE ContactPhone='+393200000032'")
+    meta_form = {"AppId":"123456","AppSecret":"","GraphVersion":"v23.0","GraphBaseUrl":"http://127.0.0.1:5079","MarketingPrice":"0,07","UtilityPrice":"0.03"}
+    sa.post("/Impostazioni/WhatsApp", dict(meta_form, MaxCampaigns="1"))
+    _, res = m.post_json("/Lists/New?handler=Import", {"GymId":alba,"Name":"Limite","FileName":"x.xlsx","Map":mp,
+        "Rows":[["Omar","Test","320 000 0032","","Annuale","2026-11-30","SI",""],["Pia","Test","320 000 0033","","Annuale","2026-11-30","SI",""]]}, "/Lists/New")
+    cL,_,_ = camp_post(m, dict(base, Name="Limite contatti", ListId=res.get("listId")), alba)
+    act(m, cL, "Start"); _time.sleep(0.3); html = cpage(m, cL)
+    check("limite di campagne per cliente: chi ne ha già ricevute abbastanza viene saltato", "Inviati (1)" in html and "ha già ricevuto 1 campagna negli ultimi 30 giorni" in html, html[html.find('class="stats"'):][:400])
+    sa.post("/Impostazioni/WhatsApp", dict(meta_form, MaxCampaigns="2"))
+    _,html,_ = sa.req("/Impostazioni/WhatsApp"); check("limite di campagne per cliente modificabile da MVitalia (di base 2)", 'name="MaxCampaigns"' in html and 'value="2"' in html)
 except ImportError:
     check("pulizia del registro (serve pymysql per la prova)", False, "pip install pymysql")
 

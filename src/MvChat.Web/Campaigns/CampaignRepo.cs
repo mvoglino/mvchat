@@ -60,6 +60,9 @@ public sealed class Campaign
 public sealed record CampaignRecipient(long Id, string Phone, string FirstName, string? LastName, string? Membership, DateTime? ExpiresOn,
     string Status, string? Reason, long? ConversationId, DateTime? SentAt, string? Outcome);
 
+/// <summary>Un numero di prova dell'attività (titolare, responsabile…): riceve il primo messaggio prima del via.</summary>
+public sealed record TestNumber(int Id, string Name, string Phone);
+
 public sealed class CampaignRepo
 {
     private readonly Db _db;
@@ -246,6 +249,24 @@ public sealed class CampaignRepo
         "SELECT COUNT(*) FROM CampaignRecipients WHERE CampaignId=@campaignId AND Status='inviato' AND SentAt >= @sinceUtc", new { campaignId, sinceUtc });
 
     /// <summary>Il cliente sta già parlando con l'attività (altra campagna o prova ancora aperta)?</summary>
+    // ---------- Numeri di prova dell'attività ----------
+    public Task<List<TestNumber>> TestNumbersAsync(int gymId) => _db.QueryAsync(
+        "SELECT Id, Name, Phone FROM TestNumbers WHERE GymId=@gymId ORDER BY Name", new { gymId },
+        r => new TestNumber(r.GetInt32(0), r.GetString(1), r.GetString(2)));
+
+    public Task<int> AddTestNumberAsync(int orgId, int gymId, string name, string phone, int userId) => _db.ExecuteAsync(
+        "INSERT INTO TestNumbers (OrganizationId, GymId, Name, Phone, CreatedBy) VALUES (@orgId, @gymId, @name, @phone, @userId) ON DUPLICATE KEY UPDATE Name=@name",
+        new { orgId, gymId, name, phone, userId });
+
+    public Task<int> DeleteTestNumberAsync(int gymId, int id) => _db.ExecuteAsync("DELETE FROM TestNumbers WHERE Id=@id AND GymId=@gymId", new { id, gymId });
+
+    /// <summary>Quante altre campagne del gruppo (o dell'attività singola) hanno scritto a questo cliente negli ultimi 30 giorni.</summary>
+    public Task<int> RecentCampaignsAsync(int orgId, string phone, int exceptCampaignId) => _db.ScalarAsync<int>(
+        @"SELECT COUNT(DISTINCT r.CampaignId) FROM CampaignRecipients r JOIN Campaigns k ON k.Id=r.CampaignId
+          WHERE r.Phone=@phone AND r.SentAt > UTC_TIMESTAMP() - INTERVAL 30 DAY AND r.Status='inviato'
+            AND k.OrganizationId=@orgId AND k.Id<>@exceptCampaignId",
+        new { orgId, phone, exceptCampaignId });
+
     public async Task<bool> HasOpenConversationAsync(int waNumberId, string phone) => await _db.ScalarAsync<int>(
         @"SELECT COUNT(*) FROM Conversations WHERE WaNumberId=@waNumberId AND ContactPhone=@phone AND Status IN ('ai','operatore')
           AND CreatedAt > UTC_TIMESTAMP() - INTERVAL 7 DAY", new { waNumberId, phone }) > 0;

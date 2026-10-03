@@ -1,0 +1,28 @@
+@page "{id:int}"
+@model MvChat.Web.Pages.Campagne.ProvaModel
+@{ ViewData["Title"] = "Numeri di prova · " + Model.Gym.Name; }
+@section Actions { <a class="btn" href="/Campagne">Campagne</a> }
+<p class="muted" style="margin:0">Facoltativi. Prima di avviare una campagna puoi mandare il primo messaggio a questi numeri (titolare, responsabile, reception) per vedere come arriva su WhatsApp e provare a rispondere all'assistente. Le prove non contano nei report e non entrano nella campagna. Su un numero collegato a Meta ogni prova è un messaggio che Meta fa pagare.</p>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<section class="panel">
+    <div class="panel-h"><h2>Numeri di prova</h2><span class="muted">@Model.Items.Count di @MvChat.Web.Pages.Campagne.ProvaModel.Max</span></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Nome</th><th>Cellulare</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var t in Model.Items)
+        {
+            <tr><td><b>@t.Name</b></td><td>@t.Phone</td>
+                <td><form method="post" asp-page-handler="Delete" style="margin:0"><input type="hidden" name="DeleteId" value="@t.Id"><button class="btn sm" type="submit">Togli</button></form></td></tr>
+        }
+        @if (Model.Items.Count == 0) { <tr><td colspan="3" class="muted">Nessun numero di prova: le campagne partono senza prova.</td></tr> }
+        </tbody>
+    </table></div>
+</section>
+<form method="post" asp-page-handler="Add" class="panel">
+    <div class="panel-h"><h2>Aggiungi un numero</h2></div>
+    <div class="panel-b inline-form">
+        <div class="field"><label for="Name">Nome</label><input id="Name" name="Name" maxlength="100" value="@Model.Name" required></div>
+        <div class="field"><label for="Phone">Cellulare</label><input id="Phone" name="Phone" inputmode="tel" value="@Model.Phone" required></div>
+        <button class="btn primary" type="submit">Aggiungi</button>
+    </div>
+</form>

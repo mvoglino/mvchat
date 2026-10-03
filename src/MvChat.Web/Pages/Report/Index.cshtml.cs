@@ -30,6 +30,10 @@ public class IndexModel : PageModel
     public ReportRow Total { get; private set; } = new();
     public List<DayPoint> Days { get; private set; } = new();
     public MetaSettings Meta => _config.Current.Meta;
+    /// <summary>Le attività visibili, per scegliere subito quella da guardare (solo se sono più di una).</summary>
+    public List<Gym> Gyms { get; private set; } = new();
+    /// <summary>Periodi pronti: un clic e i totali si aggiornano.</summary>
+    public List<(string Label, DateTime From, DateTime To)> Periods { get; } = new();
 
     private async Task<bool> LoadAsync(DateTime? dal, DateTime? al, int? gruppo, int? attivita)
     {
@@ -41,6 +45,13 @@ public class IndexModel : PageModel
         var fromUtc = From.FromRome(); var toUtc = To.AddDays(1).FromRome();
 
         var gyms = await _repos.GymsAsync(Me);
+        Gyms = gyms.OrderBy(g => g.OrganizationName).ThenBy(g => g.Name).ToList();
+        var first = new DateTime(today.Year, today.Month, 1);
+        Periods.Add(("Ultimi 7 giorni", today.AddDays(-6), today));
+        Periods.Add(("Ultimi 30 giorni", today.AddDays(-29), today));
+        Periods.Add(("Questo mese", first, today));
+        Periods.Add(("Mese scorso", first.AddMonths(-1), first.AddDays(-1)));
+        Periods.Add(("Da inizio anno", new DateTime(today.Year, 1, 1), today));
         // Il livello si decide dal ruolo e da cosa è stato aperto; quello che arriva dall'indirizzo vale solo se è nel perimetro.
         if (Me.IsManager) attivita = Me.GymId;
         if (Me.IsOrgAdmin) gruppo = Me.OrganizationId;
@@ -108,6 +119,10 @@ public class IndexModel : PageModel
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
         return File(bytes, "text/csv; charset=utf-8", $"report-{From:yyyyMMdd}-{To:yyyyMMdd}.csv");
     }
+
+    /// <summary>Stessa vista, altro periodo.</summary>
+    public string PeriodUrl(DateTime from, DateTime to) =>
+        $"/Report?dal={from:yyyy-MM-dd}&al={to:yyyy-MM-dd}" + (Group is int g ? $"&gruppo={g}" : "") + (Activity is int a ? $"&attivita={a}" : "");
 
     public string Url(int? gruppo, int? attivita, string? handler = null) =>
         $"/Report?dal={From:yyyy-MM-dd}&al={To:yyyy-MM-dd}" + (gruppo is int g ? $"&gruppo={g}" : "") + (attivita is int a ? $"&attivita={a}" : "") + (handler is null ? "" : $"&handler={handler}");
