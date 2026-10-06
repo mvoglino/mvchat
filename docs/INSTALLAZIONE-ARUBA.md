@@ -97,6 +97,6 @@ Al primo avvio mvchat aggiorna da solo il database, se serve: non c'è niente da
 
 Lo stato del programma si controlla anche aprendo `https://tuodominio.it/health`: risponde «ok» se il database è raggiungibile e aggiornato, altrimenti un errore (codice 503). Conviene farlo controllare ogni 5 minuti da un servizio gratuito di monitoraggio (per esempio UptimeRobot), che manda un'email se mvchat non risponde.
 
-**Registro tecnico**: mvchat scrive avvii, chiusure ed errori in `App_Data/logs` (14 giorni). MVitalia lo legge da *Impostazioni → Registro tecnico*; gli errori delle ultime 24 ore compaiono anche nel pannello.
+**Registro tecnico**: mvchat scrive avvii, chiusure ed errori in `App_Data/logs` (14 giorni). MVitalia lo legge da *Impostazioni → Registro tecnico*; gli errori delle ultime 24 ore compaiono anche nel pannello. Se mvchat non riesce nemmeno a partire, nella stessa cartella IIS scrive i file `stdout_….log` con il motivo.
 
 **Backup**: fai salvare ogni giorno il database (pannello Aruba) e tieni una copia della cartella **App_Data** (configurazione e chiavi): senza le chiavi le password dei numeri WhatsApp e dell'AI salvate cifrate non si possono più leggere.

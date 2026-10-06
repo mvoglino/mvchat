@@ -13,6 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Registro tecnico in App_Data/logs: sull'hosting condiviso è l'unico modo per sapere perché il programma si è fermato.
 var fileLog = new FileLogProvider(Path.Combine(builder.Environment.ContentRootPath, "App_Data"));
+builder.Logging.ClearProviders(); // niente output sullo schermo del server: così il file stdout di IIS contiene solo i crash
 builder.Logging.AddProvider(fileLog);
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
     fileLog.Write("GRAVE ", "Program", "Errore non gestito: il programma si chiude", e.ExceptionObject as Exception);

@@ -46,7 +46,7 @@ public sealed class FileLogProvider : ILoggerProvider
 
     private void Cleanup()
     {
-        foreach (var f in Directory.GetFiles(_dir, "mvchat-*.log"))
+        foreach (var f in Directory.GetFiles(_dir, "*.log")) // anche i file stdout_… scritti da IIS a ogni avvio
             if (File.GetLastWriteTimeUtc(f) < DateTime.UtcNow.AddDays(-14)) File.Delete(f);
     }
 
