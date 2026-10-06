@@ -11,6 +11,20 @@ using MvChat.Web.WhatsApp;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Registro tecnico in App_Data/logs: sull'hosting condiviso è l'unico modo per sapere perché il programma si è fermato.
+var fileLog = new FileLogProvider(Path.Combine(builder.Environment.ContentRootPath, "App_Data"));
+builder.Logging.AddProvider(fileLog);
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+    fileLog.Write("GRAVE ", "Program", "Errore non gestito: il programma si chiude", e.ExceptionObject as Exception);
+TaskScheduler.UnobservedTaskException += (_, e) => { fileLog.Write("ERRORE", "Program", "Lavoro in sottofondo non riuscito", e.Exception); e.SetObserved(); };
+builder.Services.Configure<HostOptions>(o =>
+{
+    // Un errore in un lavoro automatico (campagne, assistente, pulizia) non deve spegnere tutto mvchat.
+    o.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+    // Quando Aruba chiede di chiudere, si chiude in fretta: così il riavvio non resta a metà.
+    o.ShutdownTimeout = TimeSpan.FromSeconds(10);
+});
+
 builder.Services.AddSingleton<AppConfigStore>();
 builder.Services.AddSingleton<Db>();
 builder.Services.AddScoped<Repos>();
@@ -105,6 +119,11 @@ builder.Services.AddWebEncoders(o => o.TextEncoderSettings = new System.Text.Enc
 builder.Services.AddAntiforgery(o => { o.Cookie.Name = "mvchat.af"; o.HeaderName = "RequestVerificationToken"; });
 
 var app = builder.Build();
+
+var version = typeof(Program).Assembly.GetName().Version?.ToString(3);
+app.Lifetime.ApplicationStarted.Register(() => app.Logger.LogInformation("mvchat avviato (versione {Version}, processo {Pid})", version, Environment.ProcessId));
+app.Lifetime.ApplicationStopping.Register(() => app.Logger.LogWarning("mvchat in chiusura: richiesta dal server (riavvio, aggiornamento o inattività dell'hosting)"));
+app.Lifetime.ApplicationStopped.Register(() => app.Logger.LogInformation("mvchat chiuso"));
 
 // Installazioni fatte prima del Passo 4: crea la parola d'ordine del webhook se manca.
 {

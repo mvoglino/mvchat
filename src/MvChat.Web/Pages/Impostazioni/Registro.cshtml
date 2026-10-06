@@ -1,0 +1,11 @@
+@page
+@model MvChat.Web.Pages.Impostazioni.RegistroModel
+@{ ViewData["Title"] = "Registro tecnico"; }
+<p class="muted" style="margin:0">Cosa è successo al programma negli ultimi giorni: avvii, chiusure decise dall'hosting, avvisi ed errori. Il più recente in alto. Il file completo è in App_Data/logs (si tiene 14 giorni). Non contiene messaggi dei clienti né password.</p>
+<nav class="tabs" aria-label="Filtro">
+    <a href="/Impostazioni/Registro" aria-current="@(Model.OnlyProblems ? "false" : "page")">Tutto</a>
+    <a href="/Impostazioni/Registro?problemi=true" aria-current="@(Model.OnlyProblems ? "page" : "false")">Solo avvisi ed errori</a>
+</nav>
+<section class="panel">
+    <div class="panel-b" style="font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:pre-wrap;word-break:break-word">@if (Model.Lines.Count == 0) {<span class="muted">Niente da mostrare.</span>}@foreach (var l in Model.Lines) {<div class="@(l.Contains(" ERRORE ") || l.Contains(" GRAVE ") ? "msg-e" : "")">@l</div>}</div>
+</section>

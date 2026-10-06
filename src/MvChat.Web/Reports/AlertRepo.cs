@@ -69,6 +69,11 @@ public sealed class AlertRepo
         if (s.IsSuperAdmin)
         {
             var c = _config.Current;
+            var since = DateTime.UtcNow.ToRome().AddHours(-24).ToString("yyyy-MM-dd HH:mm:ss");
+            var logErrors = FileLogProvider.Tail(_config.DataDir, 2000)
+                .Count(l => l.Length > 19 && string.CompareOrdinal(l[..19], since) >= 0 && (l.Contains(" ERRORE ") || l.Contains(" GRAVE ")));
+            if (logErrors > 0)
+                list.Add(new("bad", $"{logErrors} {(logErrors == 1 ? "errore" : "errori")} del programma nelle ultime 24 ore", "/Impostazioni/Registro?problemi=true"));
             if (MvChat.Web.Data.Migrator.LastError is string mErr)
                 list.Add(new("bad", "Aggiornamento del database non riuscito all'avvio: " + mErr, "/health"));
             if (c.Ai.Provider != "" && c.Ai.Current.InputPrice == 0 && c.Ai.Current.OutputPrice == 0)

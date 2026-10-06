@@ -743,6 +743,8 @@ _,html,_ = sa.req("/Report"); _,html_d,_ = d.req("/Report?dal=2026-01-01")
 check("report: periodi pronti e scelta dell'attività", "Mese scorso" in html and "Da inizio anno" in html and "Tutti i clienti" in html and "Tutto il gruppo" in html_d and "FitActive Bra" in html_d)
 s,body,_ = Client().req("/health"); hj = _json.loads(body) if s == 200 else {}
 check("aggiornamenti del database applicati da soli (controllo /health)", hj.get("status") == "ok" and hj.get("database") == "ok" and hj.get("schema","").split("/")[0] == hj.get("schema","x/y").split("/")[1], body[:200])
+_,html,_ = sa.req("/Impostazioni/Registro"); s2,_,_ = m.req("/Impostazioni/Registro")
+check("registro tecnico: MVitalia vede avvii ed errori del programma", "mvchat avviato" in html and s2 in (302, 403), f"{s2} {html[html.find('panel-b'):][:200]}")
 pw_b,_ = mk_user(sa, "resp.bra@fitactive.test", "manager", "", gym["FitActive Bra"])
 def bra_active(on):
     return sa.post(f"/Gyms/Edit/{gym['FitActive Bra']}", {"Input.Id":gym["FitActive Bra"],"Input.Name":"FitActive Bra","Input.City":"X","Input.IsActive":on,"Fee":"39,00","FeeFrom":"2026-01-01"}, form_path=f"/Gyms/Edit/{gym['FitActive Bra']}")[0]

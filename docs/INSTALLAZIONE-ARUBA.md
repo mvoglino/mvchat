@@ -90,10 +90,13 @@ Al primo avvio mvchat aggiorna da solo il database, se serve: non c'è niente da
 | Cosa vedi | Cosa fare |
 |---|---|
 | Errore 500.30 o 502.5 | Il piano non ha .NET 10 attivo, oppure il file App_Data/mvchat.json è rovinato (mvchat non riparte da solo per sicurezza: ripristinalo dal backup) |
+| Errore 503.0 «Service Unavailable», codice 0x800704e7 | L'hosting ha chiuso mvchat e non l'ha riacceso. Riaccendilo: in Plesk **Ricicla** il pool di applicazioni del sito, oppure via FTP crea un file vuoto **app_offline.htm**, aspetta 10 secondi e cancellalo. Poi guarda *Impostazioni → Registro tecnico* per capire il motivo |
 | "La cartella App_Data non è scrivibile" | Ridai il permesso di scrittura ad App_Data dal pannello |
 | "Non riesco a raggiungere il server del database" | Controlla host e porta del database |
 | "Il database ha rifiutato utente o password" | Ricontrolla utente e password nel pannello Aruba |
 
 Lo stato del programma si controlla anche aprendo `https://tuodominio.it/health`: risponde «ok» se il database è raggiungibile e aggiornato, altrimenti un errore (codice 503). Conviene farlo controllare ogni 5 minuti da un servizio gratuito di monitoraggio (per esempio UptimeRobot), che manda un'email se mvchat non risponde.
+
+**Registro tecnico**: mvchat scrive avvii, chiusure ed errori in `App_Data/logs` (14 giorni). MVitalia lo legge da *Impostazioni → Registro tecnico*; gli errori delle ultime 24 ore compaiono anche nel pannello.
 
 **Backup**: fai salvare ogni giorno il database (pannello Aruba) e tieni una copia della cartella **App_Data** (configurazione e chiavi): senza le chiavi le password dei numeri WhatsApp e dell'AI salvate cifrate non si possono più leggere.
