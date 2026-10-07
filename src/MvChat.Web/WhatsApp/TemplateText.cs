@@ -17,6 +17,9 @@ public static class TemplateText
         ["sede"] = "FitActive Alba",
         ["palestra"] = "FitActive Alba", // nome storico di {{sede}}: resta valido per i template già approvati
         ["offerta"] = "Rinnovo con 2 mesi omaggio",
+        ["servizio"] = "Pilates",
+        ["corso"] = "Pilates", // sinonimo di {{servizio}}
+        ["note"] = "ti aspettiamo la sera",
     };
 
     private static readonly Regex Var = new(@"\{\{\s*([a-zA-Zàèéìòù_]+|\d+)\s*\}\}");
@@ -33,7 +36,7 @@ public static class TemplateText
         if (t.Length == 0) { errors.Add("Il testo è vuoto."); return errors; }
         if (t.Length > 1024) errors.Add("Il testo supera i 1.024 caratteri ammessi da Meta.");
         foreach (var v in Variables(t))
-            if (!Placeholders.ContainsKey(v)) errors.Add($"Segnaposto sconosciuto: {{{{{v}}}}}. Usa: {string.Join(", ", Placeholders.Keys.Where(k => k != "palestra").Select(k => "{{" + k + "}}"))}.");
+            if (!Placeholders.ContainsKey(v)) errors.Add($"Segnaposto sconosciuto: {{{{{v}}}}}. Usa: {string.Join(", ", Placeholders.Keys.Where(k => k is not ("palestra" or "corso")).Select(k => "{{" + k + "}}"))}.");
         if (Var.Match(t) is { Success: true } first && first.Index == 0) errors.Add("Il testo non può iniziare con un segnaposto (regola di Meta).");
         if (Var.Matches(t).LastOrDefault() is { } last && last.Index + last.Length == t.Length) errors.Add("Il testo non può finire con un segnaposto: aggiungi la punteggiatura o una frase (regola di Meta).");
         if (Regex.IsMatch(t, @"\n{3,}")) errors.Add("Troppe righe vuote di fila.");
@@ -45,7 +48,7 @@ public static class TemplateText
         Var.Replace(body.Trim(), m => "{{" + (variables.IndexOf(m.Groups[1].Value.ToLowerInvariant()) + 1) + "}}");
 
     /// <summary>{{sede}} e {{palestra}} sono la stessa cosa: chi riempie i valori può usare l'uno o l'altro nome.</summary>
-    private static readonly Dictionary<string, string> Aliases = new() { ["sede"] = "palestra", ["palestra"] = "sede" };
+    private static readonly Dictionary<string, string> Aliases = new() { ["sede"] = "palestra", ["palestra"] = "sede", ["corso"] = "servizio", ["servizio"] = "corso" };
 
     public static bool TryValue(IDictionary<string, string?> values, string key, out string? value)
     {

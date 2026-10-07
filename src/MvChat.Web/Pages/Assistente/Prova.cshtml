@@ -24,6 +24,8 @@ else
         <div class="field"><label for="Name">Nome</label><input id="Name" name="Name" value="@Model.Name"></div>
         <div class="field"><label for="Membership">Abbonamento</label><input id="Membership" name="Membership" value="@Model.Membership"></div>
         <div class="field"><label for="ExpiresOn">Scadenza</label><input id="ExpiresOn" name="ExpiresOn" type="date" value="@Model.ExpiresOn?.ToString("yyyy-MM-dd")"></div>
+        <div class="field"><label for="Service">Servizio / corso</label><input id="Service" name="Service" maxlength="150" value="@Model.Service" placeholder="facoltativo, es. Pilates"></div>
+        <div class="field"><label for="Notes">Note</label><input id="Notes" name="Notes" maxlength="300" value="@Model.Notes" placeholder="facoltativo, es. viene soprattutto la sera"></div>
     </div>
     <div class="actions"><button class="btn primary" type="submit">Avvia la conversazione</button></div>
 </form>

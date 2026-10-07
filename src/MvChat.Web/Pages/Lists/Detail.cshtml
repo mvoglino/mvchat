@@ -18,16 +18,17 @@
     <div class="panel-h"><h2>Contatti</h2><span style="flex:1"></span>
         <form method="get" class="inline-form"><input name="q" value="@Model.Q" placeholder="Cerca nome o numero" aria-label="Cerca" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--surface)"><button class="btn sm">Cerca</button></form></div>
     <div class="tbl"><table>
-        <thead><tr><th>Nome</th><th>WhatsApp</th><th>Abbonamento</th><th>Scadenza</th><th>Consenso</th><th></th></tr></thead>
+        <thead><tr><th>Nome</th><th>WhatsApp</th><th>Abbonamento</th><th>Scadenza</th><th>Servizio / note</th><th>Consenso</th><th></th></tr></thead>
         <tbody>
         @foreach (var c in Model.Contacts)
         {
             <tr><td><b>@c.FirstName @c.LastName</b><div class="muted">@c.Email</div></td><td><code>@c.Phone</code></td>
                 <td>@c.Membership</td><td>@c.ExpiresOn?.ToString("dd/MM/yyyy")</td>
+                <td>@c.Service@if (c.Notes is not null) {<div class="muted">@c.Notes</div>}</td>
                 <td class="muted">@c.ConsentDate?.ToString("dd/MM/yyyy") @c.ConsentSource</td>
                 <td>@if (c.OptedOut) {<span class="chip bad">STOP</span>}</td></tr>
         }
-        @if (Model.Contacts.Count == 0) { <tr><td colspan="6" class="muted">Nessun contatto@(string.IsNullOrEmpty(Model.Q) ? "" : " trovato").</td></tr> }
+        @if (Model.Contacts.Count == 0) { <tr><td colspan="7" class="muted">Nessun contatto@(string.IsNullOrEmpty(Model.Q) ? "" : " trovato").</td></tr> }
         </tbody>
     </table></div>
     @if (Model.Contacts.Count == MvChat.Web.Pages.Lists.DetailModel.PageSize) { <div class="panel-b muted">Sono mostrati i primi @MvChat.Web.Pages.Lists.DetailModel.PageSize: usa la ricerca per trovare gli altri.</div> }

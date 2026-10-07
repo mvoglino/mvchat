@@ -139,7 +139,8 @@ public sealed class CampaignSender
                 var values = new Dictionary<string, string?>
                 {
                     ["nome"] = r.FirstName, ["cognome"] = r.LastName, ["abbonamento"] = r.Membership,
-                    ["scadenza"] = r.ExpiresOn?.ToString("dd/MM/yyyy"), ["palestra"] = c.GymName, ["sede"] = c.GymName, ["offerta"] = offer?.Title
+                    ["scadenza"] = r.ExpiresOn?.ToString("dd/MM/yyyy"), ["palestra"] = c.GymName, ["sede"] = c.GymName, ["offerta"] = offer?.Title,
+                    ["servizio"] = r.Service, ["note"] = r.Notes
                 };
                 // Un dato mancante non si sostituisce con un trattino: il cliente riceverebbe un messaggio strano.
                 var missing = template!.Variables.FirstOrDefault(v => !TemplateText.TryValue(values, v, out var x) || string.IsNullOrWhiteSpace(x));
@@ -181,7 +182,8 @@ public sealed class CampaignSender
                 var conv = new Conversation
                 {
                     OrganizationId = c.OrganizationId, GymId = c.GymId, WaNumberId = number.Id, ContactPhone = r.Phone, ContactName = r.FirstName,
-                    Membership = r.Membership, ExpiresOn = r.ExpiresOn, GoalModelId = c.GoalModelId, OfferId = c.OfferId, CampaignId = c.Id
+                    Membership = r.Membership, ExpiresOn = r.ExpiresOn, GoalModelId = c.GoalModelId, OfferId = c.OfferId, CampaignId = c.Id,
+                    Service = r.Service, Notes = r.Notes
                 };
                 var convId = await _convs.CreateAsync(conv);
                 await _wa.SetMessageConversationAsync(res.MessageId, convId);

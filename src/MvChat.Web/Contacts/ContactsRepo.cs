@@ -9,7 +9,8 @@ namespace MvChat.Web.Contacts;
 
 public sealed record ContactList(int Id, int OrganizationId, int GymId, string GymName, string Name, string? FileName,
     int RowsRead, int ValidCount, int NoConsent, int BadPhone, int Duplicates, int OptedOut, DateTime CreatedAt, string? CreatedByName);
-public sealed record Contact(long Id, string FirstName, string? LastName, string Phone, string? Email, string? Membership, DateTime? ExpiresOn, DateTime? ConsentDate, string? ConsentSource, bool OptedOut);
+public sealed record Contact(long Id, string FirstName, string? LastName, string Phone, string? Email, string? Membership, DateTime? ExpiresOn, DateTime? ConsentDate, string? ConsentSource, bool OptedOut,
+    string? Service = null, string? Notes = null);
 public sealed record Reject(int RowNumber, string? Name, string? Phone, string Reason);
 public sealed record OptOut(long Id, int OrganizationId, string OrganizationName, string? GymName, string Phone, string? Reason, string Source, DateTime CreatedAt);
 
@@ -25,6 +26,9 @@ public sealed class ColumnMap
     public int Consent { get; set; } = -1;
     public int ConsentDate { get; set; } = -1;
     public int ConsentSource { get; set; } = -1;
+    /// <summary>Informazioni libere: un servizio o corso del cliente e una nota (usabili nei messaggi e lette dall'assistente).</summary>
+    public int Service { get; set; } = -1;
+    public int Notes { get; set; } = -1;
     /// <summary>Intestazioni scelte, per riconoscere lo stesso file la volta dopo.</summary>
     public Dictionary<string, string> Headers { get; set; } = new();
 }
@@ -71,7 +75,8 @@ public sealed class ContactsRepo
           ORDER BY c.LastName, c.FirstName LIMIT @limit",
         new { listId, orgId, q = search ?? "", like = "%" + (search ?? "") + "%", limit },
         r => new Contact(r.GetInt64(r.GetOrdinal("Id")), r.Str("FirstName")!, r.Str("LastName"), r.Str("Phone")!, r.Str("Email"),
-            r.Str("Membership"), r.Date("ExpiresOn"), r.Date("ConsentDate"), r.Str("ConsentSource"), Convert.ToInt32(r["IsOptedOut"]) == 1));
+            r.Str("Membership"), r.Date("ExpiresOn"), r.Date("ConsentDate"), r.Str("ConsentSource"), Convert.ToInt32(r["IsOptedOut"]) == 1,
+            r.Str("Service"), r.Str("Notes")));
 
     public Task<List<Reject>> RejectsAsync(int listId) => _db.QueryAsync(
         "SELECT RowNumber, Name, Phone, Reason FROM ContactRejects WHERE ListId=@listId ORDER BY RowNumber LIMIT 2000",
@@ -126,6 +131,8 @@ public sealed class ContactsRepo
                 (object?)ImportRules.ParseDate(Cell(row, m.ExpiresOn)) ?? DBNull.Value,
                 (object?)ImportRules.ParseDate(Cell(row, m.ConsentDate)) ?? DBNull.Value,
                 (object?)ImportRules.Clean(Cell(row, m.ConsentSource), 100) ?? DBNull.Value,
+                (object?)ImportRules.Clean(Cell(row, m.Service), 150) ?? DBNull.Value,
+                (object?)ImportRules.Clean(Cell(row, m.Notes), 300) ?? DBNull.Value,
             });
         }
 
@@ -143,14 +150,14 @@ public sealed class ContactsRepo
         // Inserimento a blocchi: una sola richiesta al database ogni 500 contatti.
         foreach (var chunk in valid.Chunk(500))
         {
-            var sb = new StringBuilder("INSERT INTO Contacts (OrganizationId, GymId, ListId, FirstName, LastName, Phone, Email, Membership, ExpiresOn, ConsentDate, ConsentSource) VALUES ");
+            var sb = new StringBuilder("INSERT INTO Contacts (OrganizationId, GymId, ListId, FirstName, LastName, Phone, Email, Membership, ExpiresOn, ConsentDate, ConsentSource, Service, Notes) VALUES ");
             await using var cmd = cn.CreateCommand();
             cmd.Transaction = tx;
             for (var k = 0; k < chunk.Length; k++)
             {
-                sb.Append(k == 0 ? "" : ",").Append($"(@o,@g,@l,@a{k},@b{k},@c{k},@d{k},@e{k},@f{k},@h{k},@i{k})");
+                sb.Append(k == 0 ? "" : ",").Append($"(@o,@g,@l,@a{k},@b{k},@c{k},@d{k},@e{k},@f{k},@h{k},@i{k},@j{k},@m{k})");
                 var v = chunk[k];
-                string[] names = { "a", "b", "c", "d", "e", "f", "h", "i" };
+                string[] names = { "a", "b", "c", "d", "e", "f", "h", "i", "j", "m" };
                 for (var j = 0; j < names.Length; j++) AddParam(cmd, $"@{names[j]}{k}", v[j]);
             }
             AddParam(cmd, "@o", orgId); AddParam(cmd, "@g", req.GymId); AddParam(cmd, "@l", listId);

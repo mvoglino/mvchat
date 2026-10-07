@@ -58,7 +58,7 @@ public sealed class Campaign
 }
 
 public sealed record CampaignRecipient(long Id, string Phone, string FirstName, string? LastName, string? Membership, DateTime? ExpiresOn,
-    string Status, string? Reason, long? ConversationId, DateTime? SentAt, string? Outcome);
+    string Status, string? Reason, long? ConversationId, DateTime? SentAt, string? Outcome, string? Service = null, string? Notes = null);
 
 /// <summary>Un numero di prova dell'attività (titolare, responsabile…): riceve il primo messaggio prima del via.</summary>
 public sealed record TestNumber(int Id, string Name, string Phone);
@@ -127,8 +127,8 @@ public sealed class CampaignRepo
             id = Convert.ToInt32(await cmd.ExecuteScalarAsync());
         int added, total;
         await using (var cmd = Db.Command(cn,
-            @"INSERT INTO CampaignRecipients (CampaignId, ContactId, Phone, FirstName, LastName, Membership, ExpiresOn)
-              SELECT @id, k.Id, k.Phone, k.FirstName, k.LastName, k.Membership, k.ExpiresOn FROM Contacts k
+            @"INSERT INTO CampaignRecipients (CampaignId, ContactId, Phone, FirstName, LastName, Membership, ExpiresOn, Service, Notes)
+              SELECT @id, k.Id, k.Phone, k.FirstName, k.LastName, k.Membership, k.ExpiresOn, k.Service, k.Notes FROM Contacts k
               WHERE k.ListId=@ListId AND k.GymId=@GymId
                 AND NOT EXISTS (SELECT 1 FROM OptOuts x WHERE x.OrganizationId=@OrganizationId AND x.Phone=k.Phone)",
             new { id, c.ListId, c.GymId, c.OrganizationId }, tx))
@@ -186,7 +186,7 @@ public sealed class CampaignRepo
         new { campaignId, status = status ?? "", limit },
         r => new CampaignRecipient(r.GetInt64(r.GetOrdinal("Id")), r.Str("Phone")!, r.Str("FirstName")!, r.Str("LastName"), r.Str("Membership"),
             r.Date("ExpiresOn"), r.Str("Status")!, r.Str("Reason"), r.IsDBNull(r.GetOrdinal("ConversationId")) ? null : r.GetInt64(r.GetOrdinal("ConversationId")),
-            r.Date("SentAt"), r.Str("Outcome")));
+            r.Date("SentAt"), r.Str("Outcome"), r.Str("Service"), r.Str("Notes")));
 
     // ---------- Orari di invio ----------
     public Task<List<SendWindow>> WindowsAsync(int gymId) => _db.QueryAsync(
@@ -225,7 +225,7 @@ public sealed class CampaignRepo
         return await _db.QueryAsync(
             "SELECT r.*, NULL AS Outcome FROM CampaignRecipients r WHERE ClaimToken=@token AND Status='in_invio' ORDER BY Id", new { token },
             r => new CampaignRecipient(r.GetInt64(r.GetOrdinal("Id")), r.Str("Phone")!, r.Str("FirstName")!, r.Str("LastName"), r.Str("Membership"),
-                r.Date("ExpiresOn"), r.Str("Status")!, null, null, null, null));
+                r.Date("ExpiresOn"), r.Str("Status")!, null, null, null, null, r.Str("Service"), r.Str("Notes")));
     }
 
     public Task MarkAsync(long id, string status, string? reason, long? conversationId) => _db.ExecuteAsync(

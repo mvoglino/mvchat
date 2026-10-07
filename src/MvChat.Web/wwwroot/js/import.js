@@ -12,6 +12,8 @@
     { key: "Consent", label: "Consenso marketing", required: true, words: ["consenso marketing", "marketing", "consenso whatsapp", "consenso commerciale", "consenso comunicazioni", "newsletter", "consenso"] },
     { key: "ConsentDate", label: "Data consenso", words: ["data consenso", "consenso data", "data privacy"] },
     { key: "ConsentSource", label: "Fonte consenso", words: ["fonte consenso", "origine consenso", "fonte", "canale"] },
+    { key: "Service", label: "Servizio / corso", words: ["servizio / corso", "servizio", "corso", "corsi", "attività preferita", "trattamento", "reparto", "interesse"] },
+    { key: "Notes", label: "Note", words: ["note", "nota", "annotazioni", "commento", "info"] },
   ];
   const $ = (s) => document.querySelector(s);
   const saved = JSON.parse($("#mappings").textContent || "{}");
@@ -136,8 +138,8 @@
   }
 
   function downloadTemplate() {
-    const cols = ["Nome", "Cognome", "Cellulare", "Email", "Tipo abbonamento", "Scadenza abbonamento", "Consenso marketing", "Data consenso", "Fonte consenso"];
-    const ws = XLSX.utils.aoa_to_sheet([cols, ["Giulia", "Rossi", "333 123 4567", "giulia@esempio.it", "Annuale", "18/10/2026", "SI", "12/10/2025", "Modulo iscrizione"]]);
+    const cols = ["Nome", "Cognome", "Cellulare", "Email", "Tipo abbonamento", "Scadenza abbonamento", "Consenso marketing", "Data consenso", "Fonte consenso", "Servizio / corso", "Note"];
+    const ws = XLSX.utils.aoa_to_sheet([cols, ["Giulia", "Rossi", "333 123 4567", "giulia@esempio.it", "Annuale", "18/10/2026", "SI", "12/10/2025", "Modulo iscrizione", "Pilates", "Viene soprattutto la sera"]]);
     ws["!cols"] = cols.map(() => ({ wch: 20 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Contatti");

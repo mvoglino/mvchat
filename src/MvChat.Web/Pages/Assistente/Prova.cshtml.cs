@@ -32,6 +32,8 @@ public class ProvaModel : PageModel
     [BindProperty] public string? Phone { get; set; }
     [BindProperty] public string? Name { get; set; } = "Giulia";
     [BindProperty] public string? Membership { get; set; } = "Annuale";
+    [BindProperty] public string? Service { get; set; }
+    [BindProperty] public string? Notes { get; set; }
     [BindProperty] public DateTime? ExpiresOn { get; set; }
 
     private async Task LoadAsync()
@@ -69,13 +71,14 @@ public class ProvaModel : PageModel
         var conv = new Conversation
         {
             OrganizationId = gym!.OrganizationId, GymId = gym.Id, WaNumberId = Number!.Id, ContactPhone = phone!, ContactName = name,
-            Membership = Membership?.Trim(), ExpiresOn = ExpiresOn, GoalModelId = model!.Id, OfferId = offer?.Id, IsTest = true
+            Membership = Membership?.Trim(), ExpiresOn = ExpiresOn, GoalModelId = model!.Id, OfferId = offer?.Id, IsTest = true,
+            Service = Clip(Service, 150), Notes = Clip(Notes, 300)
         };
         conv.Id = await _convs.CreateAsync(conv);
         var values = new Dictionary<string, string?>
         {
             ["nome"] = name, ["cognome"] = "", ["abbonamento"] = Membership, ["scadenza"] = ExpiresOn?.ToString("dd/MM/yyyy"),
-            ["palestra"] = gym.Name, ["offerta"] = offer?.Title
+            ["palestra"] = gym.Name, ["offerta"] = offer?.Title, ["servizio"] = Clip(Service, 150), ["note"] = Clip(Notes, 300)
         };
         if (template is not null)
         {
@@ -91,4 +94,6 @@ public class ProvaModel : PageModel
         await _repos.AuditAsync(User.Scope(), "assistant.test.started", $"{phone} · {model.Name}", HttpContext.Connection.RemoteIpAddress?.ToString(), gym.OrganizationId, gym.Id);
         return Redirect($"/Conversazioni/{conv.Id}");
     }
+
+    private static string? Clip(string? s, int max) => string.IsNullOrWhiteSpace(s) ? null : (s.Trim().Length > max ? s.Trim()[..max] : s.Trim());
 }

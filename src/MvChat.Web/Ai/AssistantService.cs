@@ -31,7 +31,7 @@ public sealed class AssistantService
         if (model is null) return null;
         var offer = c.OfferId is int oid ? (await _catalog.OffersAsync(new MvChat.Web.Security.Scope { Role = MvChat.Web.Security.Roles.SuperAdmin }, offerId: oid)).FirstOrDefault() : null;
         var profile = await _catalog.ProfileAsync(c.GymId);
-        var who = new Recipient(c.ContactName, null, c.Membership, c.ExpiresOn);
+        var who = new Recipient(c.ContactName, null, c.Membership, c.ExpiresOn, c.Service, c.Notes);
         var org = await _catalog.ActivityInfoAsync(c.GymId);
         var system = PromptBuilder.Build(model, c.GymName, profile, offer, who, DateTime.UtcNow.ToRome().Date, org);
         if (!string.IsNullOrWhiteSpace(firstMessage))

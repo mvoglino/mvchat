@@ -14,6 +14,9 @@ public sealed class Conversation
     public string ContactPhone { get; set; } = "";
     public string ContactName { get; set; } = "";
     public string? Membership { get; set; }
+    /// <summary>Servizio o corso del cliente e nota libera, dalla lista contatti: l'assistente li usa per personalizzare.</summary>
+    public string? Service { get; set; }
+    public string? Notes { get; set; }
     public DateTime? ExpiresOn { get; set; }
     /// <summary>Nullo per i messaggi spontanei (il cliente scrive senza una campagna).</summary>
     public int? GoalModelId { get; set; }
@@ -67,7 +70,7 @@ public sealed class ConversationRepo
     private static Conversation Map(DbDataReader r) => new()
     {
         Id = r.GetInt64(r.GetOrdinal("Id")), OrganizationId = r.Int("OrganizationId"), GymId = r.Int("GymId"), GymName = r.Str("GymName")!,
-        WaNumberId = r.Int("WaNumberId"), ContactPhone = r.Str("ContactPhone")!, ContactName = r.Str("ContactName")!, Membership = r.Str("Membership"),
+        WaNumberId = r.Int("WaNumberId"), ContactPhone = r.Str("ContactPhone")!, ContactName = r.Str("ContactName")!, Membership = r.Str("Membership"), Service = r.Str("Service"), Notes = r.Str("Notes"),
         ExpiresOn = r.Date("ExpiresOn"), GoalModelId = r.IntN("GoalModelId"), GoalName = r.Str("GoalName")!, OfferId = r.IntN("OfferId"),
         CampaignId = r.IntN("CampaignId"), IsTest = r.Bool("IsTest"), Status = r.Str("Status")!, Outcome = r.Str("Outcome")!,
         OutcomeNote = r.Str("OutcomeNote"), AiReplies = r.Int("AiReplies"), NeedsReply = r.Bool("NeedsReply"),
@@ -77,10 +80,10 @@ public sealed class ConversationRepo
     };
 
     public Task<long> CreateAsync(Conversation c) => _db.ScalarAsync<long>(
-        @"INSERT INTO Conversations (OrganizationId, GymId, WaNumberId, ContactPhone, ContactName, Membership, ExpiresOn, GoalModelId, OfferId, CampaignId, IsTest, Status, Outcome, LastMessageAt)
-          VALUES (@OrganizationId, @GymId, @WaNumberId, @ContactPhone, @ContactName, @Membership, @ExpiresOn, @GoalModelId, @OfferId, @CampaignId, @IsTest, 'ai', 'in_corso', UTC_TIMESTAMP());
+        @"INSERT INTO Conversations (OrganizationId, GymId, WaNumberId, ContactPhone, ContactName, Membership, ExpiresOn, Service, Notes, GoalModelId, OfferId, CampaignId, IsTest, Status, Outcome, LastMessageAt)
+          VALUES (@OrganizationId, @GymId, @WaNumberId, @ContactPhone, @ContactName, @Membership, @ExpiresOn, @Service, @Notes, @GoalModelId, @OfferId, @CampaignId, @IsTest, 'ai', 'in_corso', UTC_TIMESTAMP());
           SELECT LAST_INSERT_ID();",
-        new { c.OrganizationId, c.GymId, c.WaNumberId, c.ContactPhone, c.ContactName, c.Membership, c.ExpiresOn, c.GoalModelId, c.OfferId, c.CampaignId, c.IsTest });
+        new { c.OrganizationId, c.GymId, c.WaNumberId, c.ContactPhone, c.ContactName, c.Membership, c.ExpiresOn, c.Service, c.Notes, c.GoalModelId, c.OfferId, c.CampaignId, c.IsTest });
 
     /// <summary>Un cliente scrive senza una campagna in corso: si apre una conversazione per la reception (l'assistente non risponde).</summary>
     public Task<long> CreateSpontaneousAsync(MvChat.Web.WhatsApp.WaNumber n, string phone, string name) => _db.ScalarAsync<long>(

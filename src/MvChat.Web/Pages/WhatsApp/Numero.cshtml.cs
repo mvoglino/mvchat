@@ -124,7 +124,8 @@ public class NumeroModel : PageModel
         {
             ["nome"] = string.IsNullOrWhiteSpace(Nome) ? "Giulia" : Nome.Trim(), ["cognome"] = "",
             ["abbonamento"] = "Annuale", ["scadenza"] = DateTime.UtcNow.AddDays(14).ToString("dd/MM/yyyy"),
-            ["palestra"] = Gym.Name, ["offerta"] = "offerta di prova"
+            ["palestra"] = Gym.Name, ["offerta"] = "offerta di prova",
+            ["servizio"] = TemplateText.Placeholders["servizio"], ["note"] = TemplateText.Placeholders["note"]
         };
         var r = await _service.SendTemplateAsync(Number, t, phone, values, Me.UserId);
         TempData[r.Ok ? "Ok" : "Err"] = r.Ok ? $"Messaggio di prova inviato a {phone}." : "Invio non riuscito: " + r.Error;

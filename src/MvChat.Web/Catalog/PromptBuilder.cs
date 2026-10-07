@@ -12,7 +12,7 @@ public sealed record OrgInfo(int Id, string Name, string SectorKey, string? Desc
 }
 
 /// <summary>Dati del destinatario usati nei messaggi. Nell'anteprima sono di esempio.</summary>
-public sealed record Recipient(string FirstName, string? LastName, string? Membership, DateTime? ExpiresOn);
+public sealed record Recipient(string FirstName, string? LastName, string? Membership, DateTime? ExpiresOn, string? Service = null, string? Notes = null);
 
 /// <summary>
 /// Compone le istruzioni che l'assistente AI riceve per una conversazione:
@@ -34,7 +34,10 @@ public static class PromptBuilder
             .Replace("{{scadenza}}", r.ExpiresOn?.ToString("dd/MM/yyyy") ?? "")
             .Replace("{{sede}}", gymName)
             .Replace("{{palestra}}", gymName)
-            .Replace("{{offerta}}", offer?.Title ?? "");
+            .Replace("{{offerta}}", offer?.Title ?? "")
+            .Replace("{{servizio}}", r.Service ?? "")
+            .Replace("{{corso}}", r.Service ?? "")
+            .Replace("{{note}}", r.Notes ?? "");
 
     /// <summary>Come si presenta l'assistente: «l'assistente virtuale» oppure «Sara, l'assistente virtuale».</summary>
     public static string Intro(string? assistantName)
@@ -105,6 +108,9 @@ public static class PromptBuilder
         sb.AppendLine($"Nome: {r.FirstName}{(string.IsNullOrWhiteSpace(r.LastName) ? "" : " " + r.LastName)}");
         if (!string.IsNullOrWhiteSpace(r.Membership)) sb.AppendLine($"{char.ToUpper(membership[0]) + membership[1..]}: {r.Membership}");
         if (r.ExpiresOn is { } exp) sb.AppendLine($"Scadenza {membership}: {Day(exp)}");
+        if (!string.IsNullOrWhiteSpace(r.Service)) sb.AppendLine($"Servizio o corso che preferisce: {r.Service}");
+        if (!string.IsNullOrWhiteSpace(r.Notes))
+            sb.AppendLine($"Note dello staff su questo cliente (usale per personalizzare il dialogo con tatto, senza citarle parola per parola): {r.Notes}");
         sb.AppendLine();
 
         sb.AppendLine("## Regole che valgono sempre");

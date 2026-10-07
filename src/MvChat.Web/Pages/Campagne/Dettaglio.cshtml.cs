@@ -48,7 +48,8 @@ public class DettaglioModel : PageModel
             Preview = TemplateText.Fill(t.Body, new Dictionary<string, string?>
             {
                 ["nome"] = first?.FirstName ?? "Giulia", ["cognome"] = first?.LastName, ["abbonamento"] = first?.Membership,
-                ["scadenza"] = first?.ExpiresOn?.ToString("dd/MM/yyyy"), ["palestra"] = c.GymName, ["offerta"] = c.OfferTitle
+                ["scadenza"] = first?.ExpiresOn?.ToString("dd/MM/yyyy"), ["palestra"] = c.GymName, ["offerta"] = c.OfferTitle,
+                ["servizio"] = first?.Service, ["note"] = first?.Notes
             });
         return true;
     }
@@ -159,7 +160,8 @@ public class DettaglioModel : PageModel
             var values = new Dictionary<string, string?>
             {
                 ["nome"] = parts[0], ["cognome"] = parts.Length > 1 ? parts[1] : "Prova", ["abbonamento"] = "Annuale",
-                ["scadenza"] = DateTime.UtcNow.ToRome().Date.AddDays(30).ToString("dd/MM/yyyy"), ["palestra"] = C.GymName, ["sede"] = C.GymName, ["offerta"] = C.OfferTitle
+                ["scadenza"] = DateTime.UtcNow.ToRome().Date.AddDays(30).ToString("dd/MM/yyyy"), ["palestra"] = C.GymName, ["sede"] = C.GymName, ["offerta"] = C.OfferTitle,
+                ["servizio"] = TemplateText.Placeholders["servizio"], ["note"] = TemplateText.Placeholders["note"]
             };
             var r = await _send.SendTemplateAsync(number, t, n.Phone, values, User.Scope().UserId);
             if (!r.Ok) { problems.Add($"{n.Name}: {r.Error}"); continue; }

@@ -729,6 +729,20 @@ act(m, cE, "Start"); _time.sleep(0.3); html = cpage(m, cE)
 check("dato mancante nel primo messaggio: il cliente viene saltato, niente trattini", "Inviati (1)" in html and "manca il dato «scadenza»" in html, html[html.find('class="stats"'):][:400])
 s,html,_ = m.post(tpl_a + "?handler=Delete", {"TemplateId":tid}, form_path=tpl_a)
 _,html,_ = m.req(tpl_a); check("un template approvato e usato non si elimina", "rinnovo_ottobre" in html and "Si possono eliminare solo" in html)
+# Campi liberi «Servizio / corso» e «Note»: nel primo messaggio e nelle istruzioni dell'assistente
+mp2 = dict(mp, Service=9, Notes=10)
+_, res = m.post_json("/Lists/New?handler=Import", {"GymId":alba,"Name":"Corsi","FileName":"x.xlsx","Map":mp2,
+    "Rows":[["Rita","Test","320 000 0041","","Annuale","2026-11-30","SI","","","Pilates","Viene la sera"]]}, "/Lists/New")
+lid_s = res.get("listId")
+_,html,_ = m.req(f"/Lists/Detail/{lid_s}")
+check("lista: servizio e note importati", "Pilates" in html and "Viene la sera" in html, html[html.find("<tbody>"):][:300])
+s1,_,_ = m.post(tpl_a + "?handler=Create", {"Name":"Corso servizio","Category":"MARKETING","Body":"Ciao {{nome}}, a {{sede}} riparte il corso di {{servizio}}. Ti interessa?"}, form_path=tpl_a)
+tid_s = re.search(r'<option value="(\d+)">corso_servizio</option>', m.req(alba_wa)[1])
+cS,_,_ = camp_post(m, dict(base, Name="Corsi", ListId=lid_s, TemplateId=tid_s.group(1) if tid_s else ""), alba)
+act(m, cS, "Start"); _time.sleep(0.3); html = cpage(m, cS)
+conv_s = re.search(r"/Conversazioni/(\d+)", html)
+chat = page(m, conv_s.group(1)) if conv_s else ""
+check("template con {{servizio}}: il primo messaggio cita il corso del cliente", s1 == 302 and "riparte il corso di Pilates" in chat, chat[chat.find('id="chat"'):][:300])
 prova_url = f"/Campagne/Prova/{alba}"
 s,html,_ = m.post(prova_url + "?handler=Add", {"Name":"Maurizio Prova","Phone":"12"}, form_path=prova_url)
 check("numero di prova sbagliato rifiutato", s == 200 and "non è valido" in html, str(s))
@@ -763,6 +777,9 @@ try:
         cur.execute("SELECT COUNT(*) FROM SchemaBatches WHERE Version=12"); batches = cur.fetchone()[0]
     check("pulizia: le righe di fatturazione restano nel registro, le altre vecchie no", (kept or 0) > 0 and (gone or 0) == 0, f"{kept} {gone}")
     check("aggiornamento del database ricordato pezzo per pezzo", batches >= 10, str(batches))
+    with db.cursor() as cur:
+        cur.execute("SELECT Service, Notes FROM Conversations WHERE ContactPhone='+393200000041' ORDER BY Id DESC LIMIT 1"); sv = cur.fetchone()
+    check("la conversazione ricorda servizio e note per l'assistente", sv is not None and sv[0] == "Pilates" and sv[1] == "Viene la sera", str(sv))
     # Limite di campagne per cliente (qui 1 in 30 giorni): Omar ha già ricevuto «Dati mancanti»
     with db.cursor() as cur:
         cur.execute("UPDATE Conversations SET Status='chiusa' WHERE ContactPhone='+393200000032'")

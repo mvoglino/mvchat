@@ -3,7 +3,8 @@ using MvChat.Web.Security;
 
 namespace MvChat.Web.Privacy;
 
-public sealed record FoundContact(long Id, int OrganizationId, string ListName, string GymName, string FirstName, string? LastName, string? Email, string? Membership, DateTime? ExpiresOn, DateTime? ConsentDate, string? ConsentSource, DateTime CreatedAt);
+public sealed record FoundContact(long Id, int OrganizationId, string ListName, string GymName, string FirstName, string? LastName, string? Email, string? Membership, DateTime? ExpiresOn, DateTime? ConsentDate, string? ConsentSource, DateTime CreatedAt,
+    string? Service = null, string? Notes = null);
 public sealed record FoundConversation(long Id, int OrganizationId, string GymName, string GoalName, string Status, string Outcome, DateTime CreatedAt, int Messages);
 public sealed record FoundMessage(long ConversationId, string Direction, string? Body, DateTime CreatedAt);
 public sealed record FoundOptOut(string OrgName, string? GymName, string? Reason, string Source, DateTime CreatedAt);
@@ -24,10 +25,10 @@ public sealed class SubjectRequests
     public static string Mask(string phone) => phone.Length <= 9 ? (phone.Length <= 4 ? "***" : phone[..3] + "***") : phone[..5] + new string('*', phone.Length - 9) + phone[^4..];
 
     public Task<List<FoundContact>> ContactsAsync(Scope s, string phone) => _db.QueryAsync(
-        $@"SELECT k.Id, g.OrganizationId, l.Name AS ListName, g.Name AS GymName, k.FirstName, k.LastName, k.Email, k.Membership, k.ExpiresOn, k.ConsentDate, k.ConsentSource, k.CreatedAt
+        $@"SELECT k.Id, g.OrganizationId, l.Name AS ListName, g.Name AS GymName, k.FirstName, k.LastName, k.Email, k.Membership, k.ExpiresOn, k.ConsentDate, k.ConsentSource, k.CreatedAt, k.Service, k.Notes
            FROM Contacts k JOIN ContactLists l ON l.Id=k.ListId JOIN Gyms g ON g.Id=k.GymId WHERE {G} AND k.Phone=@phone ORDER BY k.CreatedAt",
         A(s, phone), r => new FoundContact(r.GetInt64(0), r.Int("OrganizationId"), r.Str("ListName")!, r.Str("GymName")!, r.Str("FirstName")!, r.Str("LastName"), r.Str("Email"),
-            r.Str("Membership"), r.Date("ExpiresOn"), r.Date("ConsentDate"), r.Str("ConsentSource"), r.Date("CreatedAt")!.Value));
+            r.Str("Membership"), r.Date("ExpiresOn"), r.Date("ConsentDate"), r.Str("ConsentSource"), r.Date("CreatedAt")!.Value, r.Str("Service"), r.Str("Notes")));
 
     public Task<List<FoundConversation>> ConversationsAsync(Scope s, string phone) => _db.QueryAsync(
         $@"SELECT c.Id, g.OrganizationId, g.Name AS GymName, COALESCE(m.Name, 'Messaggio spontaneo') AS GoalName, c.Status, c.Outcome, c.CreatedAt,
