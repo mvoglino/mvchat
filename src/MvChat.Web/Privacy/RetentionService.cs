@@ -94,6 +94,9 @@ public sealed class RetentionWorker : BackgroundService
                 try { using var s = _scopes.CreateScope(); await s.ServiceProvider.GetRequiredService<RetentionService>().RunAsync(); }
                 catch (Exception ex) { _log.LogError(ex, "Pulizia dei dati non riuscita"); }
             }
+            // Una riga all'ora nel registro tecnico: se la memoria cresce, si vede prima che l'hosting chiuda il sito.
+            using (var p = System.Diagnostics.Process.GetCurrentProcess())
+                _log.LogInformation("Memoria in uso: {Mb} MB (gestita {Managed} MB)", p.PrivateMemorySize64 / 1048576, GC.GetTotalMemory(false) / 1048576);
             await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
         }
     }

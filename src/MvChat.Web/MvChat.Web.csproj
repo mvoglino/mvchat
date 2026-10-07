@@ -9,6 +9,10 @@
     <Version>0.1.0</Version>
     <!-- Aruba Windows hosting: IIS in-process (ASP.NET Core Module V2), framework-dependent: sul server ci sono .NET 9 e 10 -->
     <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
+    <!-- Hosting condiviso: memoria "da workstation". Il GC da server riserva molta memoria per ogni processore
+         del server di Aruba e fa superare il limite del pool, che allora riavvia (e a volte blocca) il sito. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <!--

@@ -123,7 +123,12 @@ var app = builder.Build();
 
 var version = typeof(Program).Assembly.GetName().Version?.ToString(3);
 app.Lifetime.ApplicationStarted.Register(() => app.Logger.LogInformation("mvchat avviato (versione {Version}, processo {Pid})", version, Environment.ProcessId));
-app.Lifetime.ApplicationStopping.Register(() => app.Logger.LogWarning("mvchat in chiusura: richiesta dal server (riavvio, aggiornamento o inattività dell'hosting)"));
+app.Lifetime.ApplicationStopping.Register(() =>
+{
+    using var p = System.Diagnostics.Process.GetCurrentProcess();
+    app.Logger.LogWarning("mvchat in chiusura: richiesta dal server (riavvio, aggiornamento o limite dell'hosting). Memoria in uso: {Mb} MB, acceso da {Hours:0.0} ore",
+        p.PrivateMemorySize64 / 1048576, (DateTime.Now - p.StartTime).TotalHours);
+});
 app.Lifetime.ApplicationStopped.Register(() => app.Logger.LogInformation("mvchat chiuso"));
 
 // Installazioni fatte prima del Passo 4: crea la parola d'ordine del webhook se manca.
