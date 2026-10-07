@@ -13,6 +13,10 @@
          del server di Aruba e fa superare il limite del pool, che allora riavvia (e a volte blocca) il sito. -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- Nel pacchetto solo i file che servono: niente eseguibile di avvio (IIS usa dotnet + MvChat.Web.dll, vedi web.config)
+         né file di debug. Un eseguibile senza firma dentro lo zip fa bloccare il download dai browser. -->
+    <UseAppHost>false</UseAppHost>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <!--
