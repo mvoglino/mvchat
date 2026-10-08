@@ -43,6 +43,23 @@
 </section>
 
 <section class="panel">
+    <div class="panel-h"><h2>Istruzioni in più per l'assistente</h2><span class="muted">solo per questa campagna</span><span style="flex:1"></span>
+        <a class="btn sm" href="/Modelli/Anteprima?campagna=@c.Id">Vedi le istruzioni complete</a></div>
+    @if (c.Status is "completata" or "annullata")
+    {
+        <div class="panel-b">@if (string.IsNullOrWhiteSpace(c.ExtraInstructions)) {<span class="muted">Nessuna.</span>} else {<div style="white-space:pre-wrap">@c.ExtraInstructions</div>}</div>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="Extra" class="panel-b">
+            <div class="field full"><textarea name="ExtraInstructions" rows="3" maxlength="1500" aria-label="Istruzioni in più" placeholder="Es. Dal 20 al 27 dicembre la palestra è chiusa. Chi rinnova entro il 15 riceve anche la maglietta.">@c.ExtraInstructions</textarea>
+                <small>Si aggiungono al modello «@c.GoalName». I prezzi restano quelli dell'offerta. Le modifiche valgono dalle risposte successive.</small></div>
+            <button class="btn sm" type="submit">Salva istruzioni</button>
+        </form>
+    }
+</section>
+
+<section class="panel">
     <div class="panel-h"><h2>Destinatari</h2><span style="flex:1"></span>
         <form method="get" class="inline-form" style="margin:0"><select name="stato" onchange="this.form.submit()" aria-label="Filtra per stato">
             <option value="">Tutti (@c.Total)</option>

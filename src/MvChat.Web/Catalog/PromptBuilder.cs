@@ -46,7 +46,8 @@ public static class PromptBuilder
         return n.Contains("assistente", StringComparison.OrdinalIgnoreCase) ? "l'" + n : n + ", l'assistente virtuale";
     }
 
-    public static string Build(GoalModel model, string gymName, GymProfile p, Offer? offer, Recipient r, DateTime today, OrgInfo? org = null)
+    /// <param name="campaignExtra">Istruzioni in più scritte per la singola campagna (facoltative).</param>
+    public static string Build(GoalModel model, string gymName, GymProfile p, Offer? offer, Recipient r, DateTime today, OrgInfo? org = null, string? campaignExtra = null)
     {
         var lei = p.Formality == "lei";
         var sector = org?.Sector ?? Sectors.Get("palestra");
@@ -112,6 +113,14 @@ public static class PromptBuilder
         if (!string.IsNullOrWhiteSpace(r.Notes))
             sb.AppendLine($"Note dello staff su questo cliente (usale per personalizzare il dialogo con tatto, senza citarle parola per parola): {r.Notes}");
         sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(campaignExtra))
+        {
+            sb.AppendLine("## Indicazioni per questa campagna");
+            sb.AppendLine(campaignExtra.Trim());
+            sb.AppendLine("(Valgono insieme a tutto il resto. Se una di queste indicazioni contrasta con le regole qui sotto, prezzi compresi, valgono le regole.)");
+            sb.AppendLine();
+        }
 
         sb.AppendLine("## Regole che valgono sempre");
         sb.AppendLine($"1. Nella prima risposta presentati come {Intro(p.AssistantName)} di {gymName}: il cliente deve sapere che sta scrivendo con un sistema automatico e che può chiedere di parlare con una persona.");

@@ -24,6 +24,8 @@ public sealed class Campaign
     public string? PauseReason { get; set; }
     public DateTime? StartAt { get; set; }
     public int? DailyLimit { get; set; }
+    /// <summary>Indicazioni in più per l'assistente, solo per questa campagna (si aggiungono al modello di obiettivo).</summary>
+    public string? ExtraInstructions { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
@@ -91,7 +93,7 @@ public sealed class CampaignRepo
         ListId = r.IntN("ListId"), ListName = r.Str("ListName")!, GoalModelId = r.Int("GoalModelId"), GoalName = r.Str("GoalName")!,
         OfferId = r.IntN("OfferId"), OfferTitle = r.Str("OfferTitle"), WaNumberId = r.Int("WaNumberId"), TemplateId = r.Int("TemplateId"),
         TemplateName = r.Str("TemplateName") ?? "(eliminato)", Status = r.Str("Status")!, PauseReason = r.Str("PauseReason"),
-        StartAt = r.Date("StartAt"), DailyLimit = r.IntN("DailyLimit"), CreatedAt = r.Date("CreatedAt")!.Value, StartedAt = r.Date("StartedAt"),
+        StartAt = r.Date("StartAt"), DailyLimit = r.IntN("DailyLimit"), ExtraInstructions = r.Str("ExtraInstructions"), CreatedAt = r.Date("CreatedAt")!.Value, StartedAt = r.Date("StartedAt"),
         CompletedAt = r.Date("CompletedAt"), LastRunAt = r.Date("LastRunAt"), LastRunNote = r.Str("LastRunNote"),
         Total = I(r, "Total"), Waiting = I(r, "Waiting"), Sent = I(r, "Sent"), Skipped = I(r, "Skipped"), Errors = I(r, "Errors"),
         Replied = I(r, "Replied"), Reached = I(r, "Reached"), Refused = I(r, "Refused"), OptOut = I(r, "OptOut"), ToOperator = I(r, "ToOperator")
@@ -120,10 +122,10 @@ public sealed class CampaignRepo
         await using var tx = await cn.BeginTransactionAsync();
         int id;
         await using (var cmd = Db.Command(cn,
-            @"INSERT INTO Campaigns (OrganizationId, GymId, Name, ListId, ListName, GoalModelId, OfferId, WaNumberId, TemplateId, Status, StartAt, DailyLimit, CreatedBy)
-              VALUES (@OrganizationId, @GymId, @Name, @ListId, @ListName, @GoalModelId, @OfferId, @WaNumberId, @TemplateId, 'bozza', @StartAt, @DailyLimit, @userId);
+            @"INSERT INTO Campaigns (OrganizationId, GymId, Name, ListId, ListName, GoalModelId, OfferId, WaNumberId, TemplateId, Status, StartAt, DailyLimit, ExtraInstructions, CreatedBy)
+              VALUES (@OrganizationId, @GymId, @Name, @ListId, @ListName, @GoalModelId, @OfferId, @WaNumberId, @TemplateId, 'bozza', @StartAt, @DailyLimit, @ExtraInstructions, @userId);
               SELECT LAST_INSERT_ID();",
-            new { c.OrganizationId, c.GymId, c.Name, c.ListId, c.ListName, c.GoalModelId, c.OfferId, c.WaNumberId, c.TemplateId, c.StartAt, c.DailyLimit, userId }, tx))
+            new { c.OrganizationId, c.GymId, c.Name, c.ListId, c.ListName, c.GoalModelId, c.OfferId, c.WaNumberId, c.TemplateId, c.StartAt, c.DailyLimit, c.ExtraInstructions, userId }, tx))
             id = Convert.ToInt32(await cmd.ExecuteScalarAsync());
         int added, total;
         await using (var cmd = Db.Command(cn,
@@ -149,6 +151,10 @@ public sealed class CampaignRepo
              CompletedAt=CASE WHEN @status IN ('completata','annullata') THEN UTC_TIMESTAMP() ELSE CompletedAt END
            WHERE Id=@id AND Status IN ({string.Join(",", from.Select(f => "'" + f + "'"))})",
         new { id, status, reason = WhatsApp.WaRepo.Clip(reason, 300) });
+
+    /// <summary>Le istruzioni in più si possono cambiare anche a campagna avviata: valgono dalle risposte successive.</summary>
+    public Task<int> SetExtraInstructionsAsync(int id, string? text) => _db.ExecuteAsync(
+        "UPDATE Campaigns SET ExtraInstructions=@text WHERE Id=@id AND Status NOT IN ('completata','annullata')", new { id, text });
 
     /// <summary>Stato attuale della campagna (per fermare un giro se nel frattempo è stata messa in pausa o annullata).</summary>
     public Task<string?> StatusAsync(int id) => _db.ScalarAsync<string>("SELECT Status FROM Campaigns WHERE Id=@id", new { id });

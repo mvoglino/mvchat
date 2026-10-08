@@ -34,6 +34,8 @@ public class NuovaModel : PageModel
     [BindProperty] public string When { get; set; } = "subito";
     [BindProperty] public DateTime? StartAt { get; set; }
     [BindProperty] public int? DailyLimit { get; set; }
+    [BindProperty] public string? ExtraInstructions { get; set; }
+    public const int ExtraMax = 1500;
 
     private async Task<Gym?> LoadAsync()
     {
@@ -82,7 +84,8 @@ public class NuovaModel : PageModel
         var c = new Campaign
         {
             OrganizationId = g!.OrganizationId, GymId = g.Id, Name = Name!.Trim()[..Math.Min(150, Name.Trim().Length)], ListId = list!.Id, ListName = list.Name,
-            GoalModelId = model!.Id, OfferId = offer?.Id, WaNumberId = Number!.Id, TemplateId = template!.Id, StartAt = startUtc, DailyLimit = DailyLimit
+            GoalModelId = model!.Id, OfferId = offer?.Id, WaNumberId = Number!.Id, TemplateId = template!.Id, StartAt = startUtc, DailyLimit = DailyLimit,
+            ExtraInstructions = string.IsNullOrWhiteSpace(ExtraInstructions) ? null : ExtraInstructions.Trim()[..Math.Min(ExtraInstructions.Trim().Length, ExtraMax)]
         };
         var (id, recipients, excluded) = await _repo.CreateAsync(c, me.UserId);
         await _repos.AuditAsync(me, "campaign.created", $"#{id} {c.Name} · {recipients} destinatari", HttpContext.Connection.RemoteIpAddress?.ToString(), g.OrganizationId, g.Id);

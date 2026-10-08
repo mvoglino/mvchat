@@ -127,6 +127,20 @@ public class DettaglioModel : PageModel
         return Back();
     }
 
+    [BindProperty] public string? ExtraInstructions { get; set; }
+
+    /// <summary>Istruzioni in più per l'assistente: si cambiano anche a campagna avviata e valgono dalle risposte successive.</summary>
+    public async Task<IActionResult> OnPostExtraAsync(int id)
+    {
+        if (!await LoadAsync(id)) return NotFound();
+        if (C.Status is "completata" or "annullata") return Back();
+        var text = string.IsNullOrWhiteSpace(ExtraInstructions) ? null : ExtraInstructions.Trim()[..Math.Min(ExtraInstructions.Trim().Length, 1500)];
+        await _repo.SetExtraInstructionsAsync(id, text);
+        await Audit("campaign.instructions", text is null ? "tolte" : "aggiornate");
+        TempData["Ok"] = text is null ? "Istruzioni in più tolte." : "Istruzioni in più salvate: l'assistente le usa dalla prossima risposta.";
+        return Back();
+    }
+
     /// <summary>Rimette in coda i destinatari a cui l'invio non è riuscito (es. Meta non raggiungibile o numero da correggere).</summary>
     public async Task<IActionResult> OnPostRequeueAsync(int id)
     {
@@ -168,7 +182,8 @@ public class DettaglioModel : PageModel
             var convId = await _convs.CreateAsync(new Conversation
             {
                 OrganizationId = C.OrganizationId, GymId = C.GymId, WaNumberId = number.Id, ContactPhone = n.Phone, ContactName = parts[0],
-                Membership = "Annuale", ExpiresOn = DateTime.UtcNow.ToRome().Date.AddDays(30), GoalModelId = C.GoalModelId, OfferId = C.OfferId, IsTest = true
+                Membership = "Annuale", ExpiresOn = DateTime.UtcNow.ToRome().Date.AddDays(30), GoalModelId = C.GoalModelId, OfferId = C.OfferId, IsTest = true,
+                TestOfCampaignId = C.Id
             });
             await _wa.SetMessageConversationAsync(r.MessageId, convId);
             ok++;

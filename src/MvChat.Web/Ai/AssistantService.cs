@@ -33,7 +33,8 @@ public sealed class AssistantService
         var profile = await _catalog.ProfileAsync(c.GymId);
         var who = new Recipient(c.ContactName, null, c.Membership, c.ExpiresOn, c.Service, c.Notes);
         var org = await _catalog.ActivityInfoAsync(c.GymId);
-        var system = PromptBuilder.Build(model, c.GymName, profile, offer, who, DateTime.UtcNow.ToRome().Date, org);
+        var extra = (c.CampaignId ?? c.TestOfCampaignId) is int campId ? await _conv.CampaignInstructionsAsync(campId) : null;
+        var system = PromptBuilder.Build(model, c.GymName, profile, offer, who, DateTime.UtcNow.ToRome().Date, org, extra);
         if (!string.IsNullOrWhiteSpace(firstMessage))
             system += $"\n## Primo messaggio già inviato al cliente\n\"{firstMessage}\"\n";
         system += "\n" + Guardrails.OutputFormat;

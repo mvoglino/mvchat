@@ -1,7 +1,8 @@
 @page
 @model MvChat.Web.Pages.Modelli.AnteprimaModel
 @{ ViewData["Title"] = "Prova le istruzioni dell'assistente"; }
-<p class="muted" style="margin:0">Scegli modello, attività e offerta: vedi il primo messaggio che riceverebbe il cliente e le istruzioni complete che riceverà l'assistente. Dal Passo 5 da qui si potrà anche chattare con l'assistente.</p>
+<p class="muted" style="margin:0">Scegli modello, attività e offerta: vedi il primo messaggio che riceverebbe il cliente e le istruzioni complete che riceverà l'assistente. Per chattare davvero con l'assistente usa «Prova l'assistente».</p>
+@if (Model.CampaignName is not null) { <div class="note">Anteprima della campagna <b>«@Model.CampaignName»</b>: modello, offerta e istruzioni in più sono quelli della campagna. <a href="/Campagne/@Model.Campagna">Torna alla campagna</a></div> }
 <form method="get" class="panel">
     <div class="panel-b form">
         <div class="field"><label for="Model">Modello di obiettivo</label><select id="Model" name="model" onchange="this.form.submit()">@foreach (var m in Model.Models) { <option value="@m.Id" selected="@(m.Id == Model.Model)">@m.Name</option> }</select></div>

@@ -473,7 +473,7 @@ _,html,_ = m.req(orari); check("orari di invio salvati dall'attività", s == 302
 s,_,_ = oth.post(orari, {"Mode":"sempre"}, form_path="/Account/Password"); check("un altro gruppo non cambia gli orari dell'attività", s == 404, str(s))
 
 lid_a = import_list(m, alba, "Campagna ottobre", [("Anna","320 000 0001"),("Bruno","320 000 0002"),("Carla","320 000 0003"),("Dario","320 000 0004"),("Sara","333 111 6677")])
-base = {"Name":"Rinnovi ottobre","ListId":lid_a,"ModelId":rinnovo,"OfferId":offer_alba,"TemplateId":tid,"When":"subito","DailyLimit":""}
+base = {"Name":"Rinnovi ottobre","ListId":lid_a,"ModelId":rinnovo,"OfferId":offer_alba,"TemplateId":tid,"When":"subito","DailyLimit":"","ExtraInstructions":"Dal 20 al 27 dicembre la palestra è chiusa."}
 cA, s, html = camp_post(m, dict(base, Name=""), alba); check("campagna senza nome rifiutata", cA is None and "Dai un nome" in html)
 cA, s, html = camp_post(m, dict(base, TemplateId="999999"), alba); check("campagna con template non approvato rifiutata", cA is None and "template" in html)
 cA, s, html = camp_post(m, base, alba)
@@ -490,6 +490,8 @@ chat = page(m, conv_anna)
 check("ogni invio apre la sua conversazione con il primo messaggio", "Ciao Anna, il tuo abbonamento" in chat and "Rinnovo abbonamento" in chat)
 say(m, conv_anna, "Quanto costa?")
 check("il cliente risponde e l'assistente prosegue la campagna", "Il rinnovo costa 399 €." in page(m, conv_anna))
+_sys = fake_ai.REQUESTS[-1]["body"].get("system", [{}])[0].get("text", "") if fake_ai.REQUESTS else ""
+check("all'assistente arrivano le istruzioni in più della campagna", "Indicazioni per questa campagna" in _sys and "Dal 20 al 27 dicembre la palestra è chiusa." in _sys, _sys[-600:])
 say(m, conv_anna, "Va bene, procediamo")
 html = cpage(m, cA)
 check("risposte ed esiti contati nella campagna", re.search(r"<b>1</b><span>hanno risposto", html) is not None and re.search(r"<b>1</b><span>obiettivo raggiunto", html) is not None)
@@ -753,6 +755,11 @@ cP,_,_ = camp_post(m, dict(base, Name="Con prova", ListId=lid_b), alba)
 _,html,_ = m.post(f"/Campagne/{cP}?handler=Test", {}, form_path=f"/Campagne/{cP}")
 html = cpage(m, cP); _,lst,_ = m.req("/Conversazioni?view=tutte")
 check("prova facoltativa: il primo messaggio arriva ai numeri di prova, la campagna resta in bozza", "Prova inviata a 1 numero" in html and "Bozza" in html and "Inviati (0)" in html and "+393470001111" in lst, html[html.find("flash"):][:200])
+# Istruzioni in più modificabili a campagna non ancora finita e visibili nell'anteprima
+m.post(f"/Campagne/{cP}?handler=Extra", {"ExtraInstructions":"Sabato open day con lezioni gratuite."}, form_path=f"/Campagne/{cP}")
+_,html,_ = m.req(f"/Modelli/Anteprima?campagna={cP}")
+s2,html_o,_ = oth.req(f"/Modelli/Anteprima?campagna={cP}")
+check("istruzioni in più: si cambiano dalla campagna e si vedono nell'anteprima", "Sabato open day con lezioni gratuite." in html and "Anteprima della campagna" in html and "Sabato open day" not in html_o, html[html.find("Indicazioni"):][:200])
 _,html,_ = sa.req("/Report"); _,html_d,_ = d.req("/Report?dal=2026-01-01")
 check("report: periodi pronti e scelta dell'attività", "Mese scorso" in html and "Da inizio anno" in html and "Tutti i clienti" in html and "Tutto il gruppo" in html_d and "FitActive Bra" in html_d)
 s,body,_ = Client().req("/health"); hj = _json.loads(body) if s == 200 else {}

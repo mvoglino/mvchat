@@ -12,7 +12,12 @@ public class AnteprimaModel : PageModel
 {
     private readonly CatalogRepo _catalog;
     private readonly Repos _repos;
-    public AnteprimaModel(CatalogRepo catalog, Repos repos) { _catalog = catalog; _repos = repos; }
+    private readonly MvChat.Web.Campaigns.CampaignRepo _campaigns;
+    public AnteprimaModel(CatalogRepo catalog, Repos repos, MvChat.Web.Campaigns.CampaignRepo campaigns) { _catalog = catalog; _repos = repos; _campaigns = campaigns; }
+
+    /// <summary>Anteprima di una campagna precisa: modello, attività, offerta e istruzioni in più presi dalla campagna.</summary>
+    [BindProperty(SupportsGet = true)] public int? Campagna { get; set; }
+    public string? CampaignName { get; private set; }
 
     public List<GoalModel> Models { get; private set; } = new();
     public List<Gym> Gyms { get; private set; } = new();
@@ -32,6 +37,12 @@ public class AnteprimaModel : PageModel
     {
         var me = User.Scope();
         Models = await _catalog.ModelsAsync(me, onlyActive: true);
+        string? extra = null;
+        if (Campagna is int cid && await _campaigns.GetAsync(me, cid) is { } camp) // perimetro nella query
+        {
+            Model = camp.GoalModelId; Gym = camp.GymId; Offer = camp.OfferId; extra = camp.ExtraInstructions; CampaignName = camp.Name;
+            if (Models.All(m => m.Id != camp.GoalModelId)) Models.AddRange(await _catalog.ModelsAsync(me, camp.GoalModelId));
+        }
         Gyms = (await _repos.GymsAsync(me)).Where(g => g.IsActive).ToList();
         var model = Models.FirstOrDefault(m => m.Id == Model) ?? Models.FirstOrDefault();
         var gym = Gyms.FirstOrDefault(g => g.Id == Gym) ?? Gyms.FirstOrDefault();
@@ -51,7 +62,7 @@ public class AnteprimaModel : PageModel
         if (offer is not null && offer.Status != "Attiva") Warnings.Add($"L'offerta scelta è «{offer.Status.ToLower()}»: in una campagna vera non verrebbe accettata.");
         if (profile.Completeness < 60) Warnings.Add($"La scheda di {gym.Name} è compilata al {profile.Completeness}%: l'assistente saprà rispondere a poche domande.");
 
-        Prompt = PromptBuilder.Build(model, gym.Name, profile, offer, who, today, await _catalog.ActivityInfoAsync(gym.Id));
+        Prompt = PromptBuilder.Build(model, gym.Name, profile, offer, who, today, await _catalog.ActivityInfoAsync(gym.Id), extra);
         FirstMessage = PromptBuilder.FillTemplate(model.TemplateSuggestion, who, gym.Name, offer);
     }
 }
