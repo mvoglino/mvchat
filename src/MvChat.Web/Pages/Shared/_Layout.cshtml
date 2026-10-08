@@ -65,54 +65,80 @@ else
                 }
                 <div><b>@(brand?.Name ?? product)</b><small>@Roles.Label(scope!.Role)</small></div>
             </div>
+            @{
+                // Menù a gruppi: ogni gruppo raccoglie un argomento, con le voci nell'ordine in cui si usano.
+                var page = ViewContext.RouteData.Values["page"] as string ?? "";
+                bool On(string prefix, params string[] except) => page.StartsWith(prefix) && !except.Any(e => page.StartsWith(e));
+                var canWork = scope.CanManageUsers; // MVitalia, amministratore di gruppo, amministratore attività
+                var groups = new List<(string Title, string? Hint, List<(string Label, string Href, bool Active, bool Badge)> Items)>();
+                // L'ordine dei gruppi segue il lavoro: si organizza, si prepara l'assistente, si lancia la campagna, si segue la reception, si guardano i risultati.
+                if (canWork)
+                {
+                    var setup = new List<(string Label, string Href, bool Active, bool Badge)>();
+                    if (scope.IsOrgAdmin) setup.Add(("Dati e logo del gruppo", "/Gruppo", On("/Gruppo"), false));
+                    if (scope.IsManager) setup.Add(("Dati e logo dell'attività", "/Attivita", On("/Attivita"), false));
+                    if (scope.CanManageGyms) setup.Add(("Attività", "/Gyms", On("/Gyms"), false));
+                    setup.Add(("Utenti", "/Users", On("/Users"), false));
+                    setup.Add(("WhatsApp: numero e template", "/WhatsApp", On("/WhatsApp"), false));
+                    groups.Add(("Organizzazione", "attività, persone, WhatsApp", setup));
+                    groups.Add(("Assistente AI", "cosa sa e come dialoga", new()
+                    {
+                        ("1 · Scheda per l'assistente", "/Sedi", On("/Sedi"), false),
+                        ("2 · Offerte", "/Offerte", On("/Offerte"), false),
+                        ("3 · Modelli di obiettivo", "/Modelli", On("/Modelli", "/Modelli/Anteprima"), false),
+                        ("4 · Anteprima istruzioni", "/Modelli/Anteprima", On("/Modelli/Anteprima"), false),
+                        ("5 · Prova l'assistente", "/Assistente/Prova", On("/Assistente/Prova"), false),
+                        ("6 · Banco di prova", "/Assistente/Banco", On("/Assistente/Banco"), false),
+                    }));
+                    groups.Add(("Campagne", "dalla lista all'invio", new()
+                    {
+                        ("1 · Liste contatti", "/Lists", On("/Lists"), false),
+                        ("2 · Campagne", "/Campagne", On("/Campagne"), false),
+                        ("Lista STOP", "/OptOuts", On("/OptOuts"), false),
+                    }));
+                }
+                var reception = new List<(string Label, string Href, bool Active, bool Badge)>
+                {
+                    ("Conversazioni", "/Conversazioni", On("/Conversazioni", "/Conversazioni/Archivio"), true),
+                    ("Archivio dialoghi", "/Conversazioni/Archivio", On("/Conversazioni/Archivio"), false),
+                };
+                if (canWork) reception.Add(("Risposte rapide", "/RisposteRapide", On("/RisposteRapide"), false));
+                groups.Add(("Reception", "le conversazioni con i clienti", reception));
+                if (canWork)
+                {
+                    var results = new List<(string Label, string Href, bool Active, bool Badge)> { ("Report", "/Report", On("/Report"), false) };
+                    if (scope.IsOrgAdmin || (scope.IsManager && !inGroup)) results.Add(("Rendiconti", "/Fatturazione", On("/Fatturazione"), false));
+                    results.Add(("Richieste privacy dei clienti", "/Privacy", On("/Privacy"), false));
+                    groups.Add(("Risultati e privacy", null, results));
+                }
+                if (scope.IsSuperAdmin)
+                {
+                    groups.Add(("MVitalia", "gestione del servizio", new()
+                    {
+                        ("Gruppi", "/Orgs", On("/Orgs"), false),
+                        ("Impostazioni Meta", "/Impostazioni/WhatsApp", On("/Impostazioni/WhatsApp"), false),
+                        ("Impostazioni AI", "/Impostazioni/AI", On("/Impostazioni/AI"), false),
+                        ("Fatturazione", "/Fatturazione", On("/Fatturazione"), false),
+                        ("Impostazioni fatturazione", "/Impostazioni/Fatturazione", On("/Impostazioni/Fatturazione"), false),
+                        ("Conservazione dei dati", "/Impostazioni/Privacy", On("/Impostazioni/Privacy"), false),
+                        ("Registro tecnico", "/Impostazioni/Registro", On("/Impostazioni/Registro"), false),
+                    }));
+                }
+            }
             <nav class="nav" aria-label="Sezioni">
-                <a href="/" aria-current="@(Cur("/Index"))">@(scope.IsSuperAdmin ? "Pannello" : "Panoramica")</a>
-                @if (scope.IsSuperAdmin)
+                <a href="/" aria-current="@(page == "/Index" ? "page" : "false")" class="nav-home">@(scope.IsSuperAdmin ? "Pannello" : "Panoramica")</a>
+                @foreach (var (title, hint, items) in groups)
                 {
-                    <a href="/Orgs" aria-current="@(Cur("/Orgs"))">Gruppi</a>
-                    <a href="/Impostazioni/WhatsApp" aria-current="@(Cur("/Impostazioni/WhatsApp"))">Impostazioni Meta</a>
-                    <a href="/Impostazioni/AI" aria-current="@(Cur("/Impostazioni/AI"))">Impostazioni AI</a>
-                    <a href="/Fatturazione" aria-current="@(Cur("/Fatturazione"))">Fatturazione</a>
-                    <a href="/Impostazioni/Privacy" aria-current="@(Cur("/Impostazioni/Privacy"))">Privacy e dati</a>
-                    <a href="/Impostazioni/Registro" aria-current="@(Cur("/Impostazioni/Registro"))">Registro tecnico</a>
+                    var open = items.Any(i => i.Active) || (title == "Reception" && !canWork);
+                    var hasBadge = items.Any(i => i.Badge) && waiting > 0;
+                    <details class="nav-group" open="@open">
+                        <summary><span>@title@if (hasBadge) {<span class="badge" aria-hidden="true">@waiting</span>}</span>@if (hint is not null) {<small>@hint</small>}</summary>
+                        @foreach (var it in items)
+                        {
+                            <a href="@it.Href" aria-current="@(it.Active ? "page" : "false")">@it.Label@if (it.Badge) {<span class="badge" id="waitBadge" aria-label="conversazioni che aspettano una persona" hidden="@(waiting == 0)">@waiting</span>}</a>
+                        }
+                    </details>
                 }
-                @if (scope.IsOrgAdmin || (scope.IsManager && !inGroup))
-                {
-                    <a href="/Fatturazione" aria-current="@(Cur("/Fatturazione"))">Rendiconti</a>
-                }
-                @if (scope.IsOrgAdmin)
-                {
-                    <a href="/Gruppo" aria-current="@(Cur("/Gruppo"))">Il gruppo</a>
-                }
-                @if (scope.CanManageGyms)
-                {
-                    <a href="/Gyms" aria-current="@(Cur("/Gyms"))">Attività</a>
-                }
-                @if (scope.IsManager)
-                {
-                    <a href="/Attivita" aria-current="@(Cur("/Attivita"))">La mia attività</a>
-                }
-                @if (scope.CanManageUsers)
-                {
-                    <a href="/Users" aria-current="@(Cur("/Users"))">Utenti</a>
-                }
-                @if (scope.CanManageUsers)
-                {
-                    <a href="/WhatsApp" aria-current="@(Cur("/WhatsApp"))">WhatsApp</a>
-                    <a href="/Sedi" aria-current="@(Cur("/Sedi"))">Scheda per l'assistente</a>
-                    <a href="/Offerte" aria-current="@(Cur("/Offerte"))">Offerte</a>
-                    <a href="/Modelli" aria-current="@(Cur("/Modelli"))">Modelli di obiettivo</a>
-                    <a href="/Assistente/Prova" aria-current="@(Cur("/Assistente"))">Prova l'assistente</a>
-                    <a href="/Lists" aria-current="@(Cur("/Lists"))">Liste contatti</a>
-                    <a href="/OptOuts" aria-current="@(Cur("/OptOuts"))">Lista STOP</a>
-                    <a href="/Privacy" aria-current="@(Cur("/Privacy"))">Richieste privacy</a>
-                }
-                @if (scope.CanManageUsers)
-                {
-                    <a href="/Campagne" aria-current="@(Cur("/Campagne"))">Campagne</a>
-                    <a href="/Report" aria-current="@(Cur("/Report"))">Report</a>
-                }
-                <a href="/Conversazioni" aria-current="@(Cur("/Conversazioni"))">Conversazioni <span class="badge" id="waitBadge" aria-label="conversazioni che aspettano una persona" hidden="@(waiting == 0)">@waiting</span></a>
             </nav>
             <div class="rail-foot">
                 <span>@scope.Name</span>

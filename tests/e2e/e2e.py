@@ -247,7 +247,7 @@ check("l'amministratore di gruppo si assegna solo nei gruppi", sel is not None a
 pw_aur,_ = mk_user(sa, "aurora@aurora.test", "manager", "", int(aur))
 aurc = Client(); aurc.post("/Login", {"Email":"aurora@aurora.test","Password":pw_aur}); aurc.post("/Account/Password", {"Current":pw_aur,"New":"Aurora2026xyz","New2":"Aurora2026xyz"})
 _,html,_ = aurc.req("/")
-check("l'amministratore dell'attività singola entra e vede la sua attività", "Amministratore attività" in html and "La mia attività" in html and "Centro Benessere Aurora" in html, html[:200])
+check("l'amministratore dell'attività singola entra e vede la sua attività", "Amministratore attività" in html and "Dati e logo dell'attività" in html and "Centro Benessere Aurora" in html, html[:200])
 s,html,_ = aurc.post("/Users/Edit", {"Input.FullName":"Op Aurora","Input.Email":"op@aurora.test","Input.Role":"operator","Input.GymId":aur,"Input.IsActive":"true"})
 check("l'amministratore di attività crea i suoi operatori", s == 302, str(s))
 s,html,_ = aurc.post("/Users/Edit", {"Input.FullName":"Capo","Input.Email":"capo@aurora.test","Input.Role":"orgadmin","Input.GymId":aur,"Input.IsActive":"true"})
