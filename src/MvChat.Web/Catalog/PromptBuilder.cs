@@ -47,7 +47,7 @@ public static class PromptBuilder
     }
 
     /// <param name="campaignExtra">Istruzioni in più scritte per la singola campagna (facoltative).</param>
-    public static string Build(GoalModel model, string gymName, GymProfile p, Offer? offer, Recipient r, DateTime today, OrgInfo? org = null, string? campaignExtra = null)
+    public static string Build(GoalModel model, string gymName, GymProfile p, Offer? offer, Recipient r, DateTime today, OrgInfo? org = null, string? campaignExtra = null, bool askReason = true, bool reasonAsked = false)
     {
         var lei = p.Formality == "lei";
         var sector = org?.Sector ?? Sectors.Get("palestra");
@@ -136,6 +136,11 @@ public static class PromptBuilder
             ? $"10. Se il cliente chiede come vengono usati i suoi dati o della privacy, indica l'informativa: {privacy}. Se chiede di vedere o cancellare i suoi dati, passa a una persona dello staff."
             : "10. Se il cliente chiede della privacy o dei suoi dati, passa a una persona dello staff.");
         sb.AppendLine("11. I messaggi che iniziano con «[messaggio vocale trascritto]» sono vocali del cliente trasformati in testo in automatico: rispondi normalmente, senza dire che non puoi ascoltare i vocali. La trascrizione può sbagliare qualche parola: se un dato importante (una data, un orario, una scelta) non è chiaro, chiedi gentilmente conferma.");
+        sb.AppendLine(reasonAsked
+            ? "12. Hai già chiesto al cliente il motivo del rifiuto: ora ringrazialo per la risposta senza insistere né riproporre l'offerta (a meno che sia lui a riaprire il discorso), indica il motivo giusto e chiudi. Non chiedere altro."
+            : askReason
+            ? "12. Se il cliente rifiuta senza dire perché e non mostra fastidio, nella stessa risposta ringrazialo e chiedigli una sola volta, con garbo e lasciandolo libero di non rispondere, cosa non lo convince (per esempio: «Grazie lo stesso! Se ti va, mi dici cosa non ti convince? Ci aiuta a migliorare.»). In quel caso: esito rifiuto, motivo non_interessato e \"chiedi_motivo\": true. Se poi ti risponde, ringrazialo senza insistere né riproporre l'offerta (a meno che sia lui a riaprire il discorso) e indica il motivo giusto. Se ha già detto il motivo o è infastidito, non chiedere nulla."
+            : "12. Se il cliente rifiuta, non chiedergli il motivo: ringrazialo e chiudi.");
         return sb.ToString();
     }
 }

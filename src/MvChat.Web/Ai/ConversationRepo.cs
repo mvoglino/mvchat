@@ -31,6 +31,8 @@ public sealed class Conversation
     public string? OutcomeNote { get; set; }
     /// <summary>Solo per i rifiuti: il motivo (codice di <see cref="RefusalReasons"/>).</summary>
     public string? RefusalReason { get; set; }
+    /// <summary>0 motivo mai chiesto · 1 chiesto, si aspetta la risposta · 2 risposta già lavorata.</summary>
+    public int ReasonAsk { get; set; }
     public int AiReplies { get; set; }
     public bool NeedsReply { get; set; }
     public DateTime? ProcessingSince { get; set; }
@@ -78,7 +80,7 @@ public sealed class ConversationRepo
         WaNumberId = r.Int("WaNumberId"), ContactPhone = r.Str("ContactPhone")!, ContactName = r.Str("ContactName")!, Membership = r.Str("Membership"), Service = r.Str("Service"), Notes = r.Str("Notes"), TestOfCampaignId = r.IntN("TestOfCampaignId"),
         ExpiresOn = r.Date("ExpiresOn"), GoalModelId = r.IntN("GoalModelId"), GoalName = r.Str("GoalName")!, OfferId = r.IntN("OfferId"),
         CampaignId = r.IntN("CampaignId"), IsTest = r.Bool("IsTest"), Status = r.Str("Status")!, Outcome = r.Str("Outcome")!,
-        OutcomeNote = r.Str("OutcomeNote"), RefusalReason = r.Str("RefusalReason"), AiReplies = r.Int("AiReplies"), NeedsReply = r.Bool("NeedsReply"),
+        OutcomeNote = r.Str("OutcomeNote"), RefusalReason = r.Str("RefusalReason"), ReasonAsk = Convert.ToInt32(r.GetValue(r.GetOrdinal("ReasonAsk"))), AiReplies = r.Int("AiReplies"), NeedsReply = r.Bool("NeedsReply"),
         ProcessingSince = r.Date("ProcessingSince"), AssignedUserId = r.IntN("AssignedUserId"),
         AssignedName = r.Str("AssignedName"), HumanInvolved = r.Bool("HumanInvolved"), LastInboundAt = r.Date("LastInboundAt"),
         LastMessageAt = r.Date("LastMessageAt"), CreatedAt = r.Date("CreatedAt")!.Value
@@ -91,8 +93,9 @@ public sealed class ConversationRepo
         new { c.OrganizationId, c.GymId, c.WaNumberId, c.ContactPhone, c.ContactName, c.Membership, c.ExpiresOn, c.Service, c.Notes, c.GoalModelId, c.OfferId, c.CampaignId, c.TestOfCampaignId, c.IsTest });
 
     /// <summary>Le istruzioni in più della campagna da cui nasce la conversazione (lette a ogni risposta: se cambiano, valgono subito).</summary>
-    public Task<string?> CampaignInstructionsAsync(int campaignId) =>
-        _db.ScalarAsync<string>("SELECT ExtraInstructions FROM Campaigns WHERE Id=@campaignId", new { campaignId });
+    public async Task<(string? Extra, bool AskReason)> CampaignInstructionsAsync(int campaignId) =>
+        await _db.FirstAsync("SELECT ExtraInstructions, AskRefusalReason FROM Campaigns WHERE Id=@campaignId", new { campaignId },
+            r => new Tuple<string?, bool>(r.Str("ExtraInstructions"), r.Bool("AskRefusalReason"))) is { } t ? (t.Item1, t.Item2) : (null, true);
 
     /// <summary>Un cliente scrive senza una campagna in corso: si apre una conversazione per la reception (l'assistente non risponde).</summary>
     public Task<long> CreateSpontaneousAsync(MvChat.Web.WhatsApp.WaNumber n, string phone, string name) => _db.ScalarAsync<long>(
@@ -215,12 +218,18 @@ public sealed class ConversationRepo
             ProcessingSince < UTC_TIMESTAMP() - INTERVAL 5 MINUTE) LIMIT 50",
         new { olderThanSeconds }, r => r.GetInt64(0));
 
-    public Task AfterAiReplyAsync(long id, string status, string outcome, string? note, string? reason = null) => _db.ExecuteAsync(
+    public Task AfterAiReplyAsync(long id, string status, string outcome, string? note, string? reason = null, int? reasonAsk = null) => _db.ExecuteAsync(
         @"UPDATE Conversations SET AiReplies=AiReplies+1, Status=@status, Outcome=@outcome, OutcomeNote=COALESCE(@note, OutcomeNote),
             RefusalReason=CASE WHEN @outcome='rifiuto' THEN COALESCE(@reason, 'altro') ELSE NULL END,
+            ReasonAsk=COALESCE(@reasonAsk, ReasonAsk),
             HumanInvolved=CASE WHEN @status='operatore' THEN 1 ELSE HumanInvolved END,
             LastMessageAt=UTC_TIMESTAMP() WHERE Id=@id AND Status='ai'",
-        new { id, status, outcome, note, reason });
+        new { id, status, outcome, note, reason, reasonAsk });
+
+    /// <summary>Il cliente risponde alla domanda sul motivo del rifiuto: la conversazione torna all'assistente, che la richiude con il motivo giusto.</summary>
+    public Task<int> ReopenForReasonAsync(long id) => _db.ExecuteAsync(
+        @"UPDATE Conversations SET Status='ai', NeedsReply=1, LastInboundAt=UTC_TIMESTAMP(), LastMessageAt=UTC_TIMESTAMP()
+          WHERE Id=@id AND Status='chiusa' AND Outcome='rifiuto' AND ReasonAsk=1", new { id });
 
     /// <summary>Motivo del rifiuto scelto dall'operatore (vuoto se l'esito non è un rifiuto).</summary>
     public Task SetRefusalReasonAsync(long id, string? reason) =>

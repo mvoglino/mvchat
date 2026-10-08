@@ -262,6 +262,14 @@ public sealed class WebhookHandler
                     _queue.Enqueue(conv.Id); // risponde l'assistente AI
                 }
             }
+            else if (conv.Status == "chiusa" && conv.Outcome == Outcomes.Rifiuto && conv.ReasonAsk == 1
+                     && conv.LastMessageAt > DateTime.UtcNow.AddHours(-24)
+                     && (isText && !IsCourtesy(text) || MediaStore.IsVoice(type) && mediaId is not null && !number.IsSimulated && _ai.TranscribeEnabled))
+            {
+                // Risponde alla domanda sul motivo del rifiuto: lo legge l'assistente, che aggiorna il motivo e ringrazia.
+                await _convs.ReopenForReasonAsync(conv.Id);
+                _queue.Enqueue(conv.Id);
+            }
             else
             {
                 // Se la conversazione era chiusa e il cliente riscrive, la riprende una persona (non per un semplice «grazie»).

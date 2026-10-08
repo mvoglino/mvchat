@@ -59,7 +59,7 @@ public sealed class AssistantService
     }
 
     /// <summary>Le istruzioni complete per una conversazione: le stesse dell'anteprima del Passo 3, più il formato di risposta.</summary>
-    public async Task<(string System, GoalModel Model, Offer? Offer, GymProfile Profile)?> BuildSystemAsync(Conversation c, string? firstMessage)
+    public async Task<(string System, GoalModel Model, Offer? Offer, GymProfile Profile, bool AskReason)?> BuildSystemAsync(Conversation c, string? firstMessage)
     {
         if (c.GoalModelId is not int goalId) return null; // messaggio spontaneo: nessun obiettivo, risponde una persona
         var model = (await _catalog.ModelsAsync(new MvChat.Web.Security.Scope { Role = MvChat.Web.Security.Roles.SuperAdmin }, goalId)).FirstOrDefault();
@@ -68,12 +68,14 @@ public sealed class AssistantService
         var profile = await _catalog.ProfileAsync(c.GymId);
         var who = new Recipient(c.ContactName, null, c.Membership, c.ExpiresOn, c.Service, c.Notes);
         var org = await _catalog.ActivityInfoAsync(c.GymId);
-        var extra = (c.CampaignId ?? c.TestOfCampaignId) is int campId ? await _conv.CampaignInstructionsAsync(campId) : null;
-        var system = PromptBuilder.Build(model, c.GymName, profile, offer, who, DateTime.UtcNow.ToRome().Date, org, extra);
+        var (extra, askReason) = (c.CampaignId ?? c.TestOfCampaignId) is int campId ? await _conv.CampaignInstructionsAsync(campId) : (null, true);
+        // Il motivo si chiede una volta sola per conversazione.
+        if (c.ReasonAsk != 0) askReason = false;
+        var system = PromptBuilder.Build(model, c.GymName, profile, offer, who, DateTime.UtcNow.ToRome().Date, org, extra, askReason, reasonAsked: c.ReasonAsk == 1);
         if (!string.IsNullOrWhiteSpace(firstMessage))
             system += $"\n## Primo messaggio già inviato al cliente\n\"{firstMessage}\"\n";
         system += "\n" + Guardrails.OutputFormat;
-        return (system, model, offer, profile);
+        return (system, model, offer, profile, askReason);
     }
 
     /// <returns>true se nel frattempo il cliente ha scritto ancora: la conversazione va rimessa in coda.</returns>
@@ -107,9 +109,10 @@ public sealed class AssistantService
         var first = messages.FirstOrDefault(m => m.Direction == "out" && m.Kind == "template")?.Body;
         var built = await BuildSystemAsync(c, first);
         if (built is null) { await HandOffAsync(c, number, "modello di obiettivo non trovato", sendHolding: true); return false; }
-        var (system, model, offer, profile) = built.Value;
+        var (system, model, offer, profile, askReason) = built.Value;
 
-        if (c.AiReplies >= model.MaxAiMessages) { await HandOffAsync(c, number, $"raggiunto il limite di {model.MaxAiMessages} risposte dell'assistente", sendHolding: true); return false; }
+        // La risposta alla domanda sul motivo si chiude con un grazie anche se il limite di messaggi è raggiunto.
+        if (c.AiReplies >= model.MaxAiMessages && c.ReasonAsk != 1) { await HandOffAsync(c, number, $"raggiunto il limite di {model.MaxAiMessages} risposte dell'assistente", sendHolding: true); return false; }
         if (!_ai.Enabled) { await HandOffAsync(c, number, "assistente AI spento o non configurato", sendHolding: true); return false; }
 
         if (await TranscribeVoicesAsync(c, number) is { } voiceIssue)
@@ -149,7 +152,10 @@ public sealed class AssistantService
         };
         if (outcome == Outcomes.OptOut && !c.IsTest) // le prove non toccano la lista STOP vera
             await _contacts.AddOptOutAsync(c.OrganizationId, c.GymId, c.ContactPhone, "Riconosciuto dall'assistente: " + (reply.Note ?? "non vuole essere contattato"), "assistente", null);
-        await _conv.AfterAiReplyAsync(c.Id, status, outcome, reply.Note, reply.Reason);
+        // Rifiuto con la domanda sul motivo: la conversazione si chiude subito (conta come rifiuto anche se il cliente non risponde);
+        // se il cliente risponde, torna all'assistente una volta sola per correggere il motivo.
+        int? reasonAsk = c.ReasonAsk == 1 ? 2 : (outcome == Outcomes.Rifiuto && reply.AskReason && askReason ? 1 : null);
+        await _conv.AfterAiReplyAsync(c.Id, status, outcome, reply.Note, reply.Reason, reasonAsk);
         return false;
     }
 

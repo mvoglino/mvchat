@@ -750,10 +750,10 @@ check("foto non più disponibile su Meta: niente errore, solo un avviso", im is 
 sa.post("/Impostazioni/AI", dict(voice_form, Transcribe="false"))
 fake.shutdown(); fake.server_close()
 # 5j-ter. Motivi dei rifiuti: scelti dall'assistente (o dall'operatore), contati e in percentuale nel Report
-lid_r = import_list(m, alba, "Motivi", [("Rosa","320 000 0051"),("Sara","320 000 0052"),("Tina","320 000 0053")])
+lid_r = import_list(m, alba, "Motivi", [("Rosa","320 000 0051"),("Sara","320 000 0052"),("Tina","320 000 0053"),("Ugo","320 000 0054")])
 cR,_,_ = camp_post(m, dict(base, Name="Motivi rifiuto", ListId=lid_r), alba)
 act(m, cR, "Start"); _time.sleep(0.5)
-cvr = {k: conv_of(m, f"+3932000000{k}") for k in (51, 52, 53)}
+cvr = {k: conv_of(m, f"+3932000000{k}") for k in (51, 52, 53, 54)}
 say(m, cvr[51], "Grazie ma è troppo caro per me")
 say(m, cvr[52], "No grazie, mi sono trasferito a Torino")
 say(m, cvr[53], "Purtroppo non ho tempo")
@@ -771,7 +771,20 @@ s1,hx,_ = m.post(f"/Conversazioni/{cvr[52]}?handler=Outcome", {"Outcome":"rifiut
 m.post(f"/Conversazioni/{cvr[52]}?handler=Outcome", {"Outcome":"rifiuto","Reason":"salute","Note":"infortunio al ginocchio"}, form_path=f"/Conversazioni/{cvr[52]}")
 check("l'operatore che segna un rifiuto deve sceglierne il motivo", s1 == 200 and "Scegli il motivo del rifiuto" in hx and "Rifiuto · Motivi di salute" in page(m, cvr[52]), str(s1))
 hc = cpage(m, cR)
-check("campagna: riepilogo dei motivi dei rifiuti", "Motivi dei rifiuti" in hc and "Prezzo / costo 1" in hc and "Motivi di salute 1" in hc, hc[hc.find("Motivi dei rifiuti"):][:300])
+say(m, cvr[54], "No, non mi interessa")
+h54 = page(m, cvr[54]); st54 = state(m, cvr[54])
+check("rifiuto senza motivo: l'assistente lo chiede una volta e chiude il rifiuto", "cosa non ti convince" in h54 and st54.get("status") == "chiusa" and "Rifiuto · Non interessato" in h54, str(st54))
+say(m, cvr[54], "Sinceramente è troppo caro")
+h54 = page(m, cvr[54]); st54 = state(m, cvr[54])
+check("il cliente risponde: l'assistente aggiorna il motivo, ringrazia e richiude", st54.get("status") == "chiusa" and "Rifiuto · Prezzo / costo" in h54 and "grazie lo stesso! Se cambi idea" in h54, str(st54) + h54[h54.find('class="stats"'):][:200])
+say(m, cvr[54], "Ciao, a che ora aprite domani?", wait=False); _time.sleep(0.6)
+check("motivo chiesto una sola volta: dopo, i messaggi vanno alla reception", state(m, cvr[54]).get("status") == "operatore")
+_,an,_ = m.req(f"/Modelli/Anteprima?campagna={cR}")
+cR2,_,_ = camp_post(m, dict(base, Name="Senza domanda", ListId=lid_r, AskRefusalReason="false"), alba)
+_,an2,_ = m.req(f"/Modelli/Anteprima?campagna={cR2}")
+check("domanda sul motivo: si sceglie campagna per campagna (di base sì)", "chiedigli una sola volta" in an and "non chiedergli il motivo" in an2 and "chiedigli una sola volta" not in an2)
+hc = cpage(m, cR)
+check("campagna: riepilogo dei motivi dei rifiuti", "Motivi dei rifiuti" in hc and "Prezzo / costo 2" in hc and "Motivi di salute 1" in hc, hc[hc.find("Motivi dei rifiuti"):][:300])
 fai.shutdown()
 
 # 5k. Controllo generale: STOP, messaggi spontanei, foto e vocali, saluti finali, dati mancanti, aggiornamenti del database

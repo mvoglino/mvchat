@@ -53,7 +53,7 @@ public class BancoModel : PageModel
         };
         var built = await _assistant.BuildSystemAsync(conv, null);
         if (built is null) return BadRequest(new { error = "Modello non trovato." });
-        var (system, _, _, profile) = built.Value;
+        var (system, _, _, profile, _) = built.Value;
         var r = await Bench.RunAsync(s, system, offer, profile, _ai, (res, cost) => _convs.LogUsageAsync(g.OrganizationId, g.Id, null, "banco", res, cost));
         return new JsonResult(new
         {

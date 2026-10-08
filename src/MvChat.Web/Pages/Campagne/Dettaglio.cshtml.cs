@@ -133,6 +133,7 @@ public class DettaglioModel : PageModel
     }
 
     [BindProperty] public string? ExtraInstructions { get; set; }
+    [BindProperty] public bool AskRefusalReason { get; set; }
 
     /// <summary>Istruzioni in più per l'assistente: si cambiano anche a campagna avviata e valgono dalle risposte successive.</summary>
     public async Task<IActionResult> OnPostExtraAsync(int id)
@@ -140,7 +141,7 @@ public class DettaglioModel : PageModel
         if (!await LoadAsync(id)) return NotFound();
         if (C.Status is "completata" or "annullata") return Back();
         var text = string.IsNullOrWhiteSpace(ExtraInstructions) ? null : ExtraInstructions.Trim()[..Math.Min(ExtraInstructions.Trim().Length, 1500)];
-        await _repo.SetExtraInstructionsAsync(id, text);
+        await _repo.SetExtraInstructionsAsync(id, text, AskRefusalReason);
         await Audit("campaign.instructions", text is null ? "tolte" : "aggiornate");
         TempData["Ok"] = text is null ? "Istruzioni in più tolte." : "Istruzioni in più salvate: l'assistente le usa dalla prossima risposta.";
         return Back();

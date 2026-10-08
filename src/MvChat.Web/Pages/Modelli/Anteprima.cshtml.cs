@@ -37,10 +37,10 @@ public class AnteprimaModel : PageModel
     {
         var me = User.Scope();
         Models = await _catalog.ModelsAsync(me, onlyActive: true);
-        string? extra = null;
+        string? extra = null; var askReason = true;
         if (Campagna is int cid && await _campaigns.GetAsync(me, cid) is { } camp) // perimetro nella query
         {
-            Model = camp.GoalModelId; Gym = camp.GymId; Offer = camp.OfferId; extra = camp.ExtraInstructions; CampaignName = camp.Name;
+            Model = camp.GoalModelId; Gym = camp.GymId; Offer = camp.OfferId; extra = camp.ExtraInstructions; askReason = camp.AskRefusalReason; CampaignName = camp.Name;
             if (Models.All(m => m.Id != camp.GoalModelId)) Models.AddRange(await _catalog.ModelsAsync(me, camp.GoalModelId));
         }
         Gyms = (await _repos.GymsAsync(me)).Where(g => g.IsActive).ToList();
@@ -62,7 +62,7 @@ public class AnteprimaModel : PageModel
         if (offer is not null && offer.Status != "Attiva") Warnings.Add($"L'offerta scelta è «{offer.Status.ToLower()}»: in una campagna vera non verrebbe accettata.");
         if (profile.Completeness < 60) Warnings.Add($"La scheda di {gym.Name} è compilata al {profile.Completeness}%: l'assistente saprà rispondere a poche domande.");
 
-        Prompt = PromptBuilder.Build(model, gym.Name, profile, offer, who, today, await _catalog.ActivityInfoAsync(gym.Id), extra);
+        Prompt = PromptBuilder.Build(model, gym.Name, profile, offer, who, today, await _catalog.ActivityInfoAsync(gym.Id), extra, askReason);
         FirstMessage = PromptBuilder.FillTemplate(model.TemplateSuggestion, who, gym.Name, offer);
     }
 }

@@ -52,13 +52,15 @@
         <a class="btn sm" href="/Modelli/Anteprima?campagna=@c.Id">Vedi le istruzioni complete</a></div>
     @if (c.Status is "completata" or "annullata")
     {
-        <div class="panel-b">@if (string.IsNullOrWhiteSpace(c.ExtraInstructions)) {<span class="muted">Nessuna.</span>} else {<div style="white-space:pre-wrap">@c.ExtraInstructions</div>}</div>
+        <div class="panel-b">@if (string.IsNullOrWhiteSpace(c.ExtraInstructions)) {<span class="muted">Nessuna.</span>} else {<div style="white-space:pre-wrap">@c.ExtraInstructions</div>}
+            <div class="muted" style="margin-top:6px">Motivo a chi rifiuta: @(c.AskRefusalReason ? "chiesto una volta" : "non chiesto")</div></div>
     }
     else
     {
         <form method="post" asp-page-handler="Extra" class="panel-b">
             <div class="field full"><textarea name="ExtraInstructions" rows="3" maxlength="1500" aria-label="Istruzioni in più" placeholder="Es. Dal 20 al 27 dicembre la palestra è chiusa. Chi rinnova entro il 15 riceve anche la maglietta.">@c.ExtraInstructions</textarea>
                 <small>Si aggiungono al modello «@c.GoalName». I prezzi restano quelli dell'offerta. Le modifiche valgono dalle risposte successive.</small></div>
+            <label class="check"><input type="checkbox" name="AskRefusalReason" value="true" checked="@c.AskRefusalReason"><input type="hidden" name="AskRefusalReason" value="false"> A chi rifiuta senza dire perché, l'assistente chiede il motivo (una volta sola, con garbo)</label>
             <button class="btn sm" type="submit">Salva istruzioni</button>
         </form>
     }

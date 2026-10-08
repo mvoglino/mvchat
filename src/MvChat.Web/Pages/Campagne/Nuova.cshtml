@@ -28,6 +28,8 @@ else
         <div class="field full"><label for="ExtraInstructions">Istruzioni in più per l'assistente, solo per questa campagna (facoltative)</label>
             <textarea id="ExtraInstructions" name="ExtraInstructions" rows="3" maxlength="1500" placeholder="Es. Dal 20 al 27 dicembre la palestra è chiusa. Chi rinnova entro il 15 riceve anche la maglietta.">@Model.ExtraInstructions</textarea>
             <small>Si aggiungono al modello di obiettivo. I prezzi restano quelli dell'offerta: un prezzo scritto qui non può essere proposto. Si possono cambiare anche a campagna avviata.</small></div>
+        <div class="field full"><label class="check"><input type="checkbox" name="AskRefusalReason" value="true" checked="@Model.AskRefusalReason"><input type="hidden" name="AskRefusalReason" value="false"> A chi rifiuta senza dire perché, l'assistente chiede il motivo (una volta sola, con garbo)</label>
+            <small>Serve al Report «Motivi dei rifiuti». Se il cliente non risponde, il rifiuto conta come «Non interessato».</small></div>
         <div class="field full"><small>Orari di invio dell'attività: <b>@Model.Windows</b> · <a href="/Sedi/Orari/@Model.Gym">modifica</a>. Limite di Meta del numero: <b>@(SendWindows.MetaDailyLimit(Model.Number.MessagingLimit, Model.Number.IsSimulated) is int ml ? ml.ToString("N0") + " persone nuove ogni 24 ore" : "nessuno")</b>.</small></div>
     </div>
     <div class="actions"><span class="muted" style="flex:1">La campagna nasce come bozza: prima dell'invio vedi l'anteprima e quante persone riceveranno il messaggio.</span><button class="btn primary" type="submit" disabled="@(Model.Lists.Count == 0 || Model.Templates.Count == 0)">Crea la campagna</button></div>
