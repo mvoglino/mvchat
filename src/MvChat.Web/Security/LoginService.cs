@@ -93,6 +93,7 @@ public sealed class LoginService
         };
         if (u.OrganizationId is { } o) claims.Add(new("org", o.ToString()));
         if (u.GymId is { } g) claims.Add(new("gym", g.ToString()));
+        if (u.Role == Roles.AreaManager) claims.Add(new("gyms", u.AreaGyms ?? ""));
         if (u.MustChangePassword) claims.Add(new("pwd", "change"));
         claims.Add(new("stamp", Stamp(u.PasswordHash)));
         return new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));

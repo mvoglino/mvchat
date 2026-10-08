@@ -34,6 +34,7 @@ public class EditModel : PageModel
         var u = await _repos.UserAsync(Me, id.Value);
         if (u is null || (!AssignableRoles.Contains(u.Role) && u.Id != Me.UserId)) return NotFound();
         Input = new UserInput { Id = u.Id, FullName = u.FullName, Email = u.Email, Role = u.Role, OrganizationId = u.OrganizationId, GymId = u.GymId, IsActive = u.IsActive };
+        if (u.Role == Roles.AreaManager) Input.AreaGyms = await _repos.UserGymsAsync(u.Id);
         return Page();
     }
 
@@ -51,6 +52,7 @@ public class EditModel : PageModel
         if (existing is not null && existing.Id == Me.UserId)
         {
             Input.Role = existing.Role; Input.OrganizationId = existing.OrganizationId; Input.GymId = existing.GymId; Input.IsActive = true;
+            Input.AreaGyms = existing.Role == Roles.AreaManager ? await _repos.UserGymsAsync(existing.Id) : new();
         }
         else if (!AssignableRoles.Contains(Input.Role))
             ModelState.AddModelError("Input.Role", "Non puoi assegnare questo ruolo.");
@@ -65,6 +67,16 @@ public class EditModel : PageModel
                 if (!Me.IsSuperAdmin) Input.OrganizationId = Me.OrganizationId;
                 if (Input.OrganizationId is null || !Orgs.Any(o => o.Id == Input.OrganizationId))
                     ModelState.AddModelError("Input.OrganizationId", "Scegli il gruppo.");
+                break;
+            case Roles.AreaManager:
+                // Solo attività di un gruppo, tutte dello stesso gruppo e visibili a chi assegna (MVitalia o amministratore di quel gruppo).
+                Input.GymId = null;
+                var chosen = Gyms.Where(g => g.InGroup && Input.AreaGyms.Contains(g.Id)).ToList();
+                if (existing is not null && existing.Id == Me.UserId) break; // il responsabile non cambia le proprie attività
+                if (chosen.Count == 0) ModelState.AddModelError("Input.AreaGyms", "Scegli almeno un'attività da affidare al responsabile.");
+                else if (chosen.Select(g => g.OrganizationId).Distinct().Count() > 1) ModelState.AddModelError("Input.AreaGyms", "Le attività devono essere tutte dello stesso gruppo.");
+                else Input.OrganizationId = chosen[0].OrganizationId;
+                Input.AreaGyms = chosen.Select(g => g.Id).ToList();
                 break;
             default:
                 var gym = Gyms.FirstOrDefault(g => g.Id == Input.GymId);
@@ -81,7 +93,9 @@ public class EditModel : PageModel
         string? temp = null;
         if (IsNew || ResetPassword) temp = PasswordService.Generate();
         var id = await _repos.SaveUserAsync(Input.Id, Input.OrganizationId, Input.GymId, Input.Email, Input.FullName.Trim(), Input.Role, Input.IsActive, temp is null ? null : _pwd.Hash(temp));
-        await _repos.AuditAsync(Me, IsNew ? "user.created" : (ResetPassword ? "user.password_reset" : "user.updated"), $"{Input.Email} ({Input.Role})",
+        if (!(existing is not null && existing.Id == Me.UserId))
+            await _repos.SetUserGymsAsync(id, Input.Role == Roles.AreaManager ? Input.AreaGyms : Enumerable.Empty<int>());
+        await _repos.AuditAsync(Me, IsNew ? "user.created" : (ResetPassword ? "user.password_reset" : "user.updated"), $"{Input.Email} ({Input.Role}{(Input.Role == Roles.AreaManager ? ": attività " + string.Join(",", Input.AreaGyms) : "")})",
             HttpContext.Connection.RemoteIpAddress?.ToString(), Input.OrganizationId, Input.GymId);
 
         if (temp is not null) { TempData["TempPassword"] = temp; TempData["TempFor"] = Input.FullName; }
@@ -106,5 +120,7 @@ public class EditModel : PageModel
         public int? OrganizationId { get; set; }
         public int? GymId { get; set; }
         public bool IsActive { get; set; } = true;
+        /// <summary>Solo per il responsabile di area: le attività che segue.</summary>
+        public List<int> AreaGyms { get; set; } = new();
     }
 }

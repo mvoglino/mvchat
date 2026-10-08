@@ -30,9 +30,14 @@ public class IndexModel : PageModel
         if (org is null || !Orgs.Any(o => o.Id == org)) { Error = "Scegli il gruppo."; return Page(); }
         var (phone, _) = ImportRules.NormalizePhone(Phone);
         if (phone is null) { Error = "Il numero non è un cellulare valido."; return Page(); }
-        await _contacts.AddOptOutAsync(org.Value, Me.GymId, phone, ImportRules.Clean(Reason, 200), "manuale", Me.UserId);
+        if (Me.IsAreaManager)
+            foreach (var g in Me.AreaGymIds) await _contacts.AddOptOutAsync(org.Value, g, phone, ImportRules.Clean(Reason, 200), "manuale", Me.UserId);
+        else
+            await _contacts.AddOptOutAsync(org.Value, Me.GymId, phone, ImportRules.Clean(Reason, 200), "manuale", Me.UserId);
         await _repos.AuditAsync(Me, "optout.added", phone, HttpContext.Connection.RemoteIpAddress?.ToString(), org);
-        TempData["Ok"] = $"{phone} aggiunto alla lista STOP: non riceverà più messaggi da nessuna attività del gruppo.";
+        TempData["Ok"] = Me.IsAreaManager ? $"{phone} aggiunto alla lista STOP di tutte le tue attività."
+            : Me.GymId is not null ? $"{phone} aggiunto alla lista STOP dell'attività."
+            : $"{phone} aggiunto alla lista STOP: non riceverà più messaggi da nessuna attività del gruppo.";
         return Redirect("/OptOuts");
     }
 

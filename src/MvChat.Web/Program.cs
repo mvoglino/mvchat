@@ -81,8 +81,8 @@ builder.Services.AddAuthorization(o =>
 {
     o.AddPolicy("SuperAdmin", p => p.RequireRole(Roles.SuperAdmin));
     o.AddPolicy("ManageGyms", p => p.RequireRole(Roles.SuperAdmin, Roles.OrgAdmin));
-    o.AddPolicy("ManageUsers", p => p.RequireRole(Roles.SuperAdmin, Roles.OrgAdmin, Roles.Manager));
-    o.AddPolicy("ManageLists", p => p.RequireRole(Roles.SuperAdmin, Roles.OrgAdmin, Roles.Manager));
+    o.AddPolicy("ManageUsers", p => p.RequireRole(Roles.SuperAdmin, Roles.OrgAdmin, Roles.AreaManager, Roles.Manager));
+    o.AddPolicy("ManageLists", p => p.RequireRole(Roles.SuperAdmin, Roles.OrgAdmin, Roles.AreaManager, Roles.Manager));
 });
 
 builder.Services.AddRazorPages(o =>

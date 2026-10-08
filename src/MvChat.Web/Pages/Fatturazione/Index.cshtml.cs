@@ -27,7 +27,7 @@ public class IndexModel : PageModel
     private async Task<bool> LoadAsync(string? mese)
     {
         Me = User.Scope();
-        if (Me.Role == Roles.Operator) return false;
+        if (Me.Role is Roles.Operator or Roles.AreaManager) return false; // i rendiconti non sono per operatori e responsabili di area
         var now = DateTime.UtcNow.ToRome();
         var current = new DateTime(now.Year, now.Month, 1);
         for (var i = 0; i < 18; i++) Months.Add(current.AddMonths(-i).ToString("yyyy-MM"));

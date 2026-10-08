@@ -206,3 +206,6 @@ a.kpi{text-decoration:none;color:inherit}
   .panel{border:0;box-shadow:none}
   body{background:#fff;color:#000}
 }
+fieldset.field{border:0;padding:0;margin:0}
+fieldset.field legend{font-size:13px;font-weight:600;margin-bottom:4px}
+.check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 16px}

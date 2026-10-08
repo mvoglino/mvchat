@@ -28,7 +28,7 @@ public sealed class ArchiveRepo
     public ArchiveRepo(Db db) => _db = db;
 
     private const string Where = @"
-        WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR c.GymId=@Gym)
+        WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR (c.GymId=@Gym OR FIND_IN_SET(c.GymId, @Gyms)))
           AND (@FGym=-1 OR c.GymId=@FGym)
           AND (@Tests=1 OR c.IsTest=0)
           AND (@Outcome='' OR c.Outcome=@Outcome)
@@ -42,7 +42,7 @@ public sealed class ArchiveRepo
         var q = (f.Search ?? "").Trim();
         return new
         {
-            All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+            All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv,
             FGym = f.GymId ?? -1, Tests = f.IncludeTests ? 1 : 0, Outcome = f.Outcome ?? "", Camp = f.CampaignId ?? -1,
             FromUtc = f.From?.Date.FromRome(), ToUtc = f.To?.Date.AddDays(1).FromRome(),
             Q = q, QLike = "%" + q.Replace("%", "").Replace("_", "") + "%",

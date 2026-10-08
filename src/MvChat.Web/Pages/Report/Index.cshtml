@@ -28,7 +28,7 @@
     {
         <div class="field"><label for="att">Attività</label>
             <select id="att" onchange="if (this.value) location.href = this.value">
-                <option value="@(Model.Me.IsSuperAdmin ? Model.Url(null, null) : Model.Url(Model.Me.OrganizationId, null))">@(Model.Me.IsSuperAdmin ? "Tutti i clienti" : "Tutto il gruppo")</option>
+                <option value="@(Model.Me.IsSuperAdmin ? Model.Url(null, null) : Model.Url(Model.Me.OrganizationId, null))">@(Model.Me.IsSuperAdmin ? "Tutti i clienti" : Model.Me.IsAreaManager ? "Tutte le mie attività" : "Tutto il gruppo")</option>
                 @foreach (var gy in Model.Gyms)
                 {
                     <option value="@Model.Url(gy.InGroup ? gy.OrganizationId : null, gy.Id)" selected="@(gy.Id == Model.Activity)">@(Model.Me.IsSuperAdmin && gy.InGroup ? gy.OrganizationName + " · " : "")@gy.Name</option>

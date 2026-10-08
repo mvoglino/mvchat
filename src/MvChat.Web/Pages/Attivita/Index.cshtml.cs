@@ -19,6 +19,8 @@ public class IndexModel : PageModel
 
     public ActivityProfile P { get; private set; } = new();
     public Scope Me { get; private set; } = new();
+    /// <summary>Le attività del responsabile di area, per passare dall'una all'altra.</summary>
+    public List<Gym> Mine { get; private set; } = new();
     /// <summary>Il tipo di attività lo decide MVitalia; dentro un gruppo anche l'amministratore del gruppo.</summary>
     public bool CanChangeSector => Me.IsSuperAdmin || (Me.IsOrgAdmin && P.InGroup);
     [BindProperty] public ProfileInput Input { get; set; } = new();
@@ -28,7 +30,8 @@ public class IndexModel : PageModel
     private async Task<bool> LoadAsync(int? id)
     {
         Me = User.Scope();
-        var gymId = id ?? Me.GymId;
+        Mine = Me.IsAreaManager ? (await _repos.GymsAsync(Me)).Where(g => g.IsActive).ToList() : new();
+        var gymId = id ?? Me.GymId ?? Mine.FirstOrDefault()?.Id;
         if (gymId is null || await _repos.GymAsync(Me, gymId.Value) is null) return false; // perimetro: solo attività visibili a chi chiede
         var p = await _repos.ActivityProfileAsync(gymId.Value);
         if (p is null) return false;

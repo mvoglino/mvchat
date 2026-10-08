@@ -20,8 +20,8 @@ public sealed class QuickReplyRepo
     /// <summary>Quelle che l'utente può gestire: il responsabile solo le sue, la direzione tutte quelle del gruppo.</summary>
     public Task<List<QuickReply>> ManageableAsync(Scope s) => _db.QueryAsync(
         @"SELECT q.*, g.Name AS GymName FROM QuickReplies q LEFT JOIN Gyms g ON g.Id=q.GymId
-          WHERE @All=1 OR (@IsOrg=1 AND q.OrganizationId=@Org) OR q.GymId=@Gym ORDER BY q.OrganizationId, g.Name, q.Title",
-        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1 }, Map);
+          WHERE @All=1 OR (@IsOrg=1 AND q.OrganizationId=@Org) OR (q.GymId=@Gym OR FIND_IN_SET(q.GymId, @Gyms)) ORDER BY q.OrganizationId, g.Name, q.Title",
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv }, Map);
 
     private static QuickReply Map(System.Data.Common.DbDataReader r) =>
         new(r.Int("Id"), r.Int("OrganizationId"), r.IntN("GymId"), r.Str("GymName"), r.Str("Title")!, r.Str("Body")!);

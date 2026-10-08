@@ -14,8 +14,8 @@ public sealed class AlertRepo
     private readonly Db _db; private readonly AppConfigStore _config;
     public AlertRepo(Db db, AppConfigStore config) { _db = db; _config = config; }
 
-    private const string G = "(@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR g.Id=@Gym)";
-    private static object A(Scope s) => new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1 };
+    private const string G = "(@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR (g.Id=@Gym OR FIND_IN_SET(g.Id, @Gyms)))";
+    private static object A(Scope s) => new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv };
 
     public async Task<Pulse> PulseAsync(Scope s)
     {
@@ -23,13 +23,13 @@ public sealed class AlertRepo
         return (await _db.QueryAsync(
             $@"SELECT
                  (SELECT COUNT(*) FROM Gyms g WHERE {G} AND g.IsActive=1),
-                 (SELECT COUNT(*) FROM Users u LEFT JOIN Gyms g ON g.Id=u.GymId WHERE u.IsActive=1 AND (@All=1 OR (@IsOrg=1 AND u.OrganizationId=@Org) OR u.GymId=@Gym)),
+                 (SELECT COUNT(*) FROM Users u LEFT JOIN Gyms g ON g.Id=u.GymId WHERE u.IsActive=1 AND (@All=1 OR (@IsOrg=1 AND u.OrganizationId=@Org) OR (u.GymId=@Gym OR FIND_IN_SET(u.GymId, @Gyms)))),
                  (SELECT COUNT(*) FROM Campaigns k JOIN Gyms g ON g.Id=k.GymId WHERE {G} AND k.Status IN ('in_corso','programmata')),
                  (SELECT COUNT(*) FROM Conversations v JOIN Gyms g ON g.Id=v.GymId WHERE {G} AND v.IsTest=0 AND v.Status<>'chiusa'),
                  (SELECT COUNT(*) FROM Conversations v JOIN Gyms g ON g.Id=v.GymId WHERE {G} AND v.IsTest=0 AND v.Outcome='obiettivo_raggiunto'
                     AND v.LastMessageAt > UTC_TIMESTAMP() - INTERVAL 30 DAY),
                  (SELECT COALESCE(SUM(a.CostUsd),0) FROM AiUsage a LEFT JOIN Gyms g ON g.Id=a.GymId WHERE (@All=1 OR a.GymId IS NOT NULL AND {G}) AND a.CreatedAt >= @monthStart)",
-            new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, monthStart },
+            new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv, monthStart },
             r => new Pulse(Convert.ToInt32(r.GetValue(0)), Convert.ToInt32(r.GetValue(1)), Convert.ToInt32(r.GetValue(2)), Convert.ToInt32(r.GetValue(3)),
                 Convert.ToInt32(r.GetValue(4)), Convert.ToDecimal(r.GetValue(5))))).First();
     }

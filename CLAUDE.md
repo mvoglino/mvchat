@@ -21,6 +21,7 @@ Piattaforma SaaS erogata da MVitalia: campagne WhatsApp per attività di qualsia
 - **MVitalia** eroga il servizio: amministratore generale (`superadmin`) con tutti i poteri e il controllo su tutto.
 - **Attività** (nel codice `Gym`, tabella `Gyms`): la singola palestra, hotel, studio… Ha il suo **amministratore attività** (`manager`) e i suoi **operatori** (`operator`).
 - **Gruppo / marchio** (nel codice `Organization`, `IsGroup = 1`): più attività collegate (es. FitActive) con un **amministratore di gruppo** (`orgadmin`) che vede tutte le sue attività.
+- **Responsabile di area** (`areamanager`): utente di un gruppo che segue solo alcune attività, assegnate in `UserGyms` da MVitalia o dall'amministratore di gruppo (pagina Utenti, caselle). Fa quello che fa l'amministratore attività su tutte le sue attività e crea amministratori attività e operatori per quelle; non crea/modifica attività, dati del gruppo, tipo di attività, modelli di obiettivo, numeri WhatsApp, non toglie numeri dalla lista STOP e non vede i rendiconti. Report: «Le mie attività». Le sue attività arrivano nel cookie (`gyms`, aggiornato al più ogni 5 minuti) e nelle query come `FIND_IN_SET(x.GymId, @Gyms)` accanto a `x.GymId=@Gym`.
 - **Attività singola**: ha comunque un contenitore in `Organizations` con `IsGroup = 0` e lo stesso nome (nome e stato sincronizzati); non compare tra i gruppi e non può avere un amministratore di gruppo. Si crea da *Attività → Nuova attività* scegliendo «attività singola».
 - Nelle pagine si dice «gruppo», «attività», «cliente»: mai «palestra», «catena», «sede» o «struttura».
 - Tipo di attività (`Infrastructure/Sectors.cs`): del gruppo, ogni attività può averne uno proprio (`Gyms.Sector`, vuoto = come il gruppo); cambia solo le parole dell'assistente con i clienti (iscritto/ospite/paziente…). Lo cambiano MVitalia e, dentro un gruppo, l'amministratore del gruppo.
@@ -28,7 +29,7 @@ Piattaforma SaaS erogata da MVitalia: campagne WhatsApp per attività di qualsia
 - Segnaposto dei template: `{{sede}}` (nome dell'attività); `{{palestra}}` resta valido come sinonimo.
 
 ## Separazione dei dati
-- Ruoli: `superadmin` (MVitalia), `orgadmin` (amministratore di gruppo), `manager` (amministratore attività), `operator` (operatore).
+- Ruoli: `superadmin` (MVitalia), `orgadmin` (amministratore di gruppo), `areamanager` (responsabile di area), `manager` (amministratore attività), `operator` (operatore). Ogni nuovo filtro di perimetro deve comprendere anche `FIND_IN_SET(…, @Gyms)` con `Gyms = s.AreaGymsCsv`.
 - Ogni lettura di dati di lavoro passa da `Scope` (`Security/Scope.cs`) e da `Repos`: il filtro per gruppo/attività sta nella query, non nella pagina.
 - Gruppo e attività di un record si ricavano dalle regole lato server, mai da campi del modulo non verificati.
 

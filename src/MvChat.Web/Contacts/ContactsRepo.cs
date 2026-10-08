@@ -50,7 +50,7 @@ public sealed class ContactsRepo
     private readonly Db _db;
     public ContactsRepo(Db db) => _db = db;
 
-    private const string ScopeWhere = "(@All=1 OR (@IsOrg=1 AND l.OrganizationId=@Org) OR l.GymId=@Gym)";
+    private const string ScopeWhere = "(@All=1 OR (@IsOrg=1 AND l.OrganizationId=@Org) OR (l.GymId=@Gym OR FIND_IN_SET(l.GymId, @Gyms)))";
 
     // ---------- Liste ----------
     public Task<List<ContactList>> ListsAsync(Scope s, int? listId = null) => _db.QueryAsync(
@@ -58,7 +58,7 @@ public sealed class ContactsRepo
            FROM ContactLists l JOIN Gyms g ON g.Id=l.GymId LEFT JOIN Users u ON u.Id=l.CreatedBy
            WHERE {ScopeWhere} {(listId is null ? "" : "AND l.Id=@ListId")}
            ORDER BY l.CreatedAt DESC, l.Id DESC",
-        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, ListId = listId ?? -1 },
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv, ListId = listId ?? -1 },
         MapList);
 
     public async Task<ContactList?> ListAsync(Scope s, int id) => (await ListsAsync(s, id)).FirstOrDefault();
@@ -204,10 +204,10 @@ public sealed class ContactsRepo
     public Task<List<OptOut>> OptOutsAsync(Scope s, string? search) => _db.QueryAsync(
         @"SELECT o.*, org.Name AS OrgName, g.Name AS GymName FROM OptOuts o
           JOIN Organizations org ON org.Id=o.OrganizationId LEFT JOIN Gyms g ON g.Id=o.GymId
-          WHERE (@All=1 OR o.OrganizationId=@Org) AND (@Mgr=0 OR o.GymId=@Gym) AND (@q='' OR o.Phone LIKE @like)
+          WHERE (@All=1 OR o.OrganizationId=@Org) AND (@Mgr=0 OR (o.GymId=@Gym OR FIND_IN_SET(o.GymId, @Gyms))) AND (@q='' OR o.Phone LIKE @like)
           ORDER BY o.CreatedAt DESC LIMIT 1000",
         // L'amministratore di un'attività vede solo i numeri bloccati dalla sua attività, non quelli delle altre del gruppo.
-        new { All = s.IsSuperAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Mgr = s.IsManager ? 1 : 0, Gym = s.GymId ?? -1, q = search ?? "", like = "%" + (search ?? "") + "%" },
+        new { All = s.IsSuperAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Mgr = s.IsManager || s.IsAreaManager ? 1 : 0, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv, q = search ?? "", like = "%" + (search ?? "") + "%" },
         r => new OptOut(r.GetInt64(r.GetOrdinal("Id")), r.Int("OrganizationId"), r.Str("OrgName")!, r.Str("GymName"), r.Str("Phone")!,
             r.Str("Reason"), r.Str("Source")!, r.Date("CreatedAt")!.Value));
 

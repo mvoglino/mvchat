@@ -7,6 +7,11 @@
 }
 @section Actions { <a class="btn" href="/Sedi/Edit/@Model.P.Id">Scheda per l'assistente</a> }
 <p class="muted" style="margin:0">@(Model.P.InGroup ? $"Fa parte del gruppo {Model.P.GroupName}. Logo e colore vuoti = quelli del gruppo." : "Attività singola.") Orari, servizi e informazioni per i clienti si scrivono nella scheda per l'assistente.</p>
+@if (Model.Mine.Count > 1)
+{
+    <div class="inline-form"><div class="field"><label for="other">Attività</label>
+        <select id="other" onchange="location.href = '/Attivita/' + this.value">@foreach (var g in Model.Mine) { <option value="@g.Id" selected="@(g.Id == Model.P.Id)">@g.Name</option> }</select></div></div>
+}
 <form method="post" enctype="multipart/form-data" class="panel">
     <div class="panel-h"><h2>Aspetto</h2></div>
     <div class="panel-b form">

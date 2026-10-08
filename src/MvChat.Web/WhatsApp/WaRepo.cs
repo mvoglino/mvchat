@@ -59,8 +59,8 @@ public sealed class WaRepo
     private const string NumberSelect = "SELECT n.*, g.Name AS GymName FROM WaNumbers n JOIN Gyms g ON g.Id=n.GymId";
 
     public Task<List<WaNumber>> NumbersAsync(Scope s) => _db.QueryAsync(
-        NumberSelect + " WHERE (@All=1 OR (@IsOrg=1 AND n.OrganizationId=@Org) OR n.GymId=@Gym) ORDER BY g.Name",
-        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1 }, MapNumber);
+        NumberSelect + " WHERE (@All=1 OR (@IsOrg=1 AND n.OrganizationId=@Org) OR (n.GymId=@Gym OR FIND_IN_SET(n.GymId, @Gyms))) ORDER BY g.Name",
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv }, MapNumber);
 
     /// <summary>Numero di un'attività, senza filtro di perimetro: chi chiama deve aver già controllato l'attività.</summary>
     public Task<WaNumber?> NumberForGymAsync(int gymId) => _db.FirstAsync(NumberSelect + " WHERE n.GymId=@gymId", new { gymId }, MapNumber);

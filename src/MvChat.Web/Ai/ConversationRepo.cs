@@ -120,14 +120,14 @@ public sealed class ConversationRepo
         (await ListAsync(s, null, null, 1, id)).FirstOrDefault();
 
     public Task<List<Conversation>> ListAsync(Scope s, int? gymId, string? status, int limit, long? id = null) => _db.QueryAsync(
-        Select + @" WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR c.GymId=@Gym)
+        Select + @" WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR (c.GymId=@Gym OR FIND_IN_SET(c.GymId, @Gyms)))
           AND (@FGym=-1 OR c.GymId=@FGym) AND (@FStatus='' OR c.Status=@FStatus) AND (@FId=-1 OR c.Id=@FId)
           ORDER BY (c.Status='operatore') DESC, c.LastMessageAt DESC LIMIT @limit",
-        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv,
               FGym = gymId ?? -1, FStatus = status ?? "", FId = id ?? -1, limit }, Map);
 
-    private const string ScopeWhere = "(@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR c.GymId=@Gym)";
-    private static object ScopeArgs(Scope s) => new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1 };
+    private const string ScopeWhere = "(@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR (c.GymId=@Gym OR FIND_IN_SET(c.GymId, @Gyms)))";
+    private static object ScopeArgs(Scope s) => new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv };
 
     /// <summary>
     /// La postazione della reception. Viste: da_gestire (passate a una persona, libere o mie) · mie · ai · chiuse · tutte.
@@ -140,7 +140,7 @@ public sealed class ConversationRepo
             (@view='ai' AND c.Status='ai') OR (@view='chiuse' AND c.Status='chiusa') OR @view='tutte')
           ORDER BY (c.Status='operatore' AND c.LastInboundAt >= c.LastMessageAt) DESC,
                    CASE WHEN c.Status='operatore' THEN c.LastInboundAt END ASC, c.LastMessageAt DESC LIMIT @limit",
-        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv,
               FGym = gymId ?? -1, view, Me = s.UserId, limit }, Map);
 
     /// <summary>Per l'avviso nel menu: conversazioni che aspettano una persona (libere, oppure mie con il cliente in attesa).</summary>
@@ -150,7 +150,7 @@ public sealed class ConversationRepo
             $@"SELECT c.Id, c.ContactName FROM Conversations c WHERE {ScopeWhere} AND c.Status='operatore'
                  AND (c.AssignedUserId IS NULL OR (c.AssignedUserId=@Me AND c.LastInboundAt >= c.LastMessageAt))
                ORDER BY c.LastMessageAt DESC LIMIT 100",
-            new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Me = s.UserId },
+            new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv, Me = s.UserId },
             r => (r.GetInt64(0), r.GetString(1)));
         return rows.Count == 0 ? (0, null, null) : (rows.Count, rows[0].Item1, rows[0].Item2);
     }
@@ -248,8 +248,8 @@ public sealed class ConversationRepo
           WHERE Id=@id", new { id });
 
     public async Task<Dictionary<string, int>> CountsAsync(Scope s) => (await _db.QueryAsync(
-        @"SELECT c.Status, COUNT(*) FROM Conversations c WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR c.GymId=@Gym) GROUP BY c.Status",
-        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1 },
+        @"SELECT c.Status, COUNT(*) FROM Conversations c WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR (c.GymId=@Gym OR FIND_IN_SET(c.GymId, @Gyms))) GROUP BY c.Status",
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv },
         r => (r.GetString(0), Convert.ToInt32(r.GetValue(1))))).ToDictionary(x => x.Item1, x => x.Item2);
 
     public Task TouchAsync(long id) => _db.ExecuteAsync("UPDATE Conversations SET LastMessageAt=UTC_TIMESTAMP() WHERE Id=@id", new { id });

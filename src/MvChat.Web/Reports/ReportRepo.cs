@@ -52,11 +52,11 @@ public sealed class ReportRepo
     private readonly Db _db;
     public ReportRepo(Db db) => _db = db;
 
-    private const string ScopeWhere = "(@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR g.Id=@Gym)";
+    private const string ScopeWhere = "(@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR (g.Id=@Gym OR FIND_IN_SET(g.Id, @Gyms)))";
 
     private static object Args(Scope s, DateTime fromUtc, DateTime toUtc, int? orgId = null, int? gymId = null) => new
     {
-        All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+        All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv,
         fromUtc, toUtc, FOrg = orgId ?? -1, FGym = gymId ?? -1
     };
 
@@ -127,7 +127,7 @@ public sealed class ReportRepo
     {
         var args = new
         {
-            All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+            All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv,
             fromUtc, toUtc, FOrg = orgId ?? -1, FGym = gymId ?? -1, FCamp = campaignId ?? -1
         };
         var rows = await _db.QueryAsync(

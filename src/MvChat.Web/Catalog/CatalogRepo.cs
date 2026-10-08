@@ -113,10 +113,10 @@ public sealed class CatalogRepo
     // ---------- Offerte ----------
     public Task<List<Offer>> OffersAsync(Scope s, int? gymId = null, int? offerId = null) => _db.QueryAsync(
         @"SELECT o.*, g.Name AS GymName FROM Offers o JOIN Gyms g ON g.Id=o.GymId
-          WHERE (@All=1 OR (@IsOrg=1 AND o.OrganizationId=@Org) OR o.GymId=@Gym)
+          WHERE (@All=1 OR (@IsOrg=1 AND o.OrganizationId=@Org) OR (o.GymId=@Gym OR FIND_IN_SET(o.GymId, @Gyms)))
             AND (@FilterGym=-1 OR o.GymId=@FilterGym) AND (@FilterId=-1 OR o.Id=@FilterId)
           ORDER BY o.IsActive DESC, COALESCE(o.ValidTo, '2999-12-31') DESC, o.Id DESC",
-        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv,
               FilterGym = gymId ?? -1, FilterId = offerId ?? -1 }, MapOffer);
 
     public async Task<Offer?> OfferAsync(Scope s, int id) => (await OffersAsync(s, offerId: id)).FirstOrDefault();

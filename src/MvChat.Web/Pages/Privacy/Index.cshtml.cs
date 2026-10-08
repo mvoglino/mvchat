@@ -69,7 +69,10 @@ public class IndexModel : PageModel
         var (convs, msgs, contacts, recipients) = await _req.EraseAsync(me, Phone!);
         if (AddStop)
             foreach (var org in orgs)
-                await _contacts.AddOptOutAsync(org, me.GymId, Phone!, "Richiesta di cancellazione dei dati", "privacy", me.UserId);
+                if (me.IsAreaManager && org == me.OrganizationId)
+                    foreach (var g in me.AreaGymIds) await _contacts.AddOptOutAsync(org, g, Phone!, "Richiesta di cancellazione dei dati", "privacy", me.UserId);
+                else
+                    await _contacts.AddOptOutAsync(org, me.GymId, Phone!, "Richiesta di cancellazione dei dati", "privacy", me.UserId);
         await _repos.AuditAsync(me, "privacy.erase", $"{SubjectRequests.Mask(Phone!)}: conversazioni {convs}, messaggi {msgs}, contatti {contacts}, destinatari {recipients}",
             HttpContext.Connection.RemoteIpAddress?.ToString(), me.OrganizationId, me.GymId);
         TempData["Ok"] = $"Dati cancellati: {convs} conversazioni, {msgs} messaggi, {contacts} righe di liste, {recipients} invii di campagne." + (AddStop && orgs.Count > 0 ? " Il numero è nella lista STOP." : "");

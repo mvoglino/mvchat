@@ -18,8 +18,8 @@ public sealed class SubjectRequests
     private readonly Db _db; private readonly MvChat.Web.WhatsApp.MediaStore _media;
     public SubjectRequests(Db db, MvChat.Web.WhatsApp.MediaStore media) { _db = db; _media = media; }
 
-    private const string G = "(@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR g.Id=@Gym)";
-    private static object A(Scope s, string phone) => new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, phone };
+    private const string G = "(@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR (g.Id=@Gym OR FIND_IN_SET(g.Id, @Gyms)))";
+    private static object A(Scope s, string phone) => new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv, phone };
 
     /// <summary>Il numero mascherato per il registro: si sa che c'è stata una richiesta, non di chi.</summary>
     public static string Mask(string phone) => phone.Length <= 9 ? (phone.Length <= 4 ? "***" : phone[..3] + "***") : phone[..5] + new string('*', phone.Length - 9) + phone[^4..];
@@ -70,13 +70,13 @@ public sealed class SubjectRequests
             await _db.ExecuteAsync(
                 $@"DELETE x FROM ContactRejects x JOIN ContactLists l ON l.Id=x.ListId JOIN Gyms g ON g.Id=l.GymId
                    WHERE {G} AND x.Phone IS NOT NULL AND RIGHT(REGEXP_REPLACE(x.Phone, '[^0-9]', ''), 9) = @last9",
-                new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, last9 });
+                new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv, last9 });
 
         // Nel registro attività il numero resta solo mascherato.
         await _db.ExecuteAsync(
             @"UPDATE AuditLog SET Detail=REPLACE(Detail, @phone, @masked)
-              WHERE Detail LIKE CONCAT('%', @phone, '%') AND (@All=1 OR (@IsOrg=1 AND OrganizationId=@Org) OR GymId=@Gym)",
-            new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, phone, masked = Mask(phone) });
+              WHERE Detail LIKE CONCAT('%', @phone, '%') AND (@All=1 OR (@IsOrg=1 AND OrganizationId=@Org) OR (GymId=@Gym OR FIND_IN_SET(GymId, @Gyms)))",
+            new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv, phone, masked = Mask(phone) });
 
         // Copie grezze degli avvisi di Meta (tenute al massimo 30 giorni) che contengono quel numero, sui numeri WhatsApp del perimetro.
         var ids = await _db.QueryAsync(

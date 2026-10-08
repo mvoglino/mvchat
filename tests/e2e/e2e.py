@@ -13,7 +13,7 @@ class Client:
         self.jar = http.cookiejar.CookieJar()
         self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar), NoRedirect)
     def req(self, path, data=None):
-        body = urllib.parse.urlencode(data).encode() if data is not None else None
+        body = urllib.parse.urlencode(data, doseq=True).encode() if data is not None else None
         try:
             r = self.op.open(urllib.request.Request(BASE + path, data=body))
             return r.status, html_lib.unescape(r.read().decode(errors="replace")), r.headers.get("Location")
@@ -894,6 +894,48 @@ try:
     _,html,_ = sa.req("/Impostazioni/WhatsApp"); check("limite di campagne per cliente modificabile da MVitalia (di base 2)", 'name="MaxCampaigns"' in html and 'value="2"' in html)
 except ImportError:
     check("pulizia del registro (serve pymysql per la prova)", False, "pip install pymysql")
+
+# 5l. Responsabile di area: segue solo alcune attività del gruppo
+area_form = {"Input.FullName":"Resp Area","Input.Email":"area@fitactive.test","Input.Role":"areamanager","Input.OrganizationId":"","Input.GymId":"","Input.IsActive":"true"}
+s,html,_ = d.post("/Users/Edit", area_form)
+check("responsabile di area: serve almeno un'attività", s == 200 and "Scegli almeno un'attività" in html, str(s))
+s,_,_ = d.post("/Users/Edit", dict(area_form, **{"Input.AreaGyms":[str(alba)]}))
+_, lst, _ = d.req("/Users"); pw_area = temp_pwd(lst)
+check("l'amministratore di gruppo crea un responsabile di area con le sue attività", s == 302 and pw_area and "Responsabile di area" in lst and "FitActive Alba" in lst, str(s))
+area_id = re.search(r"area@fitactive\.test.*?/Users/Edit/(\d+)", lst, re.S)
+s,html,_ = m.post("/Users/Edit", dict(area_form, **{"Input.Email":"area2@fitactive.test","Input.AreaGyms":[str(alba)]}))
+check("l'amministratore attività non crea responsabili di area", s == 200 and "Non puoi assegnare questo ruolo" in html, str(s))
+ar = Client(); ar.post("/Login", {"Email":"area@fitactive.test","Password":pw_area or ""})
+ar.post("/Account/Password", {"Current":pw_area or "","New":"AreaResp2026x","New2":"AreaResp2026x"})
+_,lst,_ = ar.req("/Conversazioni?view=tutte")
+check("responsabile di area: vede le conversazioni delle sue attività e non le altre", "+393200000051" in lst and "+393200000021" not in lst, lst[lst.find("<tbody>"):][:300])
+s1,_,_ = ar.req(f"/Conversazioni/{cvr[51]}"); s2,_,_ = ar.req(f"/Conversazioni/{cv1}")
+check("responsabile di area: una conversazione di un'altra attività non si apre", s1 == 200 and s2 == 404, f"{s1} {s2}")
+_,html,_ = ar.req("/Campagne"); check("responsabile di area: solo le campagne delle sue attività", "Motivi rifiuto" in html and "Pilates Bra" not in html)
+_,html,_ = ar.req("/Report"); tb = html[html.find("Confronto tra le attività"):]
+check("responsabile di area: report con il totale delle sue attività", "Le mie attività" in html and "FitActive Alba" in tb and "FitActive Bra" not in tb, html[html.find("crumbs"):][:300])
+blocked = [ar.req(u)[0] for u in ("/Gyms", "/Gruppo", "/Impostazioni/AI", "/Fatturazione")]
+check("responsabile di area: niente attività, dati del gruppo, impostazioni e rendiconti", all(x in (302, 403, 404) for x in blocked), str(blocked))
+s,_,loc = ar.post(f"/WhatsApp/Numero/{alba}?handler=Save", {"Mode":"simulato","DisplayPhone":"0173 999999"}, form_path=f"/WhatsApp/Numero/{alba}")
+check("responsabile di area: non collega numeri WhatsApp", s in (400, 403) or "/Error/403" in (loc or ""), f"{s} {loc}")
+s1,_,_ = ar.post("/Users/Edit", {"Input.FullName":"Op Area","Input.Email":"op.area@fitactive.test","Input.Role":"operator","Input.GymId":str(alba),"Input.IsActive":"true"})
+s2,html2,_ = ar.post("/Users/Edit", {"Input.FullName":"Op Bra","Input.Email":"op.bra@fitactive.test","Input.Role":"operator","Input.GymId":str(gym["FitActive Bra"]),"Input.IsActive":"true"})
+_,ul,_ = ar.req("/Users")
+check("responsabile di area: crea operatori solo nelle sue attività e vede solo i loro utenti", s1 == 302 and s2 == 200 and "Scegli l'attività" in html2
+      and "op.area@fitactive.test" in ul and "resp.bra@fitactive.test" not in ul and "direzione@fitactive.test" not in ul, f"{s1} {s2}")
+s,html,_ = ar.post("/Users/Edit", {"Input.FullName":"Altro","Input.Email":"x.area@fitactive.test","Input.Role":"orgadmin","Input.GymId":str(alba),"Input.IsActive":"true"})
+check("responsabile di area: non crea amministratori di gruppo", s == 200 and "Non puoi assegnare questo ruolo" in html, str(s))
+if area_id:
+    d.post(f"/Users/Edit/{area_id.group(1)}", dict(area_form, **{"Input.Id":area_id.group(1),"Input.AreaGyms":[str(alba), str(gym["FitActive Bra"])]}), form_path=f"/Users/Edit/{area_id.group(1)}")
+ar2 = Client(); ar2.post("/Login", {"Email":"area@fitactive.test","Password":"AreaResp2026x"})
+_,lst,_ = ar2.req("/Conversazioni?view=tutte")
+check("attività aggiunte al responsabile: le vede (al nuovo accesso o entro pochi minuti)", area_id is not None and "+393200000021" in lst and "+393200000051" in lst)
+_,html,_ = ar2.req(f"/Users/Edit/{area_id.group(1) if area_id else 0}")
+check("il responsabile vede le sue attività nel suo profilo ma non le cambia", "Le tue attività: FitActive Alba, FitActive Bra" in html, html[html.find("Le tue"):][:200])
+
+pages_ok = {u: ar2.req(u)[0] for u in ("/", "/Lists", "/Sedi", "/Offerte", "/Modelli", "/OptOuts", "/RisposteRapide", "/Privacy", "/Attivita", "/Conversazioni/Archivio", f"/Report?attivita={alba}", f"/Campagne/{cR}")}
+_,menu,_ = ar2.req("/")
+check("responsabile di area: le sue pagine si aprono e il menù non mostra quelle del gruppo", all(v == 200 for v in pages_ok.values()) and "Dati e logo delle attività" in menu and ">Rendiconti<" not in menu and "Dati e logo del gruppo" not in menu, str(pages_ok))
 
 # 6. Blocco dopo 5 tentativi sbagliati
 x = Client()

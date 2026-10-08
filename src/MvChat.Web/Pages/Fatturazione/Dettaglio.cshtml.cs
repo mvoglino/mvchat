@@ -16,7 +16,7 @@ public class DettaglioModel : PageModel
     public async Task<IActionResult> OnGetAsync(string? mese, int org)
     {
         var me = User.Scope();
-        if (me.Role == Roles.Operator || mese is null) return NotFound();
+        if (me.Role is Roles.Operator or Roles.AreaManager || mese is null) return NotFound();
         var s = (await _billing.MonthAsync(me, mese)).FirstOrDefault(x => x.OrganizationId == org); // perimetro nella query
         if (s is null) return NotFound();
         S = s;

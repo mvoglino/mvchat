@@ -57,6 +57,7 @@ public class IndexModel : PageModel
         // Il livello si decide dal ruolo e da cosa è stato aperto; quello che arriva dall'indirizzo vale solo se è nel perimetro.
         if (Me.IsManager) attivita = Me.GymId;
         if (Me.IsOrgAdmin) gruppo = Me.OrganizationId;
+        if (Me.IsAreaManager && attivita is null) gruppo = Me.OrganizationId; // il totale è quello delle sue attività (il filtro sta nelle query)
         var gym = attivita is int a ? gyms.FirstOrDefault(g => g.Id == a) : null;
         if (attivita is not null && gym is null) return false;
         if (gruppo is int gid && !gyms.Any(g => g.OrganizationId == gid)) return false;
@@ -67,7 +68,7 @@ public class IndexModel : PageModel
         {
             Level = "attivita";
             var list = await _report.ActivitiesAsync(Me, fromUtc, toUtc, g0);
-            Title = list.FirstOrDefault().OrgName ?? "Gruppo";
+            Title = Me.IsAreaManager ? "Le mie attività" : list.FirstOrDefault().OrgName ?? "Gruppo";
             Rows = list.Select(x => { x.Row.Link = Url(g0, x.Row.Id); return x.Row; }).ToList();
             if (Me.IsSuperAdmin) Crumbs.Add((Title, null));
         }
@@ -76,7 +77,7 @@ public class IndexModel : PageModel
             Level = "campagne"; Title = gym.Name;
             Rows = await _report.CampaignsAsync(Me, fromUtc, toUtc, gym.Id);
             foreach (var r in Rows) r.Link = $"/Campagne/{r.Id}";
-            if (gym.InGroup && !Me.IsManager) Crumbs.Add((gym.OrganizationName, Url(gym.OrganizationId, null)));
+            if (gym.InGroup && !Me.IsManager) Crumbs.Add((Me.IsAreaManager ? "Le mie attività" : gym.OrganizationName, Url(gym.OrganizationId, null)));
             Crumbs.Add((gym.Name, null));
             // I totali dell'attività comprendono anche le conversazioni fuori campagna (prove escluse).
             var act = (await _report.ActivitiesAsync(Me, fromUtc, toUtc, gym.OrganizationId)).First(x => x.Row.Id == gym.Id).Row;

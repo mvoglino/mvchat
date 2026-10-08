@@ -16,17 +16,35 @@
                 <select asp-for="Input.Role">
                     @foreach (var r in Model.AssignableRoles) { <option value="@r">@Roles.Label(r)</option> }
                 </select><span asp-validation-for="Input.Role" class="field-error"></span>
-                <small>L'amministratore di gruppo vede tutte le attività del gruppo. Amministratore attività e operatore solo la propria.</small></div>
+                <small>L'amministratore di gruppo vede tutte le attività del gruppo, il responsabile di area solo quelle che gli affidi qui sotto. Amministratore attività e operatore solo la propria.</small></div>
             @if (Model.Me.IsSuperAdmin)
             {
                 <div class="field"><label asp-for="Input.OrganizationId">Gruppo (per l'amministratore di gruppo)</label>
                     <select asp-for="Input.OrganizationId" asp-items="@(new SelectList(Model.Orgs, "Id", "Name"))"><option value="">—</option></select>
                     <span asp-validation-for="Input.OrganizationId" class="field-error"></span></div>
             }
-            <div class="field"><label asp-for="Input.GymId">Attività (per amministratore attività e operatore)</label>
+            @if (Model.AssignableRoles.Contains(Roles.AreaManager))
+            {
+                <fieldset class="field full" id="AreaBox" hidden="@(Model.Input.Role != Roles.AreaManager)">
+                    <legend>Attività affidate al responsabile di area</legend>
+                    <div class="check-grid">
+                        @foreach (var g in Model.Gyms.Where(g => g.InGroup))
+                        {
+                            <label class="check"><input type="checkbox" name="Input.AreaGyms" value="@g.Id" checked="@Model.Input.AreaGyms.Contains(g.Id)"> @(Model.Me.IsSuperAdmin ? g.OrganizationName + " · " : "")@g.Name</label>
+                        }
+                    </div>
+                    <span asp-validation-for="Input.AreaGyms" class="field-error"></span>
+                    <small>Vedrà e gestirà solo queste attività. Si possono aggiungere o togliere in qualsiasi momento (vale entro pochi minuti).</small>
+                </fieldset>
+            }
+            <div class="field" id="GymBox"><label asp-for="Input.GymId">Attività (per amministratore attività e operatore)</label>
                 <select asp-for="Input.GymId" asp-items="@(new SelectList(Model.Gyms.Select(g => new { g.Id, Name = Model.Me.IsSuperAdmin ? g.OrganizationName + " · " + g.Name : g.Name }), "Id", "Name"))"><option value="">—</option></select>
                 <span asp-validation-for="Input.GymId" class="field-error"></span></div>
             <div class="field full"><label class="check"><input asp-for="Input.IsActive"> Accesso attivo</label></div>
+        }
+        @if (Model.IsSelf && Model.Input.Role == Roles.AreaManager)
+        {
+            <div class="field full"><small>Le tue attività: @string.Join(", ", Model.Gyms.Where(g => Model.Input.AreaGyms.Contains(g.Id)).Select(g => g.Name))</small></div>
         }
         @if (!Model.IsNew && !Model.IsSelf)
         {
@@ -39,3 +57,12 @@
     </div>
     <div class="actions"><a class="btn" href="/Users">Annulla</a><button class="btn primary" type="submit">Salva</button></div>
 </form>
+<script>
+(function () {
+    // Le attività da spuntare servono solo al responsabile di area; la singola attività agli altri ruoli.
+    var role = document.getElementById('Input_Role'), area = document.getElementById('AreaBox'), gym = document.getElementById('GymBox');
+    if (!role || !area) return;
+    function sync() { var isArea = role.value === 'areamanager'; area.hidden = !isArea; if (gym) gym.hidden = isArea; }
+    role.addEventListener('change', sync); sync();
+})();
+</script>

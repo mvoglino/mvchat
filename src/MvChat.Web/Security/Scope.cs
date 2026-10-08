@@ -6,15 +6,17 @@ public static class Roles
 {
     public const string SuperAdmin = "superadmin"; // MVitalia: vede tutti i gruppi
     public const string OrgAdmin = "orgadmin";     // amministratore di gruppo (marchio): tutte le attività del gruppo
+    public const string AreaManager = "areamanager"; // responsabile di area: solo alcune attività del gruppo, assegnate in UserGyms
     public const string Manager = "manager";       // amministratore di una singola attività: la sua attività e i suoi operatori
     public const string Operator = "operator";     // reception: solo le conversazioni della sua attività
 
-    public static readonly string[] All = { SuperAdmin, OrgAdmin, Manager, Operator };
+    public static readonly string[] All = { SuperAdmin, OrgAdmin, AreaManager, Manager, Operator };
 
     public static string Label(string role) => role switch
     {
         SuperAdmin => "Amministratore MVitalia",
         OrgAdmin => "Amministratore di gruppo",
+        AreaManager => "Responsabile di area",
         Manager => "Amministratore attività",
         Operator => "Operatore",
         _ => role
@@ -24,7 +26,8 @@ public static class Roles
     public static string[] Assignable(string role) => role switch
     {
         SuperAdmin => All,
-        OrgAdmin => new[] { OrgAdmin, Manager, Operator },
+        OrgAdmin => new[] { OrgAdmin, AreaManager, Manager, Operator },
+        AreaManager => new[] { Manager, Operator },
         Manager => new[] { Operator },
         _ => Array.Empty<string>()
     };
@@ -41,15 +44,19 @@ public sealed class Scope
     public string Name { get; init; } = "";
     public int? OrganizationId { get; init; }
     public int? GymId { get; init; }
+    /// <summary>Solo per il responsabile di area: le sue attività, separate da virgole (vuoto per tutti gli altri). Si usa nelle query con FIND_IN_SET.</summary>
+    public string AreaGymsCsv { get; init; } = "";
+    public IReadOnlyList<int> AreaGymIds => AreaGymsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList();
 
     public bool IsSuperAdmin => Role == Roles.SuperAdmin;
     public bool IsOrgAdmin => Role == Roles.OrgAdmin;
     public bool IsManager => Role == Roles.Manager;
+    public bool IsAreaManager => Role == Roles.AreaManager;
     public bool CanManageGyms => IsSuperAdmin || IsOrgAdmin;
-    public bool CanManageUsers => IsSuperAdmin || IsOrgAdmin || IsManager;
+    public bool CanManageUsers => IsSuperAdmin || IsOrgAdmin || IsAreaManager || IsManager;
 
     public bool CanSeeOrganization(int orgId) => IsSuperAdmin || OrganizationId == orgId;
-    public bool CanSeeGym(int orgId, int gymId) => IsSuperAdmin || (IsOrgAdmin && OrganizationId == orgId) || GymId == gymId;
+    public bool CanSeeGym(int orgId, int gymId) => IsSuperAdmin || (IsOrgAdmin && OrganizationId == orgId) || GymId == gymId || (IsAreaManager && AreaGymIds.Contains(gymId));
 
     public static Scope From(ClaimsPrincipal p) => new()
     {
@@ -58,6 +65,10 @@ public sealed class Scope
         Name = p.FindFirstValue(ClaimTypes.Name) ?? "",
         OrganizationId = int.TryParse(p.FindFirstValue("org"), out var o) ? o : null,
         GymId = int.TryParse(p.FindFirstValue("gym"), out var g) ? g : null,
+        // Solo numeri: il valore finisce in una query (come parametro), ma meglio non fidarsi nemmeno del contenuto del cookie.
+        AreaGymsCsv = p.FindFirstValue(ClaimTypes.Role) == Roles.AreaManager
+            ? string.Join(",", (p.FindFirstValue("gyms") ?? "").Split(',').Where(x => int.TryParse(x, out _)))
+            : "",
     };
 }
 

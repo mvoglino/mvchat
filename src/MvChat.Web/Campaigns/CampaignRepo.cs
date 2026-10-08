@@ -103,12 +103,12 @@ public sealed class CampaignRepo
 
     private static object ScopeArgs(Scope s, int? gymId, int? id) => new
     {
-        All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+        All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv,
         FGym = gymId ?? -1, FId = id ?? -1
     };
 
     public Task<List<Campaign>> ListAsync(Scope s, int? gymId, int? id = null) => _db.QueryAsync(
-        Select + @" WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR c.GymId=@Gym)
+        Select + @" WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR (c.GymId=@Gym OR FIND_IN_SET(c.GymId, @Gyms)))
           AND (@FGym=-1 OR c.GymId=@FGym) AND (@FId=-1 OR c.Id=@FId) ORDER BY c.CreatedAt DESC LIMIT 300",
         ScopeArgs(s, gymId, id), Map);
 

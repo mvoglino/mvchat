@@ -56,7 +56,8 @@ public sealed class ActivityProfile
     public string EffectiveSector => Sector ?? GroupSector;
 }
 public sealed record UserRow(int Id, int? OrganizationId, string? OrganizationName, int? GymId, string? GymName, string Email, string FullName, string Role, bool IsActive, DateTime? LastLoginAt);
-public sealed record UserAuth(int Id, int? OrganizationId, int? GymId, string Email, string FullName, string PasswordHash, string Role, bool IsActive, int FailedLogins, DateTime? LockedUntil, bool MustChangePassword, bool OrgActive);
+public sealed record UserAuth(int Id, int? OrganizationId, int? GymId, string Email, string FullName, string PasswordHash, string Role, bool IsActive, int FailedLogins, DateTime? LockedUntil, bool MustChangePassword, bool OrgActive,
+    string? AreaGyms = null);
 public sealed record Branding(string Name, string? LogoUrl, string PrimaryColor, string Sector);
 
 /// <summary>
@@ -139,14 +140,14 @@ public sealed class Repos
         @"SELECT g.Id, g.OrganizationId, g.Name, g.City, g.Address, g.Phone, g.IsActive, g.Sector AS OwnSector, o.Name AS OrgName, o.IsGroup,
                  COALESCE(g.Sector, o.Sector) AS Sector, (SELECT COUNT(*) FROM Users u WHERE u.GymId=g.Id) AS UserCount
           FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId
-          WHERE (@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR g.Id=@Gym)";
+          WHERE (@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR (g.Id=@Gym OR FIND_IN_SET(g.Id, @Gyms)))";
 
     private static object GymArgs(Scope s) => new
     {
         All = s.IsSuperAdmin ? 1 : 0,
         IsOrg = s.IsOrgAdmin ? 1 : 0,
         Org = s.OrganizationId ?? -1,
-        Gym = s.GymId ?? -1
+        Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv
     };
 
     public Task<List<Gym>> GymsAsync(Scope s) => _db.QueryAsync(GymSelect + " ORDER BY o.Name, g.Name", GymArgs(s), MapGym);
@@ -245,15 +246,31 @@ public sealed class Repos
 
     // ---------- Utenti ----------
     public Task<List<UserRow>> UsersAsync(Scope s) => _db.QueryAsync(
-        @"SELECT u.Id, u.OrganizationId, o.Name AS OrgName, u.GymId, g.Name AS GymName, u.Email, u.FullName, u.Role, u.IsActive, u.LastLoginAt
+        @"SELECT u.Id, u.OrganizationId, o.Name AS OrgName, u.GymId,
+                 CASE WHEN u.Role='areamanager' THEN (SELECT GROUP_CONCAT(ag.Name ORDER BY ag.Name SEPARATOR ', ') FROM UserGyms ug JOIN Gyms ag ON ag.Id=ug.GymId WHERE ug.UserId=u.Id)
+                      ELSE g.Name END AS GymName, u.Email, u.FullName, u.Role, u.IsActive, u.LastLoginAt
           FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId LEFT JOIN Gyms g ON g.Id=u.GymId
-          WHERE (@All=1 OR (@IsOrg=1 AND u.OrganizationId=@Org) OR (@IsMgr=1 AND u.GymId=@Gym))
+          WHERE (@All=1 OR (@IsOrg=1 AND u.OrganizationId=@Org) OR (@IsMgr=1 AND u.GymId=@Gym)
+                 OR (@IsArea=1 AND u.Role IN ('manager','operator') AND FIND_IN_SET(u.GymId, @Gyms)) OR u.Id=@Me)
           ORDER BY o.Name, g.Name, u.FullName",
-        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, IsMgr = s.IsManager ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1 },
+        new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, IsMgr = s.IsManager ? 1 : 0, IsArea = s.IsAreaManager ? 1 : 0,
+              Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv, Me = s.UserId },
         r => new UserRow(r.Int("Id"), r.IntN("OrganizationId"), r.Str("OrgName"), r.IntN("GymId"), r.Str("GymName"),
             r.Str("Email")!, r.Str("FullName")!, r.Str("Role")!, r.Bool("IsActive"), r.Date("LastLoginAt")));
 
     public async Task<UserRow?> UserAsync(Scope s, int id) => (await UsersAsync(s)).FirstOrDefault(u => u.Id == id);
+
+    /// <summary>Le attività assegnate a un responsabile di area.</summary>
+    public Task<List<int>> UserGymsAsync(int userId) =>
+        _db.QueryAsync("SELECT GymId FROM UserGyms WHERE UserId=@userId ORDER BY GymId", new { userId }, r => r.GetInt32(0));
+
+    /// <summary>Sostituisce le attività del responsabile di area (vuoto = nessuna, per chi non è più responsabile).</summary>
+    public async Task SetUserGymsAsync(int userId, IEnumerable<int> gymIds)
+    {
+        await _db.ExecuteAsync("DELETE FROM UserGyms WHERE UserId=@userId", new { userId });
+        foreach (var gymId in gymIds.Distinct())
+            await _db.ExecuteAsync("INSERT INTO UserGyms (UserId, GymId) VALUES (@userId, @gymId)", new { userId, gymId });
+    }
 
     public async Task<bool> EmailTakenAsync(string email, int? exceptId) => await _db.ScalarAsync<long>(
         "SELECT COUNT(*) FROM Users WHERE Email=@email AND Id<>@id", new { email, id = exceptId ?? -1 }) > 0;
@@ -274,17 +291,21 @@ public sealed class Repos
     }
 
     public Task<UserAuth?> UserForLoginAsync(string email) => _db.FirstAsync(
-        @"SELECT u.*, (COALESCE(o.IsActive, 1)=1 AND COALESCE(g.IsActive, 1)=1) AS OrgActive FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId LEFT JOIN Gyms g ON g.Id=u.GymId WHERE u.Email=@email",
+        @"SELECT u.*, (COALESCE(o.IsActive, 1)=1 AND COALESCE(g.IsActive, 1)=1) AS OrgActive, " + AreaGymsSql + @" AS AreaGyms FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId LEFT JOIN Gyms g ON g.Id=u.GymId WHERE u.Email=@email",
         new { email }, MapAuth);
 
     public Task<UserAuth?> UserForLoginAsync(int id) => _db.FirstAsync(
-        @"SELECT u.*, (COALESCE(o.IsActive, 1)=1 AND COALESCE(g.IsActive, 1)=1) AS OrgActive FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId LEFT JOIN Gyms g ON g.Id=u.GymId WHERE u.Id=@id",
+        @"SELECT u.*, (COALESCE(o.IsActive, 1)=1 AND COALESCE(g.IsActive, 1)=1) AS OrgActive, " + AreaGymsSql + @" AS AreaGyms FROM Users u LEFT JOIN Organizations o ON o.Id=u.OrganizationId LEFT JOIN Gyms g ON g.Id=u.GymId WHERE u.Id=@id",
         new { id }, MapAuth);
+
+    /// <summary>Le attività del responsabile di area (solo quelle attive e del suo gruppo).</summary>
+    private const string AreaGymsSql =
+        "(SELECT GROUP_CONCAT(CAST(ug.GymId AS CHAR) ORDER BY ug.GymId) FROM UserGyms ug JOIN Gyms ag ON ag.Id=ug.GymId WHERE ug.UserId=u.Id AND ag.IsActive=1 AND ag.OrganizationId=u.OrganizationId)";
 
     private static UserAuth MapAuth(DbDataReader r) => new(
         r.Int("Id"), r.IntN("OrganizationId"), r.IntN("GymId"), r.Str("Email")!, r.Str("FullName")!, r.Str("PasswordHash")!,
         r.Str("Role")!, r.Bool("IsActive"), r.Int("FailedLogins"), r.Date("LockedUntil"), r.Bool("MustChangePassword"),
-        Convert.ToInt32(r["OrgActive"]) == 1);
+        Convert.ToInt32(r["OrgActive"]) == 1, r.Str("AreaGyms"));
 
     /// <summary>Conta il tentativo sbagliato nel database stesso: anche con molti tentativi in parallelo il blocco scatta.</summary>
     public Task LoginFailedAsync(int id, int maxAttempts, DateTime lockUntil) => _db.ExecuteAsync(
