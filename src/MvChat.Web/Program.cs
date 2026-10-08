@@ -35,6 +35,7 @@ builder.Services.AddHttpClient<CloudApi>(c => c.Timeout = TimeSpan.FromSeconds(3
 builder.Services.AddScoped<WaRepo>();
 builder.Services.AddScoped<WaService>();
 builder.Services.AddScoped<WebhookHandler>();
+builder.Services.AddScoped<MediaStore>();
 builder.Services.AddHttpClient<AiClient>(c => c.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddScoped<ConversationRepo>();
 builder.Services.AddScoped<AssistantService>();
@@ -232,7 +233,7 @@ app.MapGet("/health", async (AppConfigStore cfg, Db db) =>
 // Indirizzo richiamato ogni pochi minuti dall'operazione pianificata di Aruba.
 // Dal Passo 6 farà partire gli invii in coda; per ora registra solo che è stato chiamato.
 app.MapGet("/jobs/tick", async (string? token, AppConfigStore cfg, Db db, ConversationRepo convs, AiQueue queue, CampaignSender sender,
-    MvChat.Web.Privacy.RetentionService retention, WebhookHandler hook, WaRepo waRepo, WaService wa, ILogger<Program> log) =>
+    MvChat.Web.Privacy.RetentionService retention, WebhookHandler hook, WaRepo waRepo, WaService wa, MediaStore media, ILogger<Program> log) =>
 {
     var c = cfg.Current;
     if (!c.Installed || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(c.JobToken)
@@ -257,12 +258,16 @@ app.MapGet("/jobs/tick", async (string? token, AppConfigStore cfg, Db db, Conver
     await Step("campagne", async () => run = await sender.RunAsync(TimeSpan.FromSeconds(20)));
     // Qualità e limite di invio dei numeri Meta: aggiornati ogni 6 ore (al massimo 3 numeri per giro).
     await Step("numeri WhatsApp", async () => { foreach (var n in (await waRepo.MetaNumbersAsync(6)).Take(3)) await wa.CheckNumberAsync(n); });
+    // Vocali e foto dei clienti non ancora scaricati da Meta (che li tiene per un tempo limitato).
+    var files = 0;
+    if (DateTime.UtcNow - started < TimeSpan.FromSeconds(22)) await Step("file dei clienti", async () => files = await media.PrefetchAsync(5));
     // Pulizia giornaliera dei dati vecchi (salta se già fatta nelle ultime 20 ore; se il tempo non basta, continua al giro dopo).
     var left = TimeSpan.FromSeconds(28) - (DateTime.UtcNow - started);
     if (left > TimeSpan.FromSeconds(3)) await Step("pulizia dati", () => retention.RunAsync(budget: left));
     var detail = string.Join(" · ", new[] {
         pending.Count > 0 ? $"riprese {pending.Count} risposte" : null,
         retried > 0 ? $"rielaborati {retried} avvisi Meta" : null,
+        files > 0 ? $"scaricati {files} vocali/foto" : null,
         run.Sent + run.Skipped + run.Errors > 0 ? $"campagne: inviati {run.Sent}, saltati {run.Skipped}, errori {run.Errors}" : null }
         .Concat(notes).Where(x => x is not null));
     // Il registro tiene un giro "vuoto" ogni 15 minuti (serve al pannello per sapere che l'operazione pianificata funziona), tutti quelli con del lavoro.

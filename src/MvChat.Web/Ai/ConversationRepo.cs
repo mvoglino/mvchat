@@ -46,7 +46,8 @@ public sealed class Conversation
 
 public sealed record UsageRow(string Purpose, string Provider, int Calls, int Failed, long InputTokens, long OutputTokens, long CacheTokens, decimal CostUsd);
 
-public sealed record ConvMessage(long Id, string Direction, string Kind, string? Body, string Status, string? Error, int? SentBy, string? SentByName, DateTime CreatedAt);
+public sealed record ConvMessage(long Id, string Direction, string Kind, string? Body, string Status, string? Error, int? SentBy, string? SentByName, DateTime CreatedAt,
+    bool HasMedia = false, bool MediaGone = false);
 
 public static class Outcomes
 {
@@ -162,11 +163,24 @@ public sealed class ConversationRepo
         new { waNumberId, phone }, Map);
 
     public Task<List<ConvMessage>> MessagesAsync(long conversationId, int limit = 200) => _db.QueryAsync(
-        @"SELECT * FROM (SELECT m.Id, m.Direction, m.Kind, m.Body, m.Status, m.Error, m.SentBy, u.FullName AS SentByName, m.CreatedAt
+        @"SELECT * FROM (SELECT m.Id, m.Direction, m.Kind, m.Body, m.Status, m.Error, m.SentBy, u.FullName AS SentByName, m.CreatedAt, m.MediaId, m.MediaFile
             FROM WaMessages m LEFT JOIN Users u ON u.Id=m.SentBy WHERE m.ConversationId=@conversationId ORDER BY m.Id DESC LIMIT @limit) x ORDER BY Id",
         new { conversationId, limit },
         r => new ConvMessage(r.GetInt64(r.GetOrdinal("Id")), r.Str("Direction")!, r.Str("Kind")!, r.Str("Body"), r.Str("Status")!, r.Str("Error"),
-            r.IntN("SentBy"), r.Str("SentByName"), r.Date("CreatedAt")!.Value));
+            r.IntN("SentBy"), r.Str("SentByName"), r.Date("CreatedAt")!.Value, r.Str("MediaId") is not null, r.Str("MediaFile") == "-"));
+
+    /// <summary>
+    /// Vocali del cliente ancora da trascrivere, arrivati dopo l'ultima risposta (quelli prima li ha già gestiti qualcuno).
+    /// Quelli che Meta non ha più non si riprovano.
+    /// </summary>
+    public Task<List<long>> PendingVoicesAsync(long id) => _db.QueryAsync(
+        @"SELECT m.Id FROM WaMessages m WHERE m.ConversationId=@id AND m.Direction='in' AND m.Kind IN ('audio','voice') AND m.Transcribed=0
+            AND m.MediaId IS NOT NULL AND (m.MediaFile IS NULL OR m.MediaFile<>'-')
+            AND m.Id > COALESCE((SELECT MAX(o.Id) FROM WaMessages o WHERE o.ConversationId=@id AND o.Direction='out'), 0) ORDER BY m.Id",
+        new { id }, r => r.GetInt64(0));
+
+    public Task SetTranscriptAsync(long messageId, string body) =>
+        _db.ExecuteAsync("UPDATE WaMessages SET Body=@body, Transcribed=1 WHERE Id=@messageId", new { messageId, body });
 
     public Task InboundAsync(long id, bool needsReply, string? reopenAs) => _db.ExecuteAsync(
         @"UPDATE Conversations SET LastInboundAt=UTC_TIMESTAMP(), LastMessageAt=UTC_TIMESTAMP(),

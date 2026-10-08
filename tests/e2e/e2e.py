@@ -692,6 +692,63 @@ try:
     check("pulizia automatica: cancellati i dati oltre i 12 mesi, il resto resta", s4 == 404 and left == 0 and still > 5 and "conversazioni 1" in html and "avvisi Meta 3" in html, f"{s4} {left} {still} {html[html.find('Ultima pulizia'):][:200]}")
 except ImportError:
     check("pulizia automatica (serve pymysql per la prova)", False, "pip install pymysql")
+# 5j-bis. Vocali dei clienti: trascritti per l'assistente, ascoltabili in reception
+fake.server_close(); fake = fake_meta.start(5079)
+fake_meta.MEDIA["media-voc1"] = ("audio/ogg; codecs=opus", b"OggS-prova AUDIO:Va bene, procediamo con il rinnovo\n")
+fake_meta.MEDIA["media-voc2"] = ("audio/ogg; codecs=opus", b"OggS-prova AUDIO:LUNGO racconto di tutta la mia settimana\n")
+voice_form = {"Provider":"anthropic","Anthropic.Key":"","Anthropic.Model":"claude-haiku-4-5-20251001","Anthropic.BaseUrl":"http://127.0.0.1:5080","Anthropic.InputPrice":"1","Anthropic.OutputPrice":"5","Anthropic.CacheReadPrice":"0,10",
+    "OpenAi.Key":"","OpenAi.Model":"gpt-5-mini","OpenAi.BaseUrl":"http://127.0.0.1:5080","OpenAi.InputPrice":"0.25","OpenAi.OutputPrice":"2","OpenAi.CacheReadPrice":"0.025",
+    "Transcribe":"true","TranscribeModel":"gpt-4o-mini-transcribe","TranscribePrice":"0,003","TranscribeMaxSeconds":"180"}
+s,_,_ = sa.post("/Impostazioni/AI", voice_form)
+_,html,_ = sa.req("/Impostazioni/AI"); check("trascrizione dei vocali accesa da MVitalia", s == 302 and "Vocali dei clienti" in html and 'name="Transcribe" value="true" checked' in html, str(s))
+def hook_bra(msgs):
+    p = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"111"},"messages":msgs}}]}]}
+    raw_ = _json.dumps(p).encode(); sig_ = "sha256=" + hmac.new(b"testsecret", raw_, hashlib.sha256).hexdigest()
+    rq = urllib.request.Request(BASE + "/webhooks/whatsapp", data=raw_, headers={"Content-Type":"application/json","X-Hub-Signature-256":sig_})
+    try: return urllib.request.urlopen(rq).status
+    except urllib.error.HTTPError as e: return e.code
+def conv_of(client, phone):
+    _,lst,_ = client.req("/Conversazioni?view=tutte")
+    mm = re.search(r"<tr>(?:(?!</tr>).)*?" + re.escape(phone) + r"(?:(?!</tr>).)*?/Conversazioni/(\d+)", lst, re.S)
+    return mm.group(1) if mm else None
+def wait_ai(client, cid):
+    for _ in range(60):
+        st = state(client, cid)
+        if not st.get("writing") and st.get("status") != "ai" or (not st.get("writing") and st.get("last", 0) > 0 and _ai_done(client, cid)): break
+        _time.sleep(0.2)
+    _time.sleep(0.3)
+def _ai_done(client, cid): return "Assistente ·" in page(client, cid)
+cv1 = conv_of(d, "+393200000021"); cv2 = conv_of(d, "+393200000022")
+hook_bra([{"from":"393200000021","id":"wamid.VOC1","timestamp":"1","type":"audio","audio":{"id":"media-voc1","mime_type":"audio/ogg; codecs=opus","voice":True}}])
+if cv1: wait_ai(d, cv1)
+html = page(d, cv1) if cv1 else ""
+tr = [r for r in fake_ai.REQUESTS if r["path"] == "/v1/audio/transcriptions"]
+check("vocale del cliente: trascritto e l'assistente risponde da solo", cv1 is not None and "[messaggio vocale trascritto] Va bene, procediamo con il rinnovo" in html and "Ti aspettiamo in reception" in html,
+      html[html.find('id="chat"'):][:500])
+check("trascrizione chiesta a OpenAI con la sua chiave, in italiano", bool(tr) and tr[-1]["headers"].get("Authorization") == "Bearer sk-oa-test" and b"gpt-4o-mini-transcribe" in tr[-1]["raw"] and re.search(rb'name="?language"?\r\n\r\nit\r\n', tr[-1]["raw"]) is not None)
+_sysv = next((r["body"].get("system", [{}])[0].get("text", "") for r in reversed(fake_ai.REQUESTS) if r["path"] == "/v1/messages"), "")
+check("l'assistente sa che i vocali trascritti possono contenere errori", "[messaggio vocale trascritto]" in _sysv and "chiedi gentilmente conferma" in _sysv)
+au = re.search(r'<audio class="msg-media"[^>]*src="([^"]+)"', html)
+src = au.group(1).replace("&amp;", "&") if au else "/x"
+s1,body1,_ = d.req(src); s2,_,_ = oth.req(src)
+check("reception: il vocale si ascolta dalla conversazione, solo nel proprio perimetro", au is not None and s1 == 200 and "AUDIO:Va bene" in body1 and s2 == 404, f"{s1} {s2} {src}")
+hook_bra([{"from":"393200000022","id":"wamid.VOC2","timestamp":"1","type":"audio","audio":{"id":"media-voc2","mime_type":"audio/ogg; codecs=opus","voice":True}}])
+st = {}
+for _ in range(60):
+    st = state(d, cv2) if cv2 else {}
+    if st.get("status") == "operatore": break
+    _time.sleep(0.2)
+html = page(d, cv2) if cv2 else ""
+check("vocale troppo lungo: trascritto, ma passa a una persona", st.get("status") == "operatore" and "LUNGO racconto" in html and "vocale lungo" in html, str(st) + html[html.find('class="stats"'):][:300])
+_,html,_ = sa.req("/Impostazioni/AI"); check("consumi: la trascrizione dei vocali ha la sua riga", "Trascrizione dei vocali" in html)
+fake_meta.MEDIA.clear()
+hook_bra([{"from":"393200000099","id":"wamid.IMG9","timestamp":"1","type":"image","image":{"id":"media-sparita","mime_type":"image/jpeg"}}])
+cv9 = conv_of(d, "+393200000099"); html = page(d, cv9) if cv9 else ""
+im = re.search(r'<img class="msg-media"[^>]*src="([^"]+)"', html)
+s9,_,_ = d.req(im.group(1).replace("&amp;", "&")) if im else (0, "", "")
+check("foto non più disponibile su Meta: niente errore, solo un avviso", im is not None and s9 == 404 and "File non più disponibile" in page(d, cv9), f"{s9}")
+sa.post("/Impostazioni/AI", dict(voice_form, Transcribe="false"))
+fake.shutdown(); fake.server_close()
 fai.shutdown()
 
 # 5k. Controllo generale: STOP, messaggi spontanei, foto e vocali, saluti finali, dati mancanti, aggiornamenti del database

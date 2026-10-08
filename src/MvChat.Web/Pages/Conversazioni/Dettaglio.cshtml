@@ -31,6 +31,13 @@
             <div class="msg @(m.Direction == "in" ? "in" : m.Kind == "template" || m.SentBy is not null ? "out" : "ai")">
                 <div class="msg-h">@who · @m.CreatedAt.ToRome().ToString("dd/MM HH:mm")@if (m.Direction == "out") {<text> · @WaService.StatusLabel(m.Status)</text>}</div>
                 <div class="msg-b">@m.Body</div>
+                @if (m.HasMedia && m.Direction == "in")
+                {
+                    var src = $"/Conversazioni/{c.Id}?handler=Media&msg={m.Id}";
+                    if (m.MediaGone) { <div class="msg-e">File non più disponibile.</div> }
+                    else if (MediaStore.IsVoice(m.Kind)) { <audio class="msg-media" controls preload="none" src="@src">Il browser non riproduce il vocale: <a href="@src">scaricalo</a>.</audio> }
+                    else if (m.Kind is "image" or "sticker") { <a href="@src" target="_blank" rel="noopener"><img class="msg-media" src="@src" alt="Foto mandata dal cliente" loading="lazy"></a> }
+                }
                 @if (!string.IsNullOrEmpty(m.Error)) { <div class="msg-e">@m.Error</div> }
             </div>
         }

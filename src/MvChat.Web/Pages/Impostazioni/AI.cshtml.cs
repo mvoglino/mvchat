@@ -18,6 +18,10 @@ public class AIModel : PageModel
     [BindProperty] public string Provider { get; set; } = "";
     [BindProperty] public ProviderInput Anthropic { get; set; } = new();
     [BindProperty] public ProviderInput OpenAi { get; set; } = new();
+    [BindProperty] public bool Transcribe { get; set; }
+    [BindProperty] public string TranscribeModel { get; set; } = "";
+    [BindProperty] public string TranscribePrice { get; set; } = "";
+    [BindProperty] public int TranscribeMaxSeconds { get; set; }
     public bool AnthropicHasKey { get; private set; }
     public bool OpenAiHasKey { get; private set; }
     public List<UsageRow> Usage { get; private set; } = new();
@@ -29,6 +33,8 @@ public class AIModel : PageModel
         Provider = a.Provider;
         Anthropic = ProviderInput.From(a.Anthropic); OpenAi = ProviderInput.From(a.OpenAi);
         AnthropicHasKey = !string.IsNullOrEmpty(a.Anthropic.KeyEnc); OpenAiHasKey = !string.IsNullOrEmpty(a.OpenAi.KeyEnc);
+        Transcribe = a.Transcribe; TranscribeModel = a.TranscribeModel; TranscribeMaxSeconds = a.TranscribeMaxSeconds;
+        TranscribePrice = a.TranscribePricePerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public async Task<IActionResult> OnPostAsync()
@@ -37,9 +43,16 @@ public class AIModel : PageModel
         c.Ai.Provider = Provider is "anthropic" or "openai" ? Provider : "";
         Anthropic.ApplyTo(c.Ai.Anthropic, _ai, "https://api.anthropic.com");
         OpenAi.ApplyTo(c.Ai.OpenAi, _ai, "https://api.openai.com");
+        c.Ai.Transcribe = Transcribe;
+        if (!string.IsNullOrWhiteSpace(TranscribeModel)) c.Ai.TranscribeModel = TranscribeModel.Trim();
+        if (decimal.TryParse((TranscribePrice ?? "").Trim().Replace(',', '.'), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var tp) && tp >= 0)
+            c.Ai.TranscribePricePerMinute = tp;
+        if (TranscribeMaxSeconds > 0) c.Ai.TranscribeMaxSeconds = Math.Clamp(TranscribeMaxSeconds, 30, 900);
         _config.Save(c);
         await _repos.AuditAsync(User.Scope(), "ai.settings", $"{c.Ai.Provider} {c.Ai.Current.Model}", HttpContext.Connection.RemoteIpAddress?.ToString());
-        TempData["Ok"] = "Impostazioni AI salvate.";
+        TempData["Ok"] = Transcribe && string.IsNullOrEmpty(c.Ai.OpenAi.KeyEnc)
+            ? "Impostazioni AI salvate. Attenzione: per trascrivere i vocali serve la chiave OpenAI (sezione OpenAI qui sopra)."
+            : "Impostazioni AI salvate.";
         return Redirect("/Impostazioni/AI");
     }
 

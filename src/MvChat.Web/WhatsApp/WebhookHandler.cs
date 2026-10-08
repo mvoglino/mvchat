@@ -19,10 +19,12 @@ public sealed class WebhookHandler
     private readonly ContactsRepo _contacts;
     private readonly ConversationRepo _convs;
     private readonly AiQueue _queue;
+    private readonly MediaStore _media;
+    private readonly AiClient _ai;
     private readonly ILogger<WebhookHandler> _log;
 
-    public WebhookHandler(AppConfigStore config, WaRepo repo, WaService wa, ContactsRepo contacts, ConversationRepo convs, AiQueue queue, ILogger<WebhookHandler> log)
-    { _config = config; _repo = repo; _wa = wa; _contacts = contacts; _convs = convs; _queue = queue; _log = log; }
+    public WebhookHandler(AppConfigStore config, WaRepo repo, WaService wa, ContactsRepo contacts, ConversationRepo convs, AiQueue queue, MediaStore media, AiClient ai, ILogger<WebhookHandler> log)
+    { _config = config; _repo = repo; _wa = wa; _contacts = contacts; _convs = convs; _queue = queue; _media = media; _ai = ai; _log = log; }
 
     /// <summary>Conferma iniziale dell'indirizzo: Meta manda una parola d'ordine e si aspetta indietro il "challenge".</summary>
     public string? Verify(string? mode, string? token, string? challenge)
@@ -217,9 +219,13 @@ public sealed class WebhookHandler
         var msgId = await _repo.InsertMessageAsync(number, phone, "in", isText ? "text" : type, text, null, id, "received", null, null, conv?.Id);
         try
         {
+            // Vocali e foto: si ricorda il riferimento di Meta per scaricare il file (in reception o per la trascrizione).
+            var mediaId = MediaStore.Kinds.Contains(type) ? m[type]?["id"]?.GetValue<string>() : null;
+            if (mediaId is not null) await _media.SetMediaAsync(msgId, mediaId, m[type]?["mime_type"]?.GetValue<string>());
+
             if (stop)
             {
-                await _wa.SendTextAsync(number, phone, $"Fatto: non riceverai più messaggi promozionali da {number.GymName}. Per qualsiasi cosa puoi sempre contattare la reception.", null, conv?.Id);
+                await _wa.SendTextAsync(number, phone, WaService.StopConfirmation(number.GymName), null, conv?.Id);
                 return;
             }
             if (type == "reaction") return; // una reazione (👍) non chiede una risposta
@@ -236,7 +242,13 @@ public sealed class WebhookHandler
 
             if (conv.Status == "ai")
             {
-                if (!isText)
+                if (MediaStore.IsVoice(type) && mediaId is not null && !number.IsSimulated && _ai.TranscribeEnabled)
+                {
+                    // Vocale: l'assistente lo fa trascrivere e risponde come a un messaggio scritto.
+                    await _convs.InboundAsync(conv.Id, needsReply: true, reopenAs: null);
+                    _queue.Enqueue(conv.Id);
+                }
+                else if (!isText)
                 {
                     // L'assistente legge solo testo: foto, vocali e documenti li guarda una persona.
                     await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: null);

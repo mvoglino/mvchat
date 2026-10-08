@@ -31,7 +31,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(body)))
         self.end_headers(); self.wfile.write(body)
     def do_POST(self):
-        n = int(self.headers.get("Content-Length", "0")); body = json.loads(self.rfile.read(n) or b"{}")
+        n = int(self.headers.get("Content-Length", "0")); raw = self.rfile.read(n)
+        if self.path == "/v1/audio/transcriptions":
+            # Trascrizione dei vocali: il "vocale" delle prove contiene il testo dopo AUDIO:
+            REQUESTS.append({"path": self.path, "headers": dict(self.headers), "body": {}, "raw": raw})
+            if self.headers.get("Authorization") != "Bearer " + OPENAI_KEY: return self._send(401, {"error": {"message": "Incorrect API key provided"}})
+            m = re.search(rb"AUDIO:([^\r\n]*)", raw); text = m.group(1).decode() if m else ""
+            if "ERRORE" in text: return self._send(500, {"error": {"message": "server error"}})
+            return self._send(200, {"text": text, "usage": {"type": "duration", "seconds": 400 if "LUNGO" in text else 12}})
+        body = json.loads(raw or b"{}")
         REQUESTS.append({"path": self.path, "headers": dict(self.headers), "body": body})
         msgs = body.get("messages", [])
         last = next((m["content"] for m in reversed(msgs) if m["role"] == "user"), "")

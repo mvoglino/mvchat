@@ -13,7 +13,7 @@ Percorso consigliato per mettere in funzione mvchat con la prima palestra FitAct
 | Pagina | Cosa inserire |
 |---|---|
 | Impostazioni Meta | App ID e chiave segreta dell'app Meta di MVitalia; copia su Meta l'indirizzo del webhook e la parola d'ordine mostrati; limite di campagne per cliente (di base 2 in 30 giorni, per tutto il gruppo) |
-| Impostazioni AI | Fornitore (Anthropic o OpenAI), chiave, prova del collegamento |
+| Impostazioni AI | Fornitore (Anthropic o OpenAI), chiave, prova del collegamento. «Vocali dei clienti»: trascrizione accesa (serve la chiave OpenAI anche se l'assistente è Anthropic) |
 | Fatturazione → Impostazioni | Canone di base, ricarico AI (20%), cambio dollaro/euro, dati di MVitalia |
 | Privacy e dati | Conservazione 12 mesi (già impostata) |
 
@@ -56,7 +56,8 @@ Percorso consigliato per mettere in funzione mvchat con la prima palestra FitAct
 Da verificare con il consulente privacy di MVitalia e di FitActive:
 
 - **Ruoli**: ogni attività (o il gruppo) è *titolare* dei dati dei suoi clienti; MVitalia è *responsabile del trattamento* e serve un **accordo di nomina** (art. 28 GDPR).
-- **Sub-responsabili** da indicare nell'accordo: Aruba (server e database), Meta (WhatsApp), il fornitore AI scelto (Anthropic o OpenAI, con il loro accordo sul trattamento dei dati).
+- **Sub-responsabili** da indicare nell'accordo: Aruba (server e database), Meta (WhatsApp), il fornitore AI scelto (Anthropic o OpenAI, con il loro accordo sul trattamento dei dati) e, se la trascrizione dei vocali è accesa, OpenAI per la trascrizione.
+- **Vocali e foto** dei clienti restano in mvchat (cartella App_Data/media) e si cancellano come i messaggi: pulizia automatica dopo il periodo di conservazione e richieste di cancellazione.
 - **Informativa** dell'attività: deve citare l'invio di messaggi WhatsApp promozionali e l'uso di un **assistente virtuale** (AI Act: l'assistente si presenta sempre come tale, mvchat lo garantisce).
 - **Consenso marketing** nella lista: si caricano solo contatti con consenso; chi scrive STOP o chiede di non essere contattato entra subito nella lista STOP.
 - **Richieste dei clienti** (vedere o cancellare i propri dati): menu *Richieste privacy*, cerca il cellulare, scarica i dati o cancellali.

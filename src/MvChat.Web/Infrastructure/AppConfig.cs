@@ -61,6 +61,14 @@ public sealed class AiSettings
     };
     [System.Text.Json.Serialization.JsonIgnore]
     public AiProviderSettings Current => Provider == "openai" ? OpenAi : Anthropic;
+
+    /// <summary>Trascrizione dei vocali dei clienti (con la chiave OpenAI, anche se l'assistente è Anthropic).</summary>
+    public bool Transcribe { get; set; }
+    public string TranscribeModel { get; set; } = "gpt-4o-mini-transcribe";
+    /// <summary>Prezzo in dollari per minuto di audio, dal listino OpenAI.</summary>
+    public decimal TranscribePricePerMinute { get; set; } = 0.003m;
+    /// <summary>Vocali più lunghi: la trascrizione resta, ma risponde una persona.</summary>
+    public int TranscribeMaxSeconds { get; set; } = 180;
 }
 
 public sealed class AiProviderSettings

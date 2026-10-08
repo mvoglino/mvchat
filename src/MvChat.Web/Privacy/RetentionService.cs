@@ -11,8 +11,8 @@ public sealed record CleanupResult(int Conversations, int Messages, int Lists, i
 /// </summary>
 public sealed class RetentionService
 {
-    private readonly Db _db; private readonly AppConfigStore _config;
-    public RetentionService(Db db, AppConfigStore config) { _db = db; _config = config; }
+    private readonly Db _db; private readonly AppConfigStore _config; private readonly MvChat.Web.WhatsApp.MediaStore _media;
+    public RetentionService(Db db, AppConfigStore config, MvChat.Web.WhatsApp.MediaStore media) { _db = db; _config = config; _media = media; }
 
     public Task<DateTime?> LastRunAsync() => _db.ScalarAsync<DateTime?>("SELECT MAX(At) FROM AuditLog WHERE Action='privacy.cleanup'");
 
@@ -66,6 +66,9 @@ public sealed class RetentionService
             var events = await InBlocksAsync("DELETE FROM WaWebhookEvents WHERE ReceivedAt < @hooks", new { hooks });
             // Il registro si accorcia, ma restano le righe di fatturazione e privacy: servono come prova di cosa è stato fatto.
             var audit = await InBlocksAsync("DELETE FROM AuditLog WHERE At < @cutoff AND Action NOT LIKE 'billing.%' AND Action NOT LIKE 'privacy.%'", new { cutoff });
+
+            // Vocali e foto dei messaggi cancellati.
+            if (!_unfinished) await _media.CleanupOrphansAsync();
 
             var r = new CleanupResult(convs, msgs, lists, recipients, events, audit, false);
             // Se il tempo non è bastato, non si segna come fatta: riparte al prossimo giro e finisce il lavoro.

@@ -16,6 +16,12 @@ public sealed record AiResult(bool Ok, string? Text, string? Error, string Provi
          + (CacheWriteTokens * p.InputPrice * 1.25m)) / 1_000_000m;
 }
 
+public sealed record Transcription(bool Ok, string? Text, decimal Seconds, string Model, string? Error)
+{
+    public decimal CostUsd(AiSettings a) => Math.Round(Seconds / 60m * a.TranscribePricePerMinute, 6);
+    public AiResult AsUsage() => new(Ok, Text, Error, "openai", Model, 0, 0, 0, 0);
+}
+
 /// <summary>
 /// Un solo punto di contatto con il fornitore AI. Anthropic e OpenAI hanno formati diversi:
 /// qui si traducono, così il resto di mvchat non sa (e non deve sapere) chi sta rispondendo.
@@ -42,6 +48,7 @@ public sealed class AiClient
     public string Provider => _config.Current.Ai.Provider;
     public bool Enabled => Provider is "anthropic" or "openai" && Key(_config.Current.Ai.Current) is not null;
     public AiProviderSettings Settings => _config.Current.Ai.Current;
+    public AiSettings AiConfig => _config.Current.Ai;
 
     public async Task<AiResult> ChatAsync(string system, IReadOnlyList<AiTurn> turns, int maxTokens = 600)
     {
@@ -98,6 +105,35 @@ public sealed class AiClient
         var u = json?["usage"];
         var cached = Int(u?["prompt_tokens_details"]?["cached_tokens"]);
         return new AiResult(true, text, null, "openai", s.Model, Int(u?["prompt_tokens"]) - cached, Int(u?["completion_tokens"]), cached, 0);
+    }
+
+    /// <summary>Trascrizione dei vocali accesa e chiave OpenAI inserita (Anthropic non trascrive l'audio).</summary>
+    public bool TranscribeEnabled => _config.Current.Ai.Transcribe && Key(_config.Current.Ai.OpenAi) is not null;
+
+    /// <summary>Trasforma un vocale in testo con OpenAI. I secondi servono a calcolare il costo (se OpenAI non li dice, si stimano dalla grandezza del file).</summary>
+    public async Task<Transcription> TranscribeAsync(byte[] audio, string fileName, string? mime)
+    {
+        var a = _config.Current.Ai;
+        var key = Key(a.OpenAi);
+        var model = string.IsNullOrWhiteSpace(a.TranscribeModel) ? "gpt-4o-mini-transcribe" : a.TranscribeModel;
+        var estimate = Math.Max(1, audio.Length / 2500m); // un vocale di WhatsApp occupa circa 2-3 KB al secondo
+        if (key is null) return new Transcription(false, null, 0, model, "Chiave OpenAI non inserita (Impostazioni AI).");
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(audio);
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(string.IsNullOrWhiteSpace(mime) ? "audio/ogg" : mime.Split(';')[0].Trim());
+        form.Add(file, "file", fileName);
+        form.Add(new StringContent(model), "model");
+        form.Add(new StringContent("it"), "language");
+        form.Add(new StringContent("json"), "response_format");
+        using var req = new HttpRequestMessage(HttpMethod.Post, a.OpenAi.BaseUrl.TrimEnd('/') + "/v1/audio/transcriptions") { Content = form };
+        req.Headers.Add("Authorization", "Bearer " + key);
+        var (ok, json, error) = await SendAsync(req);
+        if (!ok) return new Transcription(false, null, estimate, model, error);
+        var u = json?["usage"];
+        decimal seconds = estimate;
+        try { if (u?["type"]?.GetValue<string>() == "duration") seconds = u["seconds"]!.GetValue<decimal>(); } catch { }
+        try { if (json?["duration"] is JsonNode d) seconds = d.GetValue<decimal>(); } catch { }
+        return new Transcription(true, json?["text"]?.GetValue<string>()?.Trim() ?? "", seconds, model, null);
     }
 
     /// <summary>Due messaggi di fila dello stesso autore diventano uno solo: alcuni fornitori lo richiedono.</summary>

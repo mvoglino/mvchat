@@ -26,6 +26,28 @@ public sealed class WaService
         try { return _protector.Unprotect(n.AccessTokenEnc); } catch { return null; }
     }
 
+    /// <summary>Risposta automatica a chi chiede di non essere più contattato.</summary>
+    public static string StopConfirmation(string gymName) =>
+        $"Fatto: non riceverai più messaggi promozionali da {gymName}. Per qualsiasi cosa puoi sempre contattare la reception.";
+
+    /// <summary>Scarica da Meta un file mandato dal cliente (vocale, foto). I numeri simulati non hanno file veri.</summary>
+    public async Task<(byte[]? Bytes, string? Mime, string? Error, bool Gone)> DownloadMediaAsync(WaNumber n, string mediaId, long maxBytes)
+    {
+        if (n.IsSimulated) return (null, null, "numero simulato: nessun file", true);
+        var token = Token(n);
+        if (token is null) return (null, null, "chiave di accesso del numero non valida", false);
+        var info = await _api.MediaInfoAsync(mediaId, token);
+        if (!info.Ok)
+            // Meta tiene i file per un tempo limitato: se non lo trova più, è inutile riprovare.
+            return (null, null, info.Error, info.Error?.Contains("codice 100") == true || info.Error?.Contains("codice 131052") == true);
+        var url = info.Body?["url"]?.GetValue<string>();
+        var size = info.Body?["file_size"]?.ToString();
+        if (long.TryParse(size, out var sz) && sz > maxBytes) return (null, null, "file troppo grande", true);
+        if (url is null) return (null, null, "Meta non ha indicato dove scaricare il file", false);
+        var (bytes, error) = await _api.DownloadMediaAsync(url, token, maxBytes);
+        return (bytes, info.Body?["mime_type"]?.GetValue<string>(), error, error == "file troppo grande");
+    }
+
     private static string? NotReady(WaNumber n, string? token) =>
         n.IsSimulated ? null
         : string.IsNullOrEmpty(n.PhoneNumberId) ? "Manca l'identificativo del numero (Phone number ID)."

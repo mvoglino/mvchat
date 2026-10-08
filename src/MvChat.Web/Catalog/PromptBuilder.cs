@@ -135,6 +135,7 @@ public static class PromptBuilder
         sb.AppendLine(org?.PrivacyUrl is { Length: > 0 } privacy
             ? $"10. Se il cliente chiede come vengono usati i suoi dati o della privacy, indica l'informativa: {privacy}. Se chiede di vedere o cancellare i suoi dati, passa a una persona dello staff."
             : "10. Se il cliente chiede della privacy o dei suoi dati, passa a una persona dello staff.");
+        sb.AppendLine("11. I messaggi che iniziano con «[messaggio vocale trascritto]» sono vocali del cliente trasformati in testo in automatico: rispondi normalmente, senza dire che non puoi ascoltare i vocali. La trascrizione può sbagliare qualche parola: se un dato importante (una data, un orario, una scelta) non è chiaro, chiedi gentilmente conferma.");
         return sb.ToString();
     }
 }

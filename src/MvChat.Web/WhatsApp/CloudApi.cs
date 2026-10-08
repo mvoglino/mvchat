@@ -76,6 +76,37 @@ public sealed class CloudApi
     public Task<ApiResult> PhoneInfoAsync(string phoneNumberId, string token) =>
         GetAsync($"{phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier", token);
 
+    /// <summary>Dove scaricare un file mandato dal cliente (vocale, foto): Meta risponde con un indirizzo valido pochi minuti.</summary>
+    public Task<ApiResult> MediaInfoAsync(string mediaId, string token) => GetAsync(Uri.EscapeDataString(mediaId), token);
+
+    /// <summary>Scarica il file. La chiave si manda solo agli indirizzi di Meta (o al finto server delle prove).</summary>
+    public async Task<(byte[]? Bytes, string? Error)> DownloadMediaAsync(string url, string token, long maxBytes)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return (null, "indirizzo del file non valido");
+        var graphHost = Uri.TryCreate(_config.Current.Meta.GraphBaseUrl, UriKind.Absolute, out var g) ? g.Host : "";
+        var trusted = u.Scheme == "https" && (u.Host.EndsWith(".fbsbx.com") || u.Host.EndsWith(".facebook.com") || u.Host.EndsWith(".whatsapp.net"))
+                      || u.Host == graphHost;
+        if (!trusted) return (null, "indirizzo del file non di Meta: scaricamento rifiutato");
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, u);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+            if (!res.IsSuccessStatusCode) return (null, $"Meta ha risposto {(int)res.StatusCode}");
+            if (res.Content.Headers.ContentLength > maxBytes) return (null, "file troppo grande");
+            await using var s = await res.Content.ReadAsStreamAsync();
+            using var ms = new MemoryStream();
+            var buf = new byte[81920]; int n;
+            while ((n = await s.ReadAsync(buf)) > 0)
+            {
+                ms.Write(buf, 0, n);
+                if (ms.Length > maxBytes) return (null, "file troppo grande");
+            }
+            return (ms.ToArray(), null);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { return (null, "Meta non raggiungibile: " + ex.Message); }
+    }
+
     private async Task<ApiResult> PostAsync(string path, string token, JsonObject body, Func<JsonNode?, string?> id)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, Url(path))

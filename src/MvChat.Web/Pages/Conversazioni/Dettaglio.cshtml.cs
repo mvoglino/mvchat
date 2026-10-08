@@ -16,9 +16,9 @@ public class DettaglioModel : PageModel
 {
     private readonly ConversationRepo _convs; private readonly WaRepo _wa; private readonly WaService _send;
     private readonly WebhookHandler _hook; private readonly ContactsRepo _contacts; private readonly AiQueue _queue; private readonly Repos _repos;
-    private readonly QuickReplyRepo _quick;
-    public DettaglioModel(ConversationRepo convs, WaRepo wa, WaService send, WebhookHandler hook, ContactsRepo contacts, AiQueue queue, Repos repos, QuickReplyRepo quick)
-    { _convs = convs; _wa = wa; _send = send; _hook = hook; _contacts = contacts; _queue = queue; _repos = repos; _quick = quick; }
+    private readonly QuickReplyRepo _quick; private readonly MediaStore _media;
+    public DettaglioModel(ConversationRepo convs, WaRepo wa, WaService send, WebhookHandler hook, ContactsRepo contacts, AiQueue queue, Repos repos, QuickReplyRepo quick, MediaStore media)
+    { _convs = convs; _wa = wa; _send = send; _hook = hook; _contacts = contacts; _queue = queue; _repos = repos; _quick = quick; _media = media; }
 
     public List<QuickReply> QuickReplies { get; private set; } = new();
     public List<UserRow> Colleagues { get; private set; } = new();
@@ -56,6 +56,21 @@ public class DettaglioModel : PageModel
     private IActionResult Back() => Redirect($"/Conversazioni/{Conv.Id}");
 
     public async Task<IActionResult> OnGetAsync(long id) => await LoadAsync(id) ? Page() : NotFound();
+
+    /// <summary>Vocale o foto mandati dal cliente: solo a chi vede la conversazione. Se non è ancora stato scaricato, lo prende da Meta.</summary>
+    public async Task<IActionResult> OnGetMediaAsync(long id, long msg)
+    {
+        if (await _convs.GetAsync(User.Scope(), id) is null) return NotFound();
+        var m = await _media.GetAsync(msg);
+        if (m is null || m.ConversationId != id || !MediaStore.Kinds.Contains(m.Kind)) return NotFound();
+        var (path, mime, _) = await _media.EnsureAsync(msg);
+        if (path is null) return NotFound();
+        Response.Headers.CacheControl = "private, max-age=3600";
+        // Il tipo lo decide mvchat (solo audio e immagini): niente pagine o script serviti da file arrivati dall'esterno.
+        var type = (mime ?? "").Split(';')[0].Trim().ToLowerInvariant();
+        if (!(type.StartsWith("audio/") || type is "image/jpeg" or "image/png" or "image/webp")) type = "application/octet-stream";
+        return new PhysicalFileResult(path, type) { EnableRangeProcessing = true }; // il vocale si può far scorrere avanti e indietro
+    }
 
     /// <summary>Piccolo controllo per la pagina aperta: se arriva un messaggio nuovo, si ricarica da sola.</summary>
     public async Task<IActionResult> OnGetStateAsync(long id)

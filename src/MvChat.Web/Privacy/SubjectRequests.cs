@@ -15,8 +15,8 @@ public sealed record FoundOptOut(string OrgName, string? GymName, string? Reason
 /// </summary>
 public sealed class SubjectRequests
 {
-    private readonly Db _db;
-    public SubjectRequests(Db db) => _db = db;
+    private readonly Db _db; private readonly MvChat.Web.WhatsApp.MediaStore _media;
+    public SubjectRequests(Db db, MvChat.Web.WhatsApp.MediaStore media) { _db = db; _media = media; }
 
     private const string G = "(@All=1 OR (@IsOrg=1 AND g.OrganizationId=@Org) OR g.Id=@Gym)";
     private static object A(Scope s, string phone) => new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, phone };
@@ -56,6 +56,8 @@ public sealed class SubjectRequests
         var a = A(s, phone);
         var convIds = $"SELECT c.Id FROM Conversations c JOIN Gyms g ON g.Id=c.GymId WHERE {G} AND c.ContactPhone=@phone";
         await _db.ExecuteAsync($"UPDATE AiUsage SET ConversationId=NULL WHERE ConversationId IN (SELECT Id FROM ({convIds}) x)", a);
+        // Vocali e foto del cliente: i file si cancellano insieme ai messaggi.
+        _media.DeleteFiles(await _db.QueryAsync($"SELECT w.MediaFile FROM WaMessages w JOIN Gyms g ON g.Id=w.GymId WHERE {G} AND w.ContactPhone=@phone AND w.MediaFile IS NOT NULL", a, r => r.Str("MediaFile")));
         var msgs = await _db.ExecuteAsync($"DELETE w FROM WaMessages w JOIN Gyms g ON g.Id=w.GymId WHERE {G} AND w.ContactPhone=@phone", a);
         var recipients = await _db.ExecuteAsync($"DELETE r FROM CampaignRecipients r JOIN Campaigns k ON k.Id=r.CampaignId JOIN Gyms g ON g.Id=k.GymId WHERE {G} AND r.Phone=@phone", a);
         var convs = await _db.ExecuteAsync($"DELETE c FROM Conversations c JOIN Gyms g ON g.Id=c.GymId WHERE {G} AND c.ContactPhone=@phone", a);

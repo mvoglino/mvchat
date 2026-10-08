@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REQUESTS = []
 TOKEN = "good-token"
+MEDIA = {}  # file mandati dai clienti: id → (tipo, contenuto)
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -18,6 +19,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         REQUESTS.append({"method": "GET", "path": self.path})
         if not self._auth(): return
+        if self.path.startswith("/download/"):
+            mid = self.path.split("/")[-1]
+            if mid not in MEDIA: return self._send(404, {"error": {"message": "not found"}})
+            mime, data = MEDIA[mid]
+            self.send_response(200); self.send_header("Content-Type", mime); self.send_header("Content-Length", str(len(data)))
+            self.end_headers(); self.wfile.write(data); return
+        mm = re.match(r"^/v[\d.]+/(media-[\w-]+)$", self.path)
+        if mm:
+            mid = mm.group(1)
+            if mid not in MEDIA: return self._send(400, {"error": {"message": "Unsupported get request", "code": 100}})
+            return self._send(200, {"url": f"http://127.0.0.1:5079/download/{mid}", "mime_type": MEDIA[mid][0], "file_size": len(MEDIA[mid][1]), "id": mid})
         if "/message_templates" in self.path:
             return self._send(200, {"data": [{"id": "tpl123", "name": "x", "status": "APPROVED", "language": "it"}]})
         return self._send(200, {"display_phone_number": "+39 0172 000000", "verified_name": "FitActive Bra", "quality_rating": "GREEN", "messaging_limit_tier": "TIER_1K", "id": "111"})

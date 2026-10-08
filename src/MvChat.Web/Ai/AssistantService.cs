@@ -18,10 +18,45 @@ public sealed class AssistantService
     private readonly WaService _wa;
     private readonly ContactsRepo _contacts;
     private readonly AiClient _ai;
+    private readonly MediaStore _media;
     private readonly ILogger<AssistantService> _log;
 
-    public AssistantService(ConversationRepo conv, CatalogRepo catalog, WaRepo waRepo, WaService wa, ContactsRepo contacts, AiClient ai, ILogger<AssistantService> log)
-    { _conv = conv; _catalog = catalog; _waRepo = waRepo; _wa = wa; _contacts = contacts; _ai = ai; _log = log; }
+    public AssistantService(ConversationRepo conv, CatalogRepo catalog, WaRepo waRepo, WaService wa, ContactsRepo contacts, AiClient ai, MediaStore media, ILogger<AssistantService> log)
+    { _conv = conv; _catalog = catalog; _waRepo = waRepo; _wa = wa; _contacts = contacts; _ai = ai; _media = media; _log = log; }
+
+    /// <summary>Testo davanti ai vocali trascritti: lo vedono la reception e l'assistente (che sa che la trascrizione può sbagliare).</summary>
+    public const string VoicePrefix = "[messaggio vocale trascritto]";
+
+    /// <summary>
+    /// Trasforma in testo i vocali del cliente non ancora trascritti.
+    /// Restituisce il motivo per passare a una persona, oppure null se l'assistente può continuare.
+    /// </summary>
+    private async Task<string?> TranscribeVoicesAsync(Conversation c, WaNumber number)
+    {
+        foreach (var msgId in await _conv.PendingVoicesAsync(c.Id))
+        {
+            if (!_ai.TranscribeEnabled) return "il cliente ha mandato un messaggio vocale: serve una persona";
+            var (path, mime, error) = await _media.EnsureAsync(msgId);
+            if (path is null) return "vocale non scaricato da Meta (" + error + "): serve una persona";
+            var t = await _ai.TranscribeAsync(await File.ReadAllBytesAsync(path), Path.GetFileName(path), mime);
+            await _conv.LogUsageAsync(c.OrganizationId, c.GymId, c.Id, "trascrizione", t.AsUsage(), t.Ok ? t.CostUsd(_ai.AiConfig) : 0);
+            if (!t.Ok) return "vocale non trascritto (" + t.Error + "): serve una persona";
+            var text = string.IsNullOrWhiteSpace(t.Text) ? "(nessuna parola comprensibile)" : t.Text!;
+            await _conv.SetTranscriptAsync(msgId, $"{VoicePrefix} {text}");
+            if (string.IsNullOrWhiteSpace(t.Text)) return "vocale senza parole comprensibili: serve una persona";
+            var max = Math.Max(30, _ai.AiConfig.TranscribeMaxSeconds);
+            if (t.Seconds > max) return $"vocale lungo (circa {Math.Ceiling(t.Seconds / 60m)} minuti): meglio che lo ascolti una persona";
+            // Anche a voce si può chiedere di non essere più contattati.
+            if (WaService.IsStop(t.Text))
+            {
+                if (!c.IsTest) await _contacts.AddOptOutAsync(c.OrganizationId, c.GymId, c.ContactPhone, WaRepo.Clip($"Ha detto in un vocale: {t.Text}", 200), "whatsapp", null);
+                await _conv.SetStateAsync(c.Id, "chiusa", Outcomes.OptOut, WaRepo.Clip($"Ha detto in un vocale: {t.Text}", 480));
+                await _wa.SendTextAsync(number, c.ContactPhone, WaService.StopConfirmation(c.GymName), null, c.Id);
+                return "";
+            }
+        }
+        return null;
+    }
 
     /// <summary>Le istruzioni complete per una conversazione: le stesse dell'anteprima del Passo 3, più il formato di risposta.</summary>
     public async Task<(string System, GoalModel Model, Offer? Offer, GymProfile Profile)?> BuildSystemAsync(Conversation c, string? firstMessage)
@@ -76,6 +111,13 @@ public sealed class AssistantService
 
         if (c.AiReplies >= model.MaxAiMessages) { await HandOffAsync(c, number, $"raggiunto il limite di {model.MaxAiMessages} risposte dell'assistente", sendHolding: true); return false; }
         if (!_ai.Enabled) { await HandOffAsync(c, number, "assistente AI spento o non configurato", sendHolding: true); return false; }
+
+        if (await TranscribeVoicesAsync(c, number) is { } voiceIssue)
+        {
+            if (voiceIssue != "") await HandOffAsync(c, number, voiceIssue, sendHolding: true); // "" = il cliente ha chiesto STOP: già gestito
+            return false;
+        }
+        messages = await _conv.MessagesAsync(id, 40); // con il testo dei vocali appena trascritti
 
         var turns = messages.Where(m => !(m.Direction == "out" && m.Kind == "template") && m.Kind != "reaction")
             .Select(m => new AiTurn(m.Direction == "in" ? "user" : "assistant", m.Body ?? "")).ToList();
