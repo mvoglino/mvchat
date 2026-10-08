@@ -5,7 +5,7 @@ using MvChat.Web.Catalog;
 
 namespace MvChat.Web.Ai;
 
-public sealed record AiReply(string Text, string Outcome, string? Note);
+public sealed record AiReply(string Text, string Outcome, string? Note, string? Reason = null);
 
 /// <summary>
 /// Controlli fatti da mvchat sulla risposta dell'AI PRIMA di mandarla al cliente.
@@ -13,15 +13,17 @@ public sealed record AiReply(string Text, string Outcome, string? Note);
 /// </summary>
 public static class Guardrails
 {
-    public const string OutputFormat =
+    public static readonly string OutputFormat =
 @"## Formato della tua risposta
 Rispondi SOLO con un oggetto JSON, senza altro testo prima o dopo:
-{""risposta"": ""il messaggio da inviare al cliente"", ""esito"": ""in_corso | obiettivo_raggiunto | rifiuto | operatore | opt_out"", ""nota"": ""motivo dell'esito in poche parole, per lo staff""}
+{""risposta"": ""il messaggio da inviare al cliente"", ""esito"": ""in_corso | obiettivo_raggiunto | rifiuto | operatore | opt_out"", ""nota"": ""motivo dell'esito in poche parole, per lo staff"", ""motivo"": ""solo con esito rifiuto: uno dei codici qui sotto""}
 - in_corso: la conversazione continua.
 - obiettivo_raggiunto: il cliente ha accettato (vedi quando la conversazione ha successo).
 - rifiuto: il cliente ha detto chiaramente di no.
 - operatore: serve una persona della reception (regola 7, dubbi che non sai risolvere, cliente che lo chiede).
-- opt_out: il cliente non vuole più essere contattato.";
+- opt_out: il cliente non vuole più essere contattato.
+Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che ha detto il cliente (non chiedergli il motivo se non lo dice: in quel caso usa non_interessato):
+" + string.Join("\n", RefusalReasons.All.Select(r => $"- {r.Code}: {r.ForAi}"));
 
     private static readonly Regex Json = new(@"\{[\s\S]*\}");
 
@@ -39,8 +41,10 @@ Rispondi SOLO con un oggetto JSON, senza altro testo prima o dopo:
             var nota = j?["nota"]?.GetValue<string>()?.Trim();
             if (string.IsNullOrWhiteSpace(text)) return null;
             if (!new[] { Outcomes.InCorso, Outcomes.Raggiunto, Outcomes.Rifiuto, Outcomes.Operatore, Outcomes.OptOut }.Contains(esito)) esito = Outcomes.InCorso;
+            var motivo = j?["motivo"]?.GetValue<string>()?.Trim().ToLowerInvariant();
+            var reason = esito == Outcomes.Rifiuto ? (RefusalReasons.IsValid(motivo) ? motivo : RefusalReasons.Other) : null;
             if (text.Length > 1000) text = text[..(char.IsHighSurrogate(text[999]) ? 999 : 1000)]; // senza spezzare un'emoji
-            return new AiReply(text, esito, string.IsNullOrWhiteSpace(nota) ? null : (nota.Length > 480 ? nota[..480] : nota));
+            return new AiReply(text, esito, string.IsNullOrWhiteSpace(nota) ? null : (nota.Length > 480 ? nota[..480] : nota), reason);
         }
         catch { return null; }
     }

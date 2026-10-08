@@ -29,6 +29,8 @@ public sealed class Conversation
     public string Status { get; set; } = "ai";
     public string Outcome { get; set; } = "in_corso";
     public string? OutcomeNote { get; set; }
+    /// <summary>Solo per i rifiuti: il motivo (codice di <see cref="RefusalReasons"/>).</summary>
+    public string? RefusalReason { get; set; }
     public int AiReplies { get; set; }
     public bool NeedsReply { get; set; }
     public DateTime? ProcessingSince { get; set; }
@@ -76,7 +78,7 @@ public sealed class ConversationRepo
         WaNumberId = r.Int("WaNumberId"), ContactPhone = r.Str("ContactPhone")!, ContactName = r.Str("ContactName")!, Membership = r.Str("Membership"), Service = r.Str("Service"), Notes = r.Str("Notes"), TestOfCampaignId = r.IntN("TestOfCampaignId"),
         ExpiresOn = r.Date("ExpiresOn"), GoalModelId = r.IntN("GoalModelId"), GoalName = r.Str("GoalName")!, OfferId = r.IntN("OfferId"),
         CampaignId = r.IntN("CampaignId"), IsTest = r.Bool("IsTest"), Status = r.Str("Status")!, Outcome = r.Str("Outcome")!,
-        OutcomeNote = r.Str("OutcomeNote"), AiReplies = r.Int("AiReplies"), NeedsReply = r.Bool("NeedsReply"),
+        OutcomeNote = r.Str("OutcomeNote"), RefusalReason = r.Str("RefusalReason"), AiReplies = r.Int("AiReplies"), NeedsReply = r.Bool("NeedsReply"),
         ProcessingSince = r.Date("ProcessingSince"), AssignedUserId = r.IntN("AssignedUserId"),
         AssignedName = r.Str("AssignedName"), HumanInvolved = r.Bool("HumanInvolved"), LastInboundAt = r.Date("LastInboundAt"),
         LastMessageAt = r.Date("LastMessageAt"), CreatedAt = r.Date("CreatedAt")!.Value
@@ -213,11 +215,16 @@ public sealed class ConversationRepo
             ProcessingSince < UTC_TIMESTAMP() - INTERVAL 5 MINUTE) LIMIT 50",
         new { olderThanSeconds }, r => r.GetInt64(0));
 
-    public Task AfterAiReplyAsync(long id, string status, string outcome, string? note) => _db.ExecuteAsync(
+    public Task AfterAiReplyAsync(long id, string status, string outcome, string? note, string? reason = null) => _db.ExecuteAsync(
         @"UPDATE Conversations SET AiReplies=AiReplies+1, Status=@status, Outcome=@outcome, OutcomeNote=COALESCE(@note, OutcomeNote),
+            RefusalReason=CASE WHEN @outcome='rifiuto' THEN COALESCE(@reason, 'altro') ELSE NULL END,
             HumanInvolved=CASE WHEN @status='operatore' THEN 1 ELSE HumanInvolved END,
             LastMessageAt=UTC_TIMESTAMP() WHERE Id=@id AND Status='ai'",
-        new { id, status, outcome, note });
+        new { id, status, outcome, note, reason });
+
+    /// <summary>Motivo del rifiuto scelto dall'operatore (vuoto se l'esito non è un rifiuto).</summary>
+    public Task SetRefusalReasonAsync(long id, string? reason) =>
+        _db.ExecuteAsync("UPDATE Conversations SET RefusalReason=@reason WHERE Id=@id", new { id, reason });
 
     public Task SetStateAsync(long id, string status, string outcome, string? note, int? assignedUserId = null) => _db.ExecuteAsync(
         @"UPDATE Conversations SET Status=@status, Outcome=@outcome, OutcomeNote=COALESCE(@note, OutcomeNote),

@@ -39,6 +39,11 @@
         <div class="field"><label>Limiti</label><span>@(c.DailyLimit is int d ? $"massimo {d} al giorno" : "nessun limite della campagna") · Meta: @(Model.MetaLimit is int ml ? ml.ToString("N0") + " persone nuove in 24 ore" : "nessun limite")</span></div>
         <div class="field"><label>Ultimo giro di invio</label><span class="muted">@(c.LastRunAt is DateTime lr ? lr.ToRome().ToString("dd/MM HH:mm") + " · " + c.LastRunNote : "non ancora")</span></div>
         <div class="field"><label>Esiti</label><span>@c.Reached raggiunti · @c.Refused rifiuti · @c.OptOut non contattare più · @c.ToOperator aspettano la reception</span></div>
+        @if (Model.Reasons.Count > 0)
+        {
+            var tot = Model.Reasons.Sum(r => r.Count);
+            <div class="field"><label>Motivi dei rifiuti</label><span>@string.Join(" · ", Model.Reasons.Select(r => $"{r.Label} {r.Count} ({Math.Round(100.0 * r.Count / tot)}%)")) · <a href="/Report?attivita=@c.GymId#motivi">confronta nel Report</a></span></div>
+        }
     </div>
 </section>
 

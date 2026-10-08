@@ -37,6 +37,9 @@ public sealed class ReportRow
     }
 }
 
+/// <summary>Un motivo di rifiuto con quante volte compare.</summary>
+public sealed record ReasonCount(string? Code, string Label, int Count);
+
 /// <summary>Un giorno del grafico (ora italiana).</summary>
 public sealed record DayPoint(DateTime Day, int Sent, int Received, int Reached);
 
@@ -114,6 +117,29 @@ public sealed class ReportRepo
                FROM Campaigns k JOIN Gyms g ON g.Id=k.GymId
                WHERE {ScopeWhere} AND k.GymId=@FGym) x WHERE x.SentMarketing + x.SentUtility + x.Conversations > 0 ORDER BY x.Id DESC",
             Args(s, fromUtc, toUtc, null, gymId), r => Map(r, "campagna"));
+    }
+
+    /// <summary>
+    /// Motivi dei rifiuti nel periodo (conversazioni nate nel periodo, come il numero dei rifiuti del report; prove escluse).
+    /// Tutti i motivi dell'elenco compaiono, anche a zero, così i periodi si confrontano a colpo d'occhio.
+    /// </summary>
+    public async Task<List<ReasonCount>> RefusalReasonsAsync(Scope s, DateTime fromUtc, DateTime toUtc, int? orgId, int? gymId, int? campaignId = null)
+    {
+        var args = new
+        {
+            All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1,
+            fromUtc, toUtc, FOrg = orgId ?? -1, FGym = gymId ?? -1, FCamp = campaignId ?? -1
+        };
+        var rows = await _db.QueryAsync(
+            $@"SELECT v.RefusalReason, COUNT(*) FROM Conversations v JOIN Gyms g ON g.Id=v.GymId
+               WHERE {ScopeWhere} AND (@FOrg=-1 OR g.OrganizationId=@FOrg) AND (@FGym=-1 OR g.Id=@FGym) AND (@FCamp=-1 OR v.CampaignId=@FCamp)
+                 AND v.IsTest=0 AND v.Outcome='rifiuto' AND v.CreatedAt>=@fromUtc AND v.CreatedAt<@toUtc GROUP BY v.RefusalReason",
+            args, r => (Code: r.IsDBNull(0) ? null : r.GetString(0), N: Convert.ToInt32(r.GetValue(1))));
+        var list = Ai.RefusalReasons.All.Select(x => new ReasonCount(x.Code, x.Label, rows.Where(r => r.Code == x.Code).Sum(r => r.N))).ToList();
+        // Rifiuti di prima di questa funzione o con un codice non più in elenco.
+        var unknown = rows.Where(r => !Ai.RefusalReasons.IsValid(r.Code)).Sum(r => r.N);
+        if (unknown > 0) list.Add(new ReasonCount(null, "Non indicato", unknown));
+        return list.OrderByDescending(x => x.Count).ThenBy(x => x.Code == Ai.RefusalReasons.Other || x.Code is null).ToList();
     }
 
     /// <summary>

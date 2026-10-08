@@ -149,7 +149,7 @@ public sealed class AssistantService
         };
         if (outcome == Outcomes.OptOut && !c.IsTest) // le prove non toccano la lista STOP vera
             await _contacts.AddOptOutAsync(c.OrganizationId, c.GymId, c.ContactPhone, "Riconosciuto dall'assistente: " + (reply.Note ?? "non vuole essere contattato"), "assistente", null);
-        await _conv.AfterAiReplyAsync(c.Id, status, outcome, reply.Note);
+        await _conv.AfterAiReplyAsync(c.Id, status, outcome, reply.Note, reply.Reason);
         return false;
     }
 

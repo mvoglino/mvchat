@@ -29,6 +29,8 @@ public class IndexModel : PageModel
     public List<ReportRow> Rows { get; private set; } = new();
     public ReportRow Total { get; private set; } = new();
     public List<DayPoint> Days { get; private set; } = new();
+    public List<ReasonCount> Reasons { get; private set; } = new();
+    public int ReasonsTotal => Reasons.Sum(r => r.Count);
     public MetaSettings Meta => _config.Current.Meta;
     /// <summary>Le attività visibili, per scegliere subito quella da guardare (solo se sono più di una).</summary>
     public List<Gym> Gyms { get; private set; } = new();
@@ -99,6 +101,7 @@ public class IndexModel : PageModel
         }
         if (Level != "campagne") { Total = new ReportRow(); foreach (var r in Rows) Total.Add(r); }
         Days = await _report.DailyAsync(Me, fromUtc, toUtc, gym is null ? Group : null, gym?.Id);
+        Reasons = await _report.RefusalReasonsAsync(Me, fromUtc, toUtc, gym is null ? Group : null, gym?.Id);
         return true;
     }
 
@@ -118,6 +121,21 @@ public class IndexModel : PageModel
                 r.AiOnly, r.WithOperator, r.MetaCostEur(Meta).ToString("0.00", it), r.AiCostUsd.ToString("0.0000", it)));
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
         return File(bytes, "text/csv; charset=utf-8", $"report-{From:yyyyMMdd}-{To:yyyyMMdd}.csv");
+    }
+
+    /// <summary>I motivi dei rifiuti in un file per Excel: numero e percentuale per motivo.</summary>
+    public async Task<IActionResult> OnGetMotiviAsync(DateTime? dal, DateTime? al, int? gruppo, int? attivita)
+    {
+        if (!await LoadAsync(dal, al, gruppo, attivita)) return NotFound();
+        var it = CultureInfo.GetCultureInfo("it-IT");
+        var sb = new StringBuilder();
+        sb.AppendLine($"Motivi dei rifiuti;{Csv.Cell(Title)};dal {From:dd/MM/yyyy} al {To:dd/MM/yyyy}");
+        sb.AppendLine("Motivo;Rifiuti;Percentuale");
+        foreach (var r in Reasons)
+            sb.AppendLine(string.Join(";", Csv.Cell(r.Label), r.Count, (ReasonsTotal == 0 ? 0m : 100m * r.Count / ReasonsTotal).ToString("0.0", it) + "%"));
+        sb.AppendLine($"Totale;{ReasonsTotal};100%");
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return File(bytes, "text/csv; charset=utf-8", $"motivi-rifiuti-{From:yyyyMMdd}-{To:yyyyMMdd}.csv");
     }
 
     /// <summary>Stessa vista, altro periodo.</summary>

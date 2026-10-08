@@ -8,7 +8,7 @@
 @section Actions { <a class="btn" href="/Conversazioni">Tutte le conversazioni</a> }
 <div class="stats">
     <div class="stat @(c.Status == "operatore" ? "ko" : "")"><b style="font-size:17px">@statusText</b><span>@c.GymName · @c.GoalName</span></div>
-    <div class="stat"><b style="font-size:17px"><span class="chip @Outcomes.Css(c.Outcome)">@Outcomes.Label(c.Outcome)</span></b><span>@(c.OutcomeNote ?? "esito")</span></div>
+    <div class="stat"><b style="font-size:17px"><span class="chip @Outcomes.Css(c.Outcome)">@Outcomes.Label(c.Outcome)@if (c.Outcome == Outcomes.Rifiuto) {<text> · @RefusalReasons.Label(c.RefusalReason)</text>}</span></b><span>@(c.OutcomeNote ?? "esito")</span></div>
     <div class="stat"><b style="font-size:17px">@c.ContactPhone</b><span>@(c.Membership ?? "abbonamento non indicato")@(c.ExpiresOn is DateTime e ? " · scade il " + e.ToString("dd/MM/yyyy") : "")@(c.IsTest ? " · prova" : "")</span></div>
 </div>
 @if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
@@ -80,12 +80,18 @@
     <div class="panel-h"><h2>Esito</h2><span class="muted">ad esempio quando il cliente rinnova alla reception</span></div>
     <form method="post" asp-page-handler="Outcome" class="panel-b inline-form">
         <div class="field"><label for="Outcome">Esito</label><select id="Outcome" name="Outcome">@foreach (var o in Outcomes.All) { <option value="@o" selected="@(o == c.Outcome)">@Outcomes.Label(o)</option> }</select></div>
+        <div class="field" id="ReasonField" hidden="@(c.Outcome != Outcomes.Rifiuto)"><label for="Reason">Motivo del rifiuto</label><select id="Reason" name="Reason"><option value="">— scegli —</option>@foreach (var r in RefusalReasons.All) { <option value="@r.Code" selected="@(r.Code == c.RefusalReason)">@r.Label</option> }</select></div>
         <div class="field" style="flex:2"><label for="Note">Nota per i colleghi</label><input id="Note" name="Note" maxlength="480"></div>
         <button class="btn" type="submit">Salva esito</button>
     </form>
 </section>
 
 <script>
+(function () {
+    // Il motivo si chiede solo quando l'esito scelto è «Rifiuto».
+    var out = document.getElementById('Outcome'), rf = document.getElementById('ReasonField');
+    if (out && rf) out.addEventListener('change', function () { rf.hidden = out.value !== 'rifiuto'; });
+})();
 (function () {
     var quick = document.getElementById('Quick'), box = document.getElementById('ReplyText');
     if (quick && box) quick.addEventListener('change', function () {

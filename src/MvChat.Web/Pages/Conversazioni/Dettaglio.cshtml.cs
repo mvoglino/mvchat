@@ -33,6 +33,7 @@ public class DettaglioModel : PageModel
     [BindProperty] public string? Text { get; set; }
     [BindProperty] public string? Outcome { get; set; }
     [BindProperty] public string? Note { get; set; }
+    [BindProperty] public string? Reason { get; set; }
 
     /// <summary>Con un numero Meta si può scrivere liberamente solo entro 24 ore dall'ultimo messaggio del cliente.</summary>
     public bool WindowOpen => Number?.IsSimulated == true || (Conv.LastInboundAt is DateTime t && t > DateTime.UtcNow.AddHours(-24));
@@ -154,7 +155,9 @@ public class DettaglioModel : PageModel
         if (Outcome is null || !Outcomes.All.Contains(Outcome)) { Error = "Scegli un esito."; return Page(); }
         var status = Outcome switch { Outcomes.InCorso => Conv.Status == "chiusa" ? "operatore" : Conv.Status, Outcomes.Operatore => "operatore", _ => "chiusa" };
         var note = string.IsNullOrWhiteSpace(Note) ? $"esito impostato da {Me.Name}" : Note.Trim()[..Math.Min(Note.Trim().Length, 480)];
+        if (Outcome == Outcomes.Rifiuto && !RefusalReasons.IsValid(Reason)) { Error = "Scegli il motivo del rifiuto: serve per il Report."; return Page(); }
         await _convs.SetStateAsync(id, status, Outcome, note, Me.UserId);
+        await _convs.SetRefusalReasonAsync(id, Outcome == Outcomes.Rifiuto ? Reason : null);
         if (Outcome == Outcomes.OptOut)
             await _contacts.AddOptOutAsync(Conv.OrganizationId, Conv.GymId, Conv.ContactPhone, "Dalla conversazione: " + note, "operatore", Me.UserId);
         await _repos.AuditAsync(Me, "conversation.outcome", $"#{id} {Outcome}", Ip, Conv.OrganizationId, Conv.GymId);

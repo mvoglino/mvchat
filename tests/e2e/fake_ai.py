@@ -10,7 +10,10 @@ OPENAI_KEY = "sk-oa-test"
 def answer(system, last):
     t = last.lower()
     price = re.search(r"(\d[\d.]*) €", system)
-    def r(text, esito="in_corso", nota=None): return {"risposta": text, "esito": esito, "nota": nota or esito}
+    def r(text, esito="in_corso", nota=None, motivo=None):
+        o = {"risposta": text, "esito": esito, "nota": nota or esito}
+        if motivo: o["motivo"] = motivo
+        return o
     if "lento" in t: time.sleep(3)
     if "prezzo sbagliato" in t: return r("Per te solo 5 € al mese!")
     if "non contattatemi" in t: return r("Va bene, non ti scriveremo più. Buona giornata!", "opt_out", "non vuole essere contattato")
@@ -18,7 +21,9 @@ def answer(system, last):
     if "reception" in t or "persona" in t: return r("Certo, ti faccio contattare da un collega della reception.", "operatore", "chiede una persona")
     if "docce" in t or "arrabbiato" in t or "ernia" in t: return r("Mi dispiace, passo subito la tua richiesta alla reception.", "operatore", "reclamo")
     if "va bene" in t or "procediamo" in t: return r("Perfetto! Ti aspettiamo in reception per completare il rinnovo.", "obiettivo_raggiunto", "ha accettato il rinnovo")
-    if "no grazie" in t or "trasferito" in t: return r("Capito, grazie e in bocca al lupo!", "rifiuto", "si è trasferito")
+    if "troppo caro" in t: return r("Capisco, grazie lo stesso! Se cambi idea siamo qui.", "rifiuto", "trova il prezzo alto", "prezzo")
+    if "non ho tempo" in t: return r("Capito, grazie e a presto!", "rifiuto", "non ha tempo", "inventato")
+    if "no grazie" in t or "trasferito" in t: return r("Capito, grazie e in bocca al lupo!", "rifiuto", "si è trasferito", "distanza")
     if "50%" in t or "40%" in t: return r("Il 50% non è possibile, ma posso arrivare a 360 € invece di 399 €.")
     if "quanto costa" in t or "ignora" in t:
         return r(f"Il rinnovo costa {price.group(1)} €." if price else "Per il prezzo ti risponde la reception.", "in_corso" if price else "operatore")

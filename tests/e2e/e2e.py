@@ -749,6 +749,29 @@ s9,_,_ = d.req(im.group(1).replace("&amp;", "&")) if im else (0, "", "")
 check("foto non più disponibile su Meta: niente errore, solo un avviso", im is not None and s9 == 404 and "File non più disponibile" in page(d, cv9), f"{s9}")
 sa.post("/Impostazioni/AI", dict(voice_form, Transcribe="false"))
 fake.shutdown(); fake.server_close()
+# 5j-ter. Motivi dei rifiuti: scelti dall'assistente (o dall'operatore), contati e in percentuale nel Report
+lid_r = import_list(m, alba, "Motivi", [("Rosa","320 000 0051"),("Sara","320 000 0052"),("Tina","320 000 0053")])
+cR,_,_ = camp_post(m, dict(base, Name="Motivi rifiuto", ListId=lid_r), alba)
+act(m, cR, "Start"); _time.sleep(0.5)
+cvr = {k: conv_of(m, f"+3932000000{k}") for k in (51, 52, 53)}
+say(m, cvr[51], "Grazie ma è troppo caro per me")
+say(m, cvr[52], "No grazie, mi sono trasferito a Torino")
+say(m, cvr[53], "Purtroppo non ho tempo")
+_sysr = next((r["body"].get("system", [{}])[0].get("text", "") for r in reversed(fake_ai.REQUESTS) if r["path"] == "/v1/messages"), "")
+check("l'assistente sceglie il motivo del rifiuto da un elenco fisso", '"motivo"' in _sysr and "- prezzo: il prezzo è troppo alto" in _sysr and "- concorrenza:" in _sysr)
+h51 = page(m, cvr[51]) if cvr[51] else ""; h53 = page(m, cvr[53]) if cvr[53] else ""
+check("rifiuto con il suo motivo nella conversazione", "Rifiuto · Prezzo / costo" in h51 and "Rifiuto · Altro" in h53, h51[h51.find('class="stats"'):][:300])
+_,rep,_ = m.req("/Report")
+mot = rep[rep.find('id="motivi"'):][:4000]
+check("report: motivi dei rifiuti con numero e percentuale", "Motivi dei rifiuti" in mot and re.search(r"<td>Prezzo / costo</td><td class=\"num\"><b>[1-9]", mot) is not None
+      and re.search(r"<td>Trasferito / troppo lontano</td><td class=\"num\"><b>[1-9]", mot) is not None and "%" in mot, mot[:600])
+s,csv,_ = m.req("/Report?handler=Motivi")
+check("motivi dei rifiuti scaricabili per Excel", s == 200 and "Motivo;Rifiuti;Percentuale" in csv and re.search(r"Prezzo / costo\"?;[1-9]", csv) is not None and "Totale;" in csv, csv[:300])
+s1,hx,_ = m.post(f"/Conversazioni/{cvr[52]}?handler=Outcome", {"Outcome":"rifiuto","Note":""}, form_path=f"/Conversazioni/{cvr[52]}")
+m.post(f"/Conversazioni/{cvr[52]}?handler=Outcome", {"Outcome":"rifiuto","Reason":"salute","Note":"infortunio al ginocchio"}, form_path=f"/Conversazioni/{cvr[52]}")
+check("l'operatore che segna un rifiuto deve sceglierne il motivo", s1 == 200 and "Scegli il motivo del rifiuto" in hx and "Rifiuto · Motivi di salute" in page(m, cvr[52]), str(s1))
+hc = cpage(m, cR)
+check("campagna: riepilogo dei motivi dei rifiuti", "Motivi dei rifiuti" in hc and "Prezzo / costo 1" in hc and "Motivi di salute 1" in hc, hc[hc.find("Motivi dei rifiuti"):][:300])
 fai.shutdown()
 
 # 5k. Controllo generale: STOP, messaggi spontanei, foto e vocali, saluti finali, dati mancanti, aggiornamenti del database

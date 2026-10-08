@@ -14,8 +14,12 @@ public class DettaglioModel : PageModel
 {
     private readonly CampaignRepo _repo; private readonly CampaignSender _sender; private readonly WaRepo _wa; private readonly CatalogRepo _catalog; private readonly Repos _repos;
     private readonly WaService _send; private readonly ConversationRepo _convs; private readonly MvChat.Web.Contacts.ContactsRepo _contacts;
-    public DettaglioModel(CampaignRepo repo, CampaignSender sender, WaRepo wa, CatalogRepo catalog, Repos repos, WaService send, ConversationRepo convs, MvChat.Web.Contacts.ContactsRepo contacts)
-    { _repo = repo; _sender = sender; _wa = wa; _catalog = catalog; _repos = repos; _send = send; _convs = convs; _contacts = contacts; }
+    private readonly MvChat.Web.Reports.ReportRepo _report;
+    public DettaglioModel(CampaignRepo repo, CampaignSender sender, WaRepo wa, CatalogRepo catalog, Repos repos, WaService send, ConversationRepo convs, MvChat.Web.Contacts.ContactsRepo contacts, MvChat.Web.Reports.ReportRepo report)
+    { _repo = repo; _sender = sender; _wa = wa; _catalog = catalog; _repos = repos; _send = send; _convs = convs; _contacts = contacts; _report = report; }
+
+    /// <summary>Motivi dei rifiuti di questa campagna (solo quelli presenti).</summary>
+    public List<MvChat.Web.Reports.ReasonCount> Reasons { get; private set; } = new();
 
     public List<TestNumber> TestNumbers { get; private set; } = new();
 
@@ -42,6 +46,7 @@ public class DettaglioModel : PageModel
         var number = await _wa.NumberAsync(c.WaNumberId);
         MetaLimit = number is null ? null : SendWindows.MetaDailyLimit(number.MessagingLimit, number.IsSimulated);
         TestNumbers = await _repo.TestNumbersAsync(c.GymId);
+        Reasons = (await _report.RefusalReasonsAsync(User.Scope(), DateTime.UtcNow.AddYears(-20), DateTime.UtcNow.AddDays(1), null, c.GymId, c.Id)).Where(r => r.Count > 0).ToList();
         var t = await _wa.TemplateAsync(c.TemplateId);
         var first = (await _repo.RecipientsAsync(id, null, 1)).FirstOrDefault();
         if (t is not null)

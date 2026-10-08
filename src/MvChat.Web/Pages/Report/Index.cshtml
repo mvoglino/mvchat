@@ -76,6 +76,31 @@
     </div>
 </section>
 
+<section class="panel" id="motivi">
+    <div class="panel-h"><h2>Motivi dei rifiuti</h2><span class="muted">@Model.ReasonsTotal.ToString("N0", it) rifiuti nel periodo · <a href="@Model.Url(Model.Group, Model.Activity, "Motivi")">scarica per Excel</a></span></div>
+    @if (Model.ReasonsTotal == 0)
+    {
+        <div class="panel-b muted">Nessun rifiuto nel periodo scelto.</div>
+    }
+    else
+    {
+        <div class="tbl"><table class="report-table">
+            <thead><tr><th>Motivo</th><th class="num">Rifiuti</th><th class="num">%</th><th style="width:40%"></th></tr></thead>
+            <tbody>
+            @foreach (var r in Model.Reasons)
+            {
+                var pct = 100.0 * r.Count / Model.ReasonsTotal;
+                <tr class="@(r.Count == 0 ? "muted" : "")">
+                    <td>@r.Label</td><td class="num"><b>@r.Count</b></td><td class="num">@pct.ToString("0.0", it)%</td>
+                    <td><span class="hbar" style="--w:@pct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></span></td>
+                </tr>
+            }
+            </tbody>
+        </table></div>
+    }
+    <div class="panel-b muted" style="font-size:12.5px">Il motivo lo sceglie l'assistente da quello che scrive il cliente (se non lo dice: «Non interessato»); nelle conversazioni passate alla reception lo sceglie l'operatore quando segna il rifiuto. Le percentuali sono sul totale dei rifiuti.</div>
+</section>
+
 <section class="panel">
     <div class="panel-h"><h2>@(Model.Level switch { "clienti" => "Gruppi e attività singole", "attivita" => "Confronto tra le attività", _ => "Campagne nel periodo" })</h2></div>
     <div class="tbl"><table class="report-table">
