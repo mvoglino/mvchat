@@ -9,8 +9,12 @@ namespace MvChat.Web.Pages.Conversazioni;
 /// <summary>La postazione della reception: prima le conversazioni che aspettano una persona, da chi aspetta da più tempo.</summary>
 public class IndexModel : PageModel
 {
-    private readonly ConversationRepo _convs; private readonly Repos _repos;
-    public IndexModel(ConversationRepo convs, Repos repos) { _convs = convs; _repos = repos; }
+    private readonly ConversationRepo _convs; private readonly Repos _repos; private readonly TagRepo _tags;
+    public IndexModel(ConversationRepo convs, Repos repos, TagRepo tags) { _convs = convs; _repos = repos; _tags = tags; }
+
+    public string? Tag { get; private set; }
+    public List<string> AllTags { get; private set; } = new();
+    public Dictionary<long, List<TagItem>> Tags { get; private set; } = new();
 
     public static readonly (string Key, string Label)[] Views =
     {
@@ -25,13 +29,17 @@ public class IndexModel : PageModel
     public int? Gym { get; private set; }
     public string View { get; private set; } = "da_gestire";
 
-    public async Task OnGetAsync(int? gym, string? view)
+    public async Task OnGetAsync(int? gym, string? view, string? etichetta)
     {
+        Tag = TagRepo.Clean(etichetta);
+        if (Tag is not null && view is null) view = "tutte"; // cercando un'etichetta si guarda in tutte le conversazioni
         Me = User.Scope();
         Gyms = await _repos.GymsAsync(Me);
         Gym = Gyms.Any(g => g.Id == gym) ? gym : null;
         View = Views.Any(v => v.Key == view) ? view! : "da_gestire";
-        Items = await _convs.InboxAsync(Me, Gym, View, 300);
+        Items = await _convs.InboxAsync(Me, Gym, View, 300, Tag);
+        Tags = await _tags.ForConversationsAsync(Items.Select(i => i.Id));
+        AllTags = await _tags.UsedAsync(Gyms.Select(g => g.Id));
         Counts = await _convs.CountsAsync(Me);
         Waiting = (await _convs.BadgeAsync(Me)).Count;
     }

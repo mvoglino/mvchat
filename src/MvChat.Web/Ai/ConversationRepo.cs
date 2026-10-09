@@ -133,15 +133,19 @@ public sealed class ConversationRepo
     /// La postazione della reception. Viste: da_gestire (passate a una persona, libere o mie) · mie · ai · chiuse · tutte.
     /// Prima chi aspetta da più tempo.
     /// </summary>
-    public Task<List<Conversation>> InboxAsync(Scope s, int? gymId, string view, int limit) => _db.QueryAsync(
-        Select + $@" WHERE {ScopeWhere} AND (@FGym=-1 OR c.GymId=@FGym) AND (
+    public Task<List<Conversation>> InboxAsync(Scope s, int? gymId, string view, int limit, string? tag = null) => _db.QueryAsync(
+        Select + $@" WHERE {ScopeWhere} AND (@FGym=-1 OR c.GymId=@FGym) AND {TagWhere} AND (
             (@view='da_gestire' AND c.Status='operatore' AND (c.AssignedUserId IS NULL OR c.AssignedUserId=@Me)) OR
             (@view='mie' AND c.AssignedUserId=@Me AND c.Status<>'chiusa') OR
             (@view='ai' AND c.Status='ai') OR (@view='chiuse' AND c.Status='chiusa') OR @view='tutte')
           ORDER BY (c.Status='operatore' AND c.LastInboundAt >= c.LastMessageAt) DESC,
                    CASE WHEN c.Status='operatore' THEN c.LastInboundAt END ASC, c.LastMessageAt DESC LIMIT @limit",
         new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv,
-              FGym = gymId ?? -1, view, Me = s.UserId, limit }, Map);
+              FGym = gymId ?? -1, view, Me = s.UserId, limit, Tag = tag ?? "" }, Map);
+
+    /// <summary>Filtro per etichetta: del cliente o della conversazione.</summary>
+    public const string TagWhere = @"(@Tag='' OR EXISTS (SELECT 1 FROM ConversationTags t WHERE t.ConversationId=c.Id AND t.Tag=@Tag)
+        OR EXISTS (SELECT 1 FROM ContactTags k WHERE k.GymId=c.GymId AND k.Phone=c.ContactPhone AND k.Tag=@Tag))";
 
     /// <summary>Per l'avviso nel menu: conversazioni che aspettano una persona (libere, oppure mie con il cliente in attesa).</summary>
     public async Task<(int Count, long? LatestId, string? LatestName)> BadgeAsync(Scope s)

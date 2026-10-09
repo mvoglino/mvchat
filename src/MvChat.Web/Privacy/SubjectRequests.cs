@@ -42,6 +42,11 @@ public sealed class SubjectRequests
            WHERE {G} AND w.ContactPhone=@phone ORDER BY w.Id",
         A(s, phone), r => new FoundMessage(Convert.ToInt64(r.GetValue(0)), r.Str("Direction")!, r.Str("Body"), r.Date("CreatedAt")!.Value));
 
+    /// <summary>Etichette messe dallo staff sul cliente (fanno parte dei suoi dati).</summary>
+    public Task<List<string>> TagsAsync(Scope s, string phone) => _db.QueryAsync(
+        $"SELECT CONCAT(g.Name, ': ', k.Tag) FROM ContactTags k JOIN Gyms g ON g.Id=k.GymId WHERE {G} AND k.Phone=@phone ORDER BY g.Name, k.Tag",
+        A(s, phone), r => r.GetString(0));
+
     public Task<int> RecipientsCountAsync(Scope s, string phone) => _db.ScalarAsync<int>(
         $"SELECT COUNT(*) FROM CampaignRecipients r JOIN Campaigns k ON k.Id=r.CampaignId JOIN Gyms g ON g.Id=k.GymId WHERE {G} AND r.Phone=@phone", A(s, phone));
 
@@ -62,6 +67,7 @@ public sealed class SubjectRequests
         var recipients = await _db.ExecuteAsync($"DELETE r FROM CampaignRecipients r JOIN Campaigns k ON k.Id=r.CampaignId JOIN Gyms g ON g.Id=k.GymId WHERE {G} AND r.Phone=@phone", a);
         var convs = await _db.ExecuteAsync($"DELETE c FROM Conversations c JOIN Gyms g ON g.Id=c.GymId WHERE {G} AND c.ContactPhone=@phone", a);
         var contacts = await _db.ExecuteAsync($"DELETE k FROM Contacts k JOIN Gyms g ON g.Id=k.GymId WHERE {G} AND k.Phone=@phone", a);
+        await _db.ExecuteAsync($"DELETE k FROM ContactTags k JOIN Gyms g ON g.Id=k.GymId WHERE {G} AND k.Phone=@phone", a); // etichette del cliente
 
         // Anche le righe scartate all'import (numero scritto in altro modo: si confrontano le ultime 9 cifre).
         var digits = new string(phone.Where(char.IsDigit).ToArray());

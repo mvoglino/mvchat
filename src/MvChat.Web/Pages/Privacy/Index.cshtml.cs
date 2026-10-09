@@ -50,7 +50,7 @@ public class IndexModel : PageModel
         var data = new
         {
             numero = Phone, estratto_il = DateTime.UtcNow,
-            contatti = Contacts, conversazioni = Conversations, messaggi = await _req.MessagesAsync(me, Phone!),
+            contatti = Contacts, conversazioni = Conversations, messaggi = await _req.MessagesAsync(me, Phone!), etichette = await _req.TagsAsync(me, Phone!),
             destinatario_campagne = Recipients, lista_stop = OptOuts
         };
         await _repos.AuditAsync(me, "privacy.export", SubjectRequests.Mask(Phone!), HttpContext.Connection.RemoteIpAddress?.ToString());

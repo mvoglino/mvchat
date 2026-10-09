@@ -12,6 +12,25 @@
     <div class="stat"><b style="font-size:17px">@c.ContactPhone</b><span>@(c.Membership ?? "abbonamento non indicato")@(c.ExpiresOn is DateTime e ? " · scade il " + e.ToString("dd/MM/yyyy") : "")@(c.IsTest ? " · prova" : "")</span></div>
 </div>
 @if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<section class="panel">
+    <div class="panel-b tag-box">
+        <span class="muted" style="font-size:13px">Etichette</span>
+        @foreach (var t in Model.Tags)
+        {
+            <form method="post" asp-page-handler="Tag" class="tag @(t.OnContact ? "tag-c" : "")" title="@(t.OnContact ? "Etichetta del cliente: resta anche nelle prossime campagne" : "Etichetta solo di questa conversazione")">
+                <input type="hidden" name="tag" value="@t.Tag"><input type="hidden" name="su" value="@(t.OnContact ? "cliente" : "conversazione")"><input type="hidden" name="togli" value="true">
+                @t.Tag <button type="submit" aria-label="Togli l'etichetta @t.Tag">×</button>
+            </form>
+        }
+        @if (Model.Tags.Count == 0) { <span class="muted" style="font-size:13px">nessuna</span> }
+        <form method="post" asp-page-handler="Tag" class="inline-form" style="margin:0 0 0 auto;gap:6px">
+            <input name="tag" list="tagList" maxlength="30" placeholder="es. VIP, richiamare" aria-label="Nuova etichetta" style="width:160px">
+            <datalist id="tagList">@foreach (var s in Model.TagSuggestions) { <option value="@s"></option> }</datalist>
+            <select name="su" aria-label="Dove mettere l'etichetta"><option value="cliente">sul cliente</option><option value="conversazione">solo su questa conversazione</option></select>
+            <button class="btn sm" type="submit">Aggiungi</button>
+        </form>
+    </div>
+</section>
 
 <section class="panel">
     <div class="panel-h"><h2>Chat</h2><span class="muted">@c.AiReplies risposte dell'assistente@(c.AssignedName is null ? "" : " · in carico a " + c.AssignedName)</span><span style="flex:1"></span>
@@ -25,9 +44,10 @@
         }
     </div>
     <div class="panel-b chat" id="chat">
+        @{ var templatesSeen = 0; }
         @foreach (var m in Model.Messages)
         {
-            var who = m.Direction == "in" ? c.ContactName : m.Kind == "template" ? "Primo messaggio" : m.SentBy is null ? "Assistente" : m.SentByName ?? "Operatore";
+            var who = m.Direction == "in" ? c.ContactName : m.Kind == "template" ? (templatesSeen++ == 0 ? "Primo messaggio" : "Promemoria automatico") : m.SentBy is null ? "Assistente" : m.SentByName ?? "Operatore";
             <div class="msg @(m.Direction == "in" ? "in" : m.Kind == "template" || m.SentBy is not null ? "out" : "ai")">
                 <div class="msg-h">@who · @m.CreatedAt.ToRome().ToString("dd/MM HH:mm")@if (m.Direction == "out") {<text> · @WaService.StatusLabel(m.Status)</text>}</div>
                 <div class="msg-b">@m.Body</div>

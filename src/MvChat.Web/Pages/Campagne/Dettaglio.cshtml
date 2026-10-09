@@ -48,6 +48,19 @@
 </section>
 
 <section class="panel">
+    <div class="panel-h"><h2>Promemoria a chi non risponde</h2><span class="muted">@(c.FollowUpTemplateId is null ? "non attivo" : $"«{c.FollowUpTemplateName}» dopo {c.FollowUpDays} {(c.FollowUpDays == 1 ? "giorno" : "giorni")} · inviati {c.FollowUpsSent} · hanno risposto dopo il promemoria {c.FollowUpsReplied}")</span></div>
+    @if (c.Status != "annullata")
+    {
+        <form method="post" asp-page-handler="FollowUp" class="panel-b inline-form">
+            <div class="field"><label for="FollowUpTemplateId">Template del promemoria</label><select id="FollowUpTemplateId" name="FollowUpTemplateId"><option value="">Nessun promemoria</option>@foreach (var t in Model.Templates.Where(t => t.Id != c.TemplateId)) { <option value="@t.Id" selected="@(t.Id == c.FollowUpTemplateId)">@t.Name</option> }</select></div>
+            <div class="field"><label for="FollowUpDays">Dopo</label><select id="FollowUpDays" name="FollowUpDays">@for (var d = 1; d <= 7; d++) { <option value="@d" selected="@(d == c.FollowUpDays)">@d @(d == 1 ? "giorno" : "giorni")</option> }</select></div>
+            <button class="btn sm" type="submit">Salva promemoria</button>
+            <small class="muted" style="flex-basis:100%">Parte una volta sola, negli orari di invio dell'attività, solo a chi non ha ancora risposto e non è nella lista STOP. Meta lo fa pagare come un primo messaggio.</small>
+        </form>
+    }
+</section>
+
+<section class="panel">
     <div class="panel-h"><h2>Istruzioni in più per l'assistente</h2><span class="muted">solo per questa campagna</span><span style="flex:1"></span>
         <a class="btn sm" href="/Modelli/Anteprima?campagna=@c.Id">Vedi le istruzioni complete</a></div>
     @if (c.Status is "completata" or "annullata")

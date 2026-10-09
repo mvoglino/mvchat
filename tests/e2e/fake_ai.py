@@ -21,6 +21,10 @@ def answer(system, last):
     if "reception" in t or "persona" in t: return r("Certo, ti faccio contattare da un collega della reception.", "operatore", "chiede una persona")
     if "docce" in t or "arrabbiato" in t or "ernia" in t: return r("Mi dispiace, passo subito la tua richiesta alla reception.", "operatore", "reclamo")
     if "va bene" in t or "procediamo" in t: return r("Perfetto! Ti aspettiamo in reception per completare il rinnovo.", "obiettivo_raggiunto", "ha accettato il rinnovo")
+    if "mandami il link" in t:
+        u = re.search(r"Link per aderire e pagare l'offerta: (\S+)", system)
+        return r(f"Ecco il link per aderire: {u.group(1)}" if u else "Per aderire passa in reception.")
+    if "sito falso" in t: return r("Puoi aderire qui: https://truffa.example.com/offerta")
     if "non mi interessa" in t:
         if "chiedigli una sola volta" in system:
             o = r("Grazie lo stesso! Se ti va, mi dici cosa non ti convince? Ci aiuta a migliorare.", "rifiuto", "non interessato", "non_interessato")

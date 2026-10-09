@@ -31,7 +31,8 @@ else
         <div class="field"><label asp-for="Input.ValidFrom">Valida dal</label><input asp-for="Input.ValidFrom" type="date"></div>
         <div class="field"><label asp-for="Input.ValidTo">Valida fino al (compreso)</label><input asp-for="Input.ValidTo" type="date"><span asp-validation-for="Input.ValidTo" class="field-error"></span></div>
         <div class="field full"><label asp-for="Input.Conditions">Condizioni</label><textarea asp-for="Input.Conditions" rows="2" placeholder="es. valida solo per chi rinnova prima della scadenza; non cumulabile"></textarea></div>
-        <div class="field full"><label asp-for="Input.ActionUrl">Link per aderire (facoltativo)</label><input asp-for="Input.ActionUrl" placeholder="https://..."><small>Se manca, l'assistente invita a passare in reception.</small><span asp-validation-for="Input.ActionUrl" class="field-error"></span></div>
+        <div class="field full"><label asp-for="Input.ActionUrl">Link di pagamento / per aderire (facoltativo)</label><input asp-for="Input.ActionUrl" placeholder="https://... (es. link di pagamento Stripe, PayPal o pagina dell'offerta)"><small>L'assistente lo manda quando il cliente vuole aderire. Se non ci sono link, invita a passare in reception.</small><span asp-validation-for="Input.ActionUrl" class="field-error"></span></div>
+        <div class="field full"><label asp-for="Input.BookUrl">Link di prenotazione (facoltativo)</label><input asp-for="Input.BookUrl" placeholder="https://... (es. pagina per prenotare la prima lezione o la visita)"><small>L'assistente lo manda quando il cliente vuole fissare giorno e ora.</small><span asp-validation-for="Input.BookUrl" class="field-error"></span></div>
         <div class="field full"><label class="check"><input asp-for="Input.IsActive"> Offerta attiva</label></div>
     </div>
     <div class="actions"><a class="btn" href="/Offerte">Annulla</a><button class="btn primary" type="submit">Salva</button></div>

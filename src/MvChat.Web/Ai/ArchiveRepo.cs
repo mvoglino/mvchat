@@ -13,6 +13,7 @@ public sealed class ArchiveFilter
     public int? CampaignId { get; set; }
     public string? Search { get; set; }
     public bool IncludeTests { get; set; }
+    public string? Tag { get; set; }
 }
 
 public sealed record ArchiveRow(long Id, string GymName, string ContactName, string ContactPhone, string GoalName, string? CampaignName,
@@ -27,7 +28,7 @@ public sealed class ArchiveRepo
     private readonly Db _db;
     public ArchiveRepo(Db db) => _db = db;
 
-    private const string Where = @"
+    private static readonly string Where = @"
         WHERE (@All=1 OR (@IsOrg=1 AND c.OrganizationId=@Org) OR (c.GymId=@Gym OR FIND_IN_SET(c.GymId, @Gyms)))
           AND (@FGym=-1 OR c.GymId=@FGym)
           AND (@Tests=1 OR c.IsTest=0)
@@ -35,7 +36,8 @@ public sealed class ArchiveRepo
           AND (@Camp=-1 OR c.CampaignId=@Camp)
           AND (@FromUtc IS NULL OR c.CreatedAt >= @FromUtc)
           AND (@ToUtc IS NULL OR c.CreatedAt < @ToUtc)
-          AND (@Q='' OR c.ContactName LIKE @QLike OR c.ContactPhone LIKE @QLike)";
+          AND (@Q='' OR c.ContactName LIKE @QLike OR c.ContactPhone LIKE @QLike)
+          AND " + ConversationRepo.TagWhere;
 
     private static object Args(Scope s, ArchiveFilter f, int limit = 0)
     {
@@ -46,7 +48,7 @@ public sealed class ArchiveRepo
             FGym = f.GymId ?? -1, Tests = f.IncludeTests ? 1 : 0, Outcome = f.Outcome ?? "", Camp = f.CampaignId ?? -1,
             FromUtc = f.From?.Date.FromRome(), ToUtc = f.To?.Date.AddDays(1).FromRome(),
             Q = q, QLike = "%" + q.Replace("%", "").Replace("_", "") + "%",
-            Kind = f.Kind ?? "", limit
+            Kind = f.Kind ?? "", limit, Tag = TagRepo.Clean(f.Tag) ?? ""
         };
     }
 

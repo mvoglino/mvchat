@@ -25,6 +25,7 @@
         <div class="field"><label for="dal">Dal</label><input id="dal" name="dal" type="date" value="@f.From?.ToString("yyyy-MM-dd")"></div>
         <div class="field"><label for="al">Al</label><input id="al" name="al" type="date" value="@f.To?.ToString("yyyy-MM-dd")"></div>
         <div class="field"><label for="q">Cliente</label><input id="q" name="q" value="@f.Search" placeholder="nome o cellulare"></div>
+        @if (Model.AllTags.Count > 0) { <div class="field"><label for="etichetta">Etichetta</label><select id="etichetta" name="etichetta"><option value="">Tutte</option>@foreach (var t in Model.AllTags) { <option value="@t" selected="@(string.Equals(t, f.Tag, StringComparison.OrdinalIgnoreCase))">@t</option> }</select></div> }
         <div class="field"><label class="check"><input type="checkbox" name="prove" value="true" checked="@f.IncludeTests"> Includi le conversazioni di prova</label></div>
     </div>
     <div class="actions"><a class="btn" href="?tipo=@f.Kind">Azzera filtri</a><button class="btn primary" type="submit">Filtra</button></div>
@@ -36,7 +37,7 @@
     {
         <tr>
             <td class="muted">@r.CreatedAt.ToRome().ToString("dd/MM/yy HH:mm")</td>
-            <td><b>@r.ContactName</b>@if (r.IsTest) {<span class="chip" style="margin-left:6px">prova</span>}<div class="muted">@r.ContactPhone</div></td>
+            <td><b>@r.ContactName</b>@if (r.IsTest) {<span class="chip" style="margin-left:6px">prova</span>}<div class="muted">@r.ContactPhone</div>@if (Model.Tags.TryGetValue(r.Id, out var tg) && tg.Count > 0) {<div class="tags">@foreach (var t in tg) {<span class="tag @(t.OnContact ? "tag-c" : "")">@t.Tag</span>}</div>}</td>
             @if (many) {<td>@r.GymName</td>}
             <td>@r.GoalName<div class="muted">@(r.CampaignName ?? "")</div></td>
             <td>@if (r.HumanInvolved) {<span class="chip warn">Con operatore</span><div class="muted">@(r.Operators ?? "passata alla reception")</div>} else {<span class="chip">Solo assistente AI</span>}</td>

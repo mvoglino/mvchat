@@ -110,6 +110,9 @@ public sealed class AssistantService
         var built = await BuildSystemAsync(c, first);
         if (built is null) { await HandOffAsync(c, number, "modello di obiettivo non trovato", sendHolding: true); return false; }
         var (system, model, offer, profile, askReason) = built.Value;
+        // Il promemoria automatico (secondo template) fa parte di quello che il cliente ha già letto.
+        var reminder = messages.Where(m => m.Direction == "out" && m.Kind == "template").Skip(1).LastOrDefault()?.Body;
+        if (!string.IsNullOrWhiteSpace(reminder)) system = system.Replace(Guardrails.OutputFormat, $"## Promemoria già inviato al cliente (non aveva risposto al primo messaggio)\n\"{reminder}\"\n\n" + Guardrails.OutputFormat);
 
         // La risposta alla domanda sul motivo si chiude con un grazie anche se il limite di messaggi è raggiunto.
         if (c.AiReplies >= model.MaxAiMessages && c.ReasonAsk != 1) { await HandOffAsync(c, number, $"raggiunto il limite di {model.MaxAiMessages} risposte dell'assistente", sendHolding: true); return false; }
@@ -137,6 +140,7 @@ public sealed class AssistantService
         if (reply is null) { await HandOffAsync(c, number, "risposta dell'AI non leggibile", sendHolding: true); return false; }
         if (Guardrails.PriceProblem(reply.Text, offer) is { } priceIssue) { await HandOffAsync(c, number, priceIssue, sendHolding: true); return false; }
         if (Guardrails.PercentProblem(reply.Text, offer) is { } pctIssue) { await HandOffAsync(c, number, pctIssue, sendHolding: true); return false; }
+        if (Guardrails.LinkProblem(reply.Text, system) is { } linkIssue) { await HandOffAsync(c, number, linkIssue, sendHolding: true); return false; }
 
         var text = Guardrails.EnsureDisclosure(reply.Text, c.AiReplies == 0, profile.AssistantName, c.GymName);
         var sent = await _wa.SendTextAsync(number, c.ContactPhone, text, null, c.Id);

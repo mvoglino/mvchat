@@ -10,12 +10,15 @@
 <nav class="tabs" aria-label="Viste">
     @foreach (var (key, label) in IndexModel.Views)
     {
-        <a href="?view=@key&gym=@Model.Gym" aria-current="@(key == Model.View ? "page" : "false")">@label</a>
+        <a href="?view=@key&gym=@Model.Gym&etichetta=@Model.Tag" aria-current="@(key == Model.View ? "page" : "false")">@label</a>
     }
 </nav>
-@if (many)
+@if (many || Model.AllTags.Count > 0)
 {
-    <form method="get" class="inline-form"><input type="hidden" name="view" value="@Model.View"><div class="field" style="max-width:300px"><label for="gym">Attività</label><select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div></form>
+    <form method="get" class="inline-form"><input type="hidden" name="view" value="@Model.View">
+        @if (many) { <div class="field" style="max-width:300px"><label for="gym">Attività</label><select id="gym" name="gym" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var g in Model.Gyms) { <option value="@g.Id" selected="@(g.Id == Model.Gym)">@g.Name</option> }</select></div> }
+        @if (Model.AllTags.Count > 0) { <div class="field" style="max-width:240px"><label for="etichetta">Etichetta</label><select id="etichetta" name="etichetta" onchange="this.form.submit()"><option value="">Tutte</option>@foreach (var t in Model.AllTags) { <option value="@t" selected="@(string.Equals(t, Model.Tag, StringComparison.OrdinalIgnoreCase))">@t</option> }</select></div> }
+    </form>
 }
 <section class="panel"><div class="tbl"><table>
     <thead><tr><th>Cliente</th>@if (many) {<th>Attività</th>}<th>Obiettivo</th><th>Stato</th><th>In carico a</th><th>Esito</th><th>Ultimo messaggio</th><th></th></tr></thead>
@@ -24,7 +27,7 @@
     {
         var waiting = c.Status == "operatore" && c.Awaiting;
         <tr>
-            <td><b>@c.ContactName</b>@if (c.IsTest) {<span class="chip" style="margin-left:6px">prova</span>}<div class="muted">@c.ContactPhone</div></td>
+            <td><b>@c.ContactName</b>@if (c.IsTest) {<span class="chip" style="margin-left:6px">prova</span>}<div class="muted">@c.ContactPhone</div>@if (Model.Tags.TryGetValue(c.Id, out var tg) && tg.Count > 0) {<div class="tags">@foreach (var t in tg) {<span class="tag @(t.OnContact ? "tag-c" : "")">@t.Tag</span>}</div>}</td>
             @if (many) {<td>@c.GymName</td>}
             <td>@c.GoalName</td>
             <td>@if (waiting) {<span class="chip warn">Il cliente aspetta @IndexModel.Waited(c.LastInboundAt)</span>} else if (c.Status == "operatore") {<span class="chip">Con la reception</span>} else if (c.Status == "ai") {<span class="muted">Risponde l'assistente</span>} else {<span class="muted">Chiusa</span>}</td>

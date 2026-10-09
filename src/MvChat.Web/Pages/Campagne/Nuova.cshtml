@@ -20,6 +20,10 @@ else
         <div class="field"><label for="ModelId">Obiettivo</label><select id="ModelId" name="ModelId">@foreach (var m in Model.Models) { <option value="@m.Id" selected="@(m.Id == Model.ModelId)">@m.Name@(m.NeedsOffer ? " · serve un'offerta" : "")</option> }</select></div>
         <div class="field"><label for="OfferId">Offerta</label><select id="OfferId" name="OfferId"><option value="">Nessuna</option>@foreach (var o in Model.Offers) { <option value="@o.Id" selected="@(o.Id == Model.OfferId)">@o.Title @(o.Price is decimal p ? "· " + PromptBuilder.Money(p) : "")</option> }</select><small>L'assistente potrà citare solo il prezzo di questa offerta.</small></div>
         <div class="field"><label for="TemplateId">Primo messaggio (template)</label><select id="TemplateId" name="TemplateId">@foreach (var t in Model.Templates) { <option value="@t.Id" selected="@(t.Id == Model.TemplateId)">@t.Name</option> }</select></div>
+        <div class="field"><label for="FollowUpTemplateId">Promemoria a chi non risponde (facoltativo)</label>
+            <div class="inline-form" style="gap:6px;margin:0"><select id="FollowUpTemplateId" name="FollowUpTemplateId"><option value="">Nessun promemoria</option>@foreach (var t in Model.Templates) { <option value="@t.Id" selected="@(t.Id == Model.FollowUpTemplateId)">@t.Name</option> }</select>
+            <select name="FollowUpDays" aria-label="Dopo quanti giorni">@for (var d = 1; d <= 7; d++) { <option value="@d" selected="@(d == Model.FollowUpDays)">dopo @d @(d == 1 ? "giorno" : "giorni")</option> }</select></div>
+            <small>Un secondo template, una volta sola, a chi non ha risposto. Meta lo fa pagare come un primo messaggio.</small></div>
         <div class="field"><label>Quando partire</label>
             <label class="check"><input type="radio" name="When" value="subito" checked="@(Model.When != "data")"> Appena avviata</label>
             <label class="check"><input type="radio" name="When" value="data" checked="@(Model.When == "data")"> Dal giorno e ora</label>

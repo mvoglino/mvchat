@@ -63,6 +63,9 @@ public sealed class RetentionService
                 "DELETE FROM WaMessages WHERE CreatedAt < @cutoff AND (ConversationId IS NULL OR NOT EXISTS (SELECT 1 FROM Conversations c WHERE c.Id=WaMessages.ConversationId))", new { cutoff });
             var recipients = await InBlocksAsync("DELETE FROM CampaignRecipients WHERE CampaignId IN (SELECT Id FROM (SELECT Id FROM Campaigns WHERE CreatedAt < @cutoff) x)", new { cutoff });
             var lists = _unfinished ? 0 : await _db.ExecuteAsync("DELETE FROM ContactLists WHERE CreatedAt < @cutoff", new { cutoff }); // contatti e scarti vanno via con la lista
+            // Etichette di clienti senza più conversazioni, messe prima del periodo di conservazione.
+            await InBlocksAsync(@"DELETE FROM ContactTags WHERE CreatedAt < @cutoff
+                AND NOT EXISTS (SELECT 1 FROM Conversations c WHERE c.GymId=ContactTags.GymId AND c.ContactPhone=ContactTags.Phone)", new { cutoff });
             var events = await InBlocksAsync("DELETE FROM WaWebhookEvents WHERE ReceivedAt < @hooks", new { hooks });
             // Il registro si accorcia, ma restano le righe di fatturazione e privacy: servono come prova di cosa è stato fatto.
             var audit = await InBlocksAsync("DELETE FROM AuditLog WHERE At < @cutoff AND Action NOT LIKE 'billing.%' AND Action NOT LIKE 'privacy.%'", new { cutoff });

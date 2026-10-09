@@ -22,6 +22,8 @@ public class DettaglioModel : PageModel
     public List<MvChat.Web.Reports.ReasonCount> Reasons { get; private set; } = new();
 
     public List<TestNumber> TestNumbers { get; private set; } = new();
+    /// <summary>Template approvati del numero della campagna (per scegliere il promemoria).</summary>
+    public List<WaTemplate> Templates { get; private set; } = new();
 
     public Campaign C { get; private set; } = null!;
     public List<CampaignRecipient> Recipients { get; private set; } = new();
@@ -46,6 +48,7 @@ public class DettaglioModel : PageModel
         var number = await _wa.NumberAsync(c.WaNumberId);
         MetaLimit = number is null ? null : SendWindows.MetaDailyLimit(number.MessagingLimit, number.IsSimulated);
         TestNumbers = await _repo.TestNumbersAsync(c.GymId);
+        Templates = (await _wa.TemplatesAsync(c.GymId)).Where(x => x.IsApproved && x.WaNumberId == c.WaNumberId).ToList();
         Reasons = (await _report.RefusalReasonsAsync(User.Scope(), DateTime.UtcNow.AddYears(-20), DateTime.UtcNow.AddDays(1), null, c.GymId, c.Id)).Where(r => r.Count > 0).ToList();
         var t = await _wa.TemplateAsync(c.TemplateId);
         var first = (await _repo.RecipientsAsync(id, null, 1)).FirstOrDefault();
@@ -144,6 +147,24 @@ public class DettaglioModel : PageModel
         await _repo.SetExtraInstructionsAsync(id, text, AskRefusalReason);
         await Audit("campaign.instructions", text is null ? "tolte" : "aggiornate");
         TempData["Ok"] = text is null ? "Istruzioni in più tolte." : "Istruzioni in più salvate: l'assistente le usa dalla prossima risposta.";
+        return Back();
+    }
+
+    [BindProperty] public int? FollowUpTemplateId { get; set; }
+    [BindProperty] public int FollowUpDays { get; set; } = 3;
+
+    /// <summary>Promemoria a chi non risponde: si attiva, cambia o toglie finché la campagna non è annullata.</summary>
+    public async Task<IActionResult> OnPostFollowUpAsync(int id)
+    {
+        if (!await LoadAsync(id)) return NotFound();
+        if (C.Status == "annullata") return Back();
+        var t = FollowUpTemplateId is int fid ? Templates.FirstOrDefault(x => x.Id == fid) : null;
+        if (FollowUpTemplateId is not null && (t is null || t.Id == C.TemplateId || FollowUpDays is < 1 or > 7))
+        { TempData["Err"] = "Scegli un template approvato diverso dal primo messaggio e un numero di giorni tra 1 e 7."; return Back(); }
+        if (t is not null && t.Variables.Contains("offerta") && C.OfferId is null) { TempData["Err"] = "Il promemoria cita l'offerta, ma la campagna non ha un'offerta."; return Back(); }
+        await _repo.SetFollowUpAsync(id, t?.Id, Math.Clamp(FollowUpDays, 1, 7));
+        await Audit("campaign.followup", t is null ? "tolto" : $"{t.Name} dopo {FollowUpDays} giorni");
+        TempData["Ok"] = t is null ? "Promemoria tolto." : $"Promemoria attivo: «{t.Name}» a chi non risponde dopo {FollowUpDays} {(FollowUpDays == 1 ? "giorno" : "giorni")}.";
         return Back();
     }
 

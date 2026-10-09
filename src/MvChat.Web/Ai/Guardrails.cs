@@ -28,6 +28,28 @@ Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che 
 
     private static readonly Regex Json = new(@"\{[\s\S]*\}");
 
+    private static readonly Regex Url = new(@"(?:https?://|www\.)[^\s<>""«»]+", RegexOptions.IgnoreCase);
+    private static string NormUrl(string u)
+    {
+        u = u.Trim().TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '»', '"', '\'').ToLowerInvariant();
+        foreach (var p in new[] { "https://", "http://" }) if (u.StartsWith(p)) u = u[p.Length..];
+        if (u.StartsWith("www.")) u = u[4..];
+        return u.TrimEnd('/');
+    }
+
+    /// <summary>
+    /// L'assistente può mandare solo i link scritti nelle sue istruzioni (offerta, prenotazione, informativa privacy, sito):
+    /// un link inventato o modificato non parte e la conversazione passa a una persona.
+    /// </summary>
+    public static string? LinkProblem(string text, string instructions)
+    {
+        var allowed = Url.Matches(instructions).Select(m => NormUrl(m.Value)).ToHashSet();
+        foreach (Match m in Url.Matches(text))
+            if (!allowed.Contains(NormUrl(m.Value)))
+                return $"l'assistente voleva mandare un link non previsto ({(m.Value.Length > 80 ? m.Value[..80] + "…" : m.Value)}): controlla e rispondi tu";
+        return null;
+    }
+
     /// <summary>Legge la risposta dell'AI. Se non è nel formato richiesto restituisce null: in quel caso non si manda nulla.</summary>
     public static AiReply? Parse(string? raw)
     {

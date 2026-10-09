@@ -91,8 +91,9 @@ public static class PromptBuilder
             sb.AppendLine(offer.MaxExtraDiscountPct > 0
                 ? $"Sconto extra concedibile: al massimo il {offer.MaxExtraDiscountPct}% sul prezzo dell'offerta, solo se il cliente esita per il prezzo. Non proporlo subito."
                 : "Sconto extra: nessuno. Non concedere riduzioni oltre il prezzo dell'offerta.");
-            if (!string.IsNullOrWhiteSpace(offer.ActionUrl)) sb.AppendLine($"Per aderire il cliente usa questo link: {offer.ActionUrl}");
-            else sb.AppendLine($"Per aderire il cliente passa da {gymName}: proponi di fissare quando.");
+            if (!string.IsNullOrWhiteSpace(offer.ActionUrl)) sb.AppendLine($"Link per aderire e pagare l'offerta: {offer.ActionUrl} (mandalo quando il cliente dice di voler aderire o chiede come fare, non prima).");
+            if (!string.IsNullOrWhiteSpace(offer.BookUrl)) sb.AppendLine($"Link per prenotare legato all'offerta: {offer.BookUrl} (mandalo quando il cliente vuole fissare un giorno o un orario).");
+            if (string.IsNullOrWhiteSpace(offer.ActionUrl) && string.IsNullOrWhiteSpace(offer.BookUrl)) sb.AppendLine($"Per aderire il cliente passa da {gymName}: proponi di fissare quando.");
         }
         sb.AppendLine();
 
@@ -103,6 +104,7 @@ public static class PromptBuilder
         Line(sector.Activities, p.Classes);
         Line("Come arrivare e parcheggio", p.HowToReach);
         Line("Altre informazioni", p.ExtraInfo);
+        if (!string.IsNullOrWhiteSpace(p.BookingUrl)) sb.AppendLine($"Link per prenotare una visita, una prova o un appuntamento: {p.BookingUrl.Trim()}");
         sb.AppendLine();
 
         sb.AppendLine("## Cliente");
@@ -141,6 +143,7 @@ public static class PromptBuilder
             : askReason
             ? "12. Se il cliente rifiuta senza dire perché e non mostra fastidio, nella stessa risposta ringrazialo e chiedigli una sola volta, con garbo e lasciandolo libero di non rispondere, cosa non lo convince (per esempio: «Grazie lo stesso! Se ti va, mi dici cosa non ti convince? Ci aiuta a migliorare.»). In quel caso: esito rifiuto, motivo non_interessato e \"chiedi_motivo\": true. Se poi ti risponde, ringrazialo senza insistere né riproporre l'offerta (a meno che sia lui a riaprire il discorso) e indica il motivo giusto. Se ha già detto il motivo o è infastidito, non chiedere nulla."
             : "12. Se il cliente rifiuta, non chiedergli il motivo: ringrazialo e chiudi.");
+        sb.AppendLine("13. Puoi mandare solo i link scritti in queste istruzioni, copiati esattamente: mai link inventati, accorciati o modificati.");
         return sb.ToString();
     }
 }

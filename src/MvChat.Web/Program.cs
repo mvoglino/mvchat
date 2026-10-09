@@ -36,6 +36,7 @@ builder.Services.AddScoped<WaRepo>();
 builder.Services.AddScoped<WaService>();
 builder.Services.AddScoped<WebhookHandler>();
 builder.Services.AddScoped<MediaStore>();
+builder.Services.AddScoped<TagRepo>();
 builder.Services.AddHttpClient<AiClient>(c => c.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddScoped<ConversationRepo>();
 builder.Services.AddScoped<AssistantService>();

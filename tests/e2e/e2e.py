@@ -785,6 +785,43 @@ _,an2,_ = m.req(f"/Modelli/Anteprima?campagna={cR2}")
 check("domanda sul motivo: si sceglie campagna per campagna (di base sì)", "chiedigli una sola volta" in an and "non chiedergli il motivo" in an2 and "chiedigli una sola volta" not in an2)
 hc = cpage(m, cR)
 check("campagna: riepilogo dei motivi dei rifiuti", "Motivi dei rifiuti" in hc and "Prezzo / costo 2" in hc and "Motivi di salute 1" in hc, hc[hc.find("Motivi dei rifiuti"):][:300])
+# 5j-quater. Link di pagamento e prenotazione: solo quelli scritti dall'attività
+off_form = {"Input.Id":offer_alba,"Input.GymId":alba,"Input.Title":"Rinnovo con 2 mesi omaggio","Input.Description":"14 mesi al prezzo di 12","Input.Price":"399","Input.FullPrice":"465",
+    "Input.PriceNote":"una tantum","Input.MaxExtraDiscountPct":"10","Input.ValidTo":"2099-10-31","Input.IsActive":"true","Input.ActionUrl":"https://pay.example.com/rinnovo"}
+s,html,_ = m.post(f"/Offerte/Edit/{offer_alba}", dict(off_form, **{"Input.BookUrl":"non un link"}), form_path=f"/Offerte/Edit/{offer_alba}")
+check("link di prenotazione sbagliato rifiutato", s == 200 and "deve iniziare con https://" in html, str(s))
+s1,_,_ = m.post(f"/Offerte/Edit/{offer_alba}", dict(off_form, **{"Input.BookUrl":"https://prenota.example.com/prima-lezione"}), form_path=f"/Offerte/Edit/{offer_alba}")
+s2,_,_ = m.post(f"/Sedi/Edit/{alba}", {"Input.OpeningHours":"Lun-Ven 7-22, Sab 9-19","Input.Services":"Sala pesi, corsi, sauna","Input.Classes":"Pilates mar 18:30","Input.HowToReach":"Parcheggio gratuito",
+    "Input.ExtraInfo":"Serve il certificato medico","Input.AssistantName":"assistente virtuale","Input.Formality":"tu","Input.BookingUrl":"https://prenota.example.com/visita"})
+_,an,_ = m.req(f"/Modelli/Anteprima?campagna={cR}")
+check("offerta e scheda: link di pagamento e di prenotazione nelle istruzioni dell'assistente", s1 == 302 and s2 == 302 and "Link per aderire e pagare l'offerta: https://pay.example.com/rinnovo" in an
+      and "https://prenota.example.com/prima-lezione" in an and "Link per prenotare una visita, una prova o un appuntamento: https://prenota.example.com/visita" in an and "mai link inventati" in an, f"{s1} {s2}")
+cidL,_,_ = start_conv(m, "333 777 0001", name="Lina")
+say(m, cidL, "Ok, mandami il link per aderire")
+check("l'assistente manda il link di pagamento dell'offerta", "Ecco il link per aderire: https://pay.example.com/rinnovo" in page(m, cidL))
+cidF,_,_ = start_conv(m, "333 777 0002", name="Fede")
+say(m, cidF, "C'è un sito falso dove pagare?")
+hF = page(m, cidF)
+check("link non previsto: non parte, risponde una persona", "truffa.example.com" not in hF[hF.find('id="chat"'):].split("Serve una persona")[0] and state(m, cidF).get("status") == "operatore" and "link non previsto" in hF, hF[hF.find('class="stats"'):][:300])
+
+# 5j-quinquies. Etichette sul cliente e sulla conversazione
+cvT = cvr[51]
+m.post(f"/Conversazioni/{cvT}?handler=Tag", {"tag":"VIP","su":"cliente"}, form_path=f"/Conversazioni/{cvT}")
+o.post(f"/Conversazioni/{cvT}?handler=Tag", {"tag":"richiamare a gennaio","su":"conversazione"}, form_path=f"/Conversazioni/{cvT}")
+hT = page(m, cvT)
+check("etichette sul cliente e sulla conversazione (anche dall'operatore)", 'class="tag tag-c"' in hT and "VIP" in hT and "richiamare a gennaio" in hT)
+s,_,_ = oth.post(f"/Conversazioni/{cvT}?handler=Tag", {"tag":"intrusa","su":"cliente"}, form_path="/Account/Password")
+check("un altro gruppo non mette etichette", s == 404 and "intrusa" not in page(m, cvT), str(s))
+_,lst,_ = m.req("/Conversazioni?etichetta=VIP")
+check("reception: filtro per etichetta", "+393200000051" in lst and "+393200000052" not in lst and '<span class="tag tag-c">VIP</span>' in lst, lst[lst.find("<tbody>"):][:300])
+_,arc,_ = m.req("/Conversazioni/Archivio?etichetta=richiamare%20a%20gennaio")
+_,csvA,_ = m.req("/Conversazioni/Archivio?etichetta=VIP&handler=Csv")
+check("archivio: filtro ed esportazione con le etichette", "+393200000051" in arc and "+393200000053" not in arc and "Etichette" in csvA and "VIP" in csvA)
+s,body,_ = m.req("/Privacy?numero=320%20000%200051&handler=Export")
+check("richiesta privacy: le etichette del cliente fanno parte dei suoi dati", s == 200 and "FitActive Alba: VIP" in body, body[:200])
+m.post(f"/Conversazioni/{cvT}?handler=Tag", {"tag":"VIP","su":"cliente","togli":"true"}, form_path=f"/Conversazioni/{cvT}")
+hT2 = page(m, cvT)
+check("etichetta tolta", 'name="tag" value="VIP"' not in hT2 and 'name="tag" value="richiamare a gennaio"' in hT2)
 fai.shutdown()
 
 # 5k. Controllo generale: STOP, messaggi spontanei, foto e vocali, saluti finali, dati mancanti, aggiornamenti del database
@@ -892,6 +929,29 @@ try:
     check("limite di campagne per cliente: chi ne ha già ricevute abbastanza viene saltato", "Inviati (1)" in html and "ha già ricevuto 1 campagna negli ultimi 30 giorni" in html, html[html.find('class="stats"'):][:400])
     sa.post("/Impostazioni/WhatsApp", dict(meta_form, MaxCampaigns="2"))
     _,html,_ = sa.req("/Impostazioni/WhatsApp"); check("limite di campagne per cliente modificabile da MVitalia (di base 2)", 'name="MaxCampaigns"' in html and 'value="2"' in html)
+    # Promemoria automatico a chi non risponde (template «corso_servizio» dopo 1 giorno)
+    _, res = m.post_json("/Lists/New?handler=Import", {"GymId":alba,"Name":"Promemoria","FileName":"x.xlsx","Map":mp2,
+        "Rows":[["Gea","Test","320 000 0061","","Annuale","2026-11-30","SI","","","Yoga",""],["Ivo","Test","320 000 0062","","Annuale","2026-11-30","SI","","","Yoga",""]]}, "/Lists/New")
+    c0,_,h0 = camp_post(m, dict(base, Name="Con promemoria", ListId=res.get("listId"), FollowUpTemplateId=str(tid), FollowUpDays="1"), alba)
+    check("promemoria: dev'essere un template diverso dal primo messaggio", c0 is None and "template diverso dal primo messaggio" in h0)
+    cF,_,_ = camp_post(m, dict(base, Name="Con promemoria", ListId=res.get("listId"), FollowUpTemplateId=tid_s.group(1) if tid_s else "", FollowUpDays="1"), alba)
+    act(m, cF, "Start"); _time.sleep(0.5)
+    c62 = conv_of(m, "+393200000062")
+    m.post(f"/Conversazioni/{c62}?handler=Simulate", {"Text":"Ciao, ci penso"}, form_path=f"/Conversazioni/{c62}"); _time.sleep(0.5)
+    with db.cursor() as cur:
+        cur.execute("UPDATE CampaignRecipients SET SentAt=UTC_TIMESTAMP() - INTERVAL 25 HOUR WHERE CampaignId=%s", (cF,))
+    for _ in range(8):
+        Client().req("/jobs/tick?token=" + tick.group(1))
+        if "inviati 1" in cpage(m, cF): break
+        _time.sleep(2)
+    hc = cpage(m, cF); c61 = conv_of(m, "+393200000061")
+    h61 = page(m, c61) if c61 else ""; h62 = page(m, c62) if c62 else ""
+    check("promemoria: parte una volta sola a chi non ha risposto", "«corso_servizio» dopo 1 giorno · inviati 1" in hc and "Promemoria automatico" in h61 and "riparte il corso di Yoga" in h61
+          and "Promemoria automatico" not in h62, hc[hc.find("Promemoria a chi"):][:300])
+    Client().req("/jobs/tick?token=" + tick.group(1)); _time.sleep(1)
+    check("promemoria: niente doppioni ai giri successivi", page(m, c61).count("Promemoria automatico") == 1)
+    m.post(f"/Campagne/{cF}?handler=FollowUp", {"FollowUpTemplateId":"","FollowUpDays":"3"}, form_path=f"/Campagne/{cF}")
+    check("promemoria: si toglie dalla pagina della campagna", "non attivo" in cpage(m, cF))
 except ImportError:
     check("pulizia del registro (serve pymysql per la prova)", False, "pip install pymysql")
 

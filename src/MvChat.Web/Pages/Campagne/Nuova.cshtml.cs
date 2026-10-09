@@ -37,6 +37,9 @@ public class NuovaModel : PageModel
     [BindProperty] public string? ExtraInstructions { get; set; }
     /// <summary>Di base sì: a chi rifiuta senza dire perché, l'assistente chiede il motivo una volta.</summary>
     [BindProperty] public bool AskRefusalReason { get; set; } = true;
+    /// <summary>Promemoria a chi non risponde: un secondo template approvato (vuoto = nessun promemoria) dopo 1–7 giorni.</summary>
+    [BindProperty] public int? FollowUpTemplateId { get; set; }
+    [BindProperty] public int FollowUpDays { get; set; } = 3;
     public const int ExtraMax = 1500;
 
     private async Task<Gym?> LoadAsync()
@@ -64,6 +67,7 @@ public class NuovaModel : PageModel
         var model = Models.FirstOrDefault(m => m.Id == ModelId);
         var offer = Offers.FirstOrDefault(o => o.Id == OfferId);
         var template = Templates.FirstOrDefault(t => t.Id == TemplateId);
+        var followUp = FollowUpTemplateId is int fid ? Templates.FirstOrDefault(t => t.Id == fid) : null;
         DateTime? startUtc = null;
         if (When == "data" && StartAt is DateTime local)
         {
@@ -79,6 +83,10 @@ public class NuovaModel : PageModel
             : template.Variables.Contains("offerta") && offer is null ? "Il template cita l'offerta: collega un'offerta alla campagna."
             : When == "data" && (startUtc is null || startUtc < DateTime.UtcNow.AddMinutes(-5)) ? "Indica una data e ora di partenza futura."
             : DailyLimit is < 1 or > 100000 ? "Il limite giornaliero deve essere un numero tra 1 e 100.000 (oppure vuoto)."
+            : FollowUpTemplateId is not null && followUp is null ? "Il template del promemoria deve essere approvato da Meta."
+            : followUp is not null && followUp.Id == template.Id ? "Per il promemoria scegli un template diverso dal primo messaggio."
+            : followUp is not null && followUp.Variables.Contains("offerta") && offer is null ? "Il promemoria cita l'offerta: collega un'offerta alla campagna."
+            : FollowUpDays is < 1 or > 7 ? "Il promemoria parte dopo 1–7 giorni."
             : null;
         if (Error is not null) return Page();
 
@@ -88,7 +96,7 @@ public class NuovaModel : PageModel
             OrganizationId = g!.OrganizationId, GymId = g.Id, Name = Name!.Trim()[..Math.Min(150, Name.Trim().Length)], ListId = list!.Id, ListName = list.Name,
             GoalModelId = model!.Id, OfferId = offer?.Id, WaNumberId = Number!.Id, TemplateId = template!.Id, StartAt = startUtc, DailyLimit = DailyLimit,
             ExtraInstructions = string.IsNullOrWhiteSpace(ExtraInstructions) ? null : ExtraInstructions.Trim()[..Math.Min(ExtraInstructions.Trim().Length, ExtraMax)],
-            AskRefusalReason = AskRefusalReason
+            AskRefusalReason = AskRefusalReason, FollowUpTemplateId = followUp?.Id, FollowUpDays = FollowUpDays
         };
         var (id, recipients, excluded) = await _repo.CreateAsync(c, me.UserId);
         await _repos.AuditAsync(me, "campaign.created", $"#{id} {c.Name} · {recipients} destinatari", HttpContext.Connection.RemoteIpAddress?.ToString(), g.OrganizationId, g.Id);

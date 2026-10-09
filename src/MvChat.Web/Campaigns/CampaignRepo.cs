@@ -28,6 +28,12 @@ public sealed class Campaign
     public string? ExtraInstructions { get; set; }
     /// <summary>A chi rifiuta senza dire perché, l'assistente chiede il motivo una volta (di base sì).</summary>
     public bool AskRefusalReason { get; set; } = true;
+    /// <summary>Promemoria automatico: secondo template a chi non ha risposto dopo FollowUpDays giorni (null = nessun promemoria).</summary>
+    public int? FollowUpTemplateId { get; set; }
+    public string? FollowUpTemplateName { get; set; }
+    public int FollowUpDays { get; set; } = 3;
+    public int FollowUpsSent { get; set; }
+    public int FollowUpsReplied { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
@@ -73,7 +79,10 @@ public sealed class CampaignRepo
     public CampaignRepo(Db db) => _db = db;
 
     private const string Select = @"
-        SELECT c.*, g.Name AS GymName, m.Name AS GoalName, o.Title AS OfferTitle, t.Name AS TemplateName,
+        SELECT c.*, g.Name AS GymName, m.Name AS GoalName, o.Title AS OfferTitle, t.Name AS TemplateName, ft.Name AS FollowUpTemplateName,
+          (SELECT COUNT(*) FROM CampaignRecipients r WHERE r.CampaignId=c.Id AND r.FollowUpState='inviato') AS FollowUpsSent,
+          (SELECT COUNT(*) FROM CampaignRecipients r JOIN Conversations v ON v.Id=r.ConversationId
+             WHERE r.CampaignId=c.Id AND r.FollowUpState='inviato' AND v.LastInboundAt > r.FollowUpAt) AS FollowUpsReplied,
           (SELECT COUNT(*) FROM CampaignRecipients r WHERE r.CampaignId=c.Id) AS Total,
           (SELECT COUNT(*) FROM CampaignRecipients r WHERE r.CampaignId=c.Id AND r.Status IN ('in_attesa','in_invio')) AS Waiting,
           (SELECT COUNT(*) FROM CampaignRecipients r WHERE r.CampaignId=c.Id AND r.Status='inviato') AS Sent,
@@ -85,7 +94,7 @@ public sealed class CampaignRepo
           (SELECT COUNT(*) FROM Conversations v WHERE v.CampaignId=c.Id AND v.Outcome='opt_out') AS OptOut,
           (SELECT COUNT(*) FROM Conversations v WHERE v.CampaignId=c.Id AND v.Status='operatore') AS ToOperator
         FROM Campaigns c JOIN Gyms g ON g.Id=c.GymId JOIN GoalModels m ON m.Id=c.GoalModelId
-        LEFT JOIN Offers o ON o.Id=c.OfferId LEFT JOIN WaTemplates t ON t.Id=c.TemplateId";
+        LEFT JOIN Offers o ON o.Id=c.OfferId LEFT JOIN WaTemplates t ON t.Id=c.TemplateId LEFT JOIN WaTemplates ft ON ft.Id=c.FollowUpTemplateId";
 
     private static int I(DbDataReader r, string n) => Convert.ToInt32(r.GetValue(r.GetOrdinal(n)));
 
@@ -95,7 +104,9 @@ public sealed class CampaignRepo
         ListId = r.IntN("ListId"), ListName = r.Str("ListName")!, GoalModelId = r.Int("GoalModelId"), GoalName = r.Str("GoalName")!,
         OfferId = r.IntN("OfferId"), OfferTitle = r.Str("OfferTitle"), WaNumberId = r.Int("WaNumberId"), TemplateId = r.Int("TemplateId"),
         TemplateName = r.Str("TemplateName") ?? "(eliminato)", Status = r.Str("Status")!, PauseReason = r.Str("PauseReason"),
-        StartAt = r.Date("StartAt"), DailyLimit = r.IntN("DailyLimit"), ExtraInstructions = r.Str("ExtraInstructions"), AskRefusalReason = r.Bool("AskRefusalReason"), CreatedAt = r.Date("CreatedAt")!.Value, StartedAt = r.Date("StartedAt"),
+        StartAt = r.Date("StartAt"), DailyLimit = r.IntN("DailyLimit"), ExtraInstructions = r.Str("ExtraInstructions"), AskRefusalReason = r.Bool("AskRefusalReason"),
+        FollowUpTemplateId = r.IntN("FollowUpTemplateId"), FollowUpTemplateName = r.Str("FollowUpTemplateName"), FollowUpDays = Convert.ToInt32(r.GetValue(r.GetOrdinal("FollowUpDays"))),
+        FollowUpsSent = I(r, "FollowUpsSent"), FollowUpsReplied = I(r, "FollowUpsReplied"), CreatedAt = r.Date("CreatedAt")!.Value, StartedAt = r.Date("StartedAt"),
         CompletedAt = r.Date("CompletedAt"), LastRunAt = r.Date("LastRunAt"), LastRunNote = r.Str("LastRunNote"),
         Total = I(r, "Total"), Waiting = I(r, "Waiting"), Sent = I(r, "Sent"), Skipped = I(r, "Skipped"), Errors = I(r, "Errors"),
         Replied = I(r, "Replied"), Reached = I(r, "Reached"), Refused = I(r, "Refused"), OptOut = I(r, "OptOut"), ToOperator = I(r, "ToOperator")
@@ -124,10 +135,10 @@ public sealed class CampaignRepo
         await using var tx = await cn.BeginTransactionAsync();
         int id;
         await using (var cmd = Db.Command(cn,
-            @"INSERT INTO Campaigns (OrganizationId, GymId, Name, ListId, ListName, GoalModelId, OfferId, WaNumberId, TemplateId, Status, StartAt, DailyLimit, ExtraInstructions, AskRefusalReason, CreatedBy)
-              VALUES (@OrganizationId, @GymId, @Name, @ListId, @ListName, @GoalModelId, @OfferId, @WaNumberId, @TemplateId, 'bozza', @StartAt, @DailyLimit, @ExtraInstructions, @AskRefusalReason, @userId);
+            @"INSERT INTO Campaigns (OrganizationId, GymId, Name, ListId, ListName, GoalModelId, OfferId, WaNumberId, TemplateId, Status, StartAt, DailyLimit, ExtraInstructions, AskRefusalReason, FollowUpTemplateId, FollowUpDays, CreatedBy)
+              VALUES (@OrganizationId, @GymId, @Name, @ListId, @ListName, @GoalModelId, @OfferId, @WaNumberId, @TemplateId, 'bozza', @StartAt, @DailyLimit, @ExtraInstructions, @AskRefusalReason, @FollowUpTemplateId, @FollowUpDays, @userId);
               SELECT LAST_INSERT_ID();",
-            new { c.OrganizationId, c.GymId, c.Name, c.ListId, c.ListName, c.GoalModelId, c.OfferId, c.WaNumberId, c.TemplateId, c.StartAt, c.DailyLimit, c.ExtraInstructions, c.AskRefusalReason, userId }, tx))
+            new { c.OrganizationId, c.GymId, c.Name, c.ListId, c.ListName, c.GoalModelId, c.OfferId, c.WaNumberId, c.TemplateId, c.StartAt, c.DailyLimit, c.ExtraInstructions, c.AskRefusalReason, c.FollowUpTemplateId, c.FollowUpDays, userId }, tx))
             id = Convert.ToInt32(await cmd.ExecuteScalarAsync());
         int added, total;
         await using (var cmd = Db.Command(cn,
@@ -157,6 +168,33 @@ public sealed class CampaignRepo
     /// <summary>Le istruzioni in più si possono cambiare anche a campagna avviata: valgono dalle risposte successive.</summary>
     public Task<int> SetExtraInstructionsAsync(int id, string? text, bool askReason) => _db.ExecuteAsync(
         "UPDATE Campaigns SET ExtraInstructions=@text, AskRefusalReason=@askReason WHERE Id=@id AND Status NOT IN ('completata','annullata')", new { id, text, askReason });
+
+    /// <summary>Il promemoria si può cambiare finché la campagna non è annullata (vale per chi non l'ha ancora ricevuto).</summary>
+    public Task<int> SetFollowUpAsync(int id, int? templateId, int days) => _db.ExecuteAsync(
+        "UPDATE Campaigns SET FollowUpTemplateId=@templateId, FollowUpDays=@days WHERE Id=@id AND Status<>'annullata'", new { id, templateId, days });
+
+    /// <summary>
+    /// Chi deve ricevere il promemoria: primo messaggio inviato da almeno N giorni (ma non da più di N+3: dopo un fermo lungo non si recupera),
+    /// nessuna risposta, conversazione ancora seguita dall'assistente, promemoria non ancora mandato.
+    /// </summary>
+    public Task<List<(CampaignRecipient R, int CampaignId)>> FollowUpsDueAsync(int limit) => _db.QueryAsync(
+        @"SELECT r.*, NULL AS Outcome FROM CampaignRecipients r JOIN Campaigns k ON k.Id=r.CampaignId JOIN Conversations c ON c.Id=r.ConversationId
+          WHERE k.FollowUpTemplateId IS NOT NULL AND k.Status IN ('in_corso','completata')
+            AND r.Status='inviato' AND r.FollowUpState IS NULL
+            AND r.SentAt <= UTC_TIMESTAMP() - INTERVAL k.FollowUpDays DAY AND r.SentAt > UTC_TIMESTAMP() - INTERVAL (k.FollowUpDays + 3) DAY
+            AND c.LastInboundAt IS NULL AND c.Status='ai' AND c.IsTest=0
+          ORDER BY r.SentAt LIMIT @limit", new { limit },
+        r => (new CampaignRecipient(r.GetInt64(r.GetOrdinal("Id")), r.Str("Phone")!, r.Str("FirstName")!, r.Str("LastName"), r.Str("Membership"),
+                r.Date("ExpiresOn"), r.Str("Status")!, null, r.GetInt64(r.GetOrdinal("ConversationId")), r.Date("SentAt"), null, r.Str("Service"), r.Str("Notes")),
+              r.Int("CampaignId")));
+
+    /// <summary>Prenota il promemoria: se due giri partono insieme, solo uno lo manda.</summary>
+    public async Task<bool> ClaimFollowUpAsync(long recipientId) => await _db.ExecuteAsync(
+        "UPDATE CampaignRecipients SET FollowUpState='invio', FollowUpAt=UTC_TIMESTAMP() WHERE Id=@recipientId AND FollowUpState IS NULL", new { recipientId }) == 1;
+
+    public Task MarkFollowUpAsync(long recipientId, string state, string? note) => _db.ExecuteAsync(
+        "UPDATE CampaignRecipients SET FollowUpState=@state, FollowUpNote=@note, FollowUpAt=UTC_TIMESTAMP() WHERE Id=@recipientId",
+        new { recipientId, state, note = WhatsApp.WaRepo.Clip(note, 200) });
 
     /// <summary>Stato attuale della campagna (per fermare un giro se nel frattempo è stata messa in pausa o annullata).</summary>
     public Task<string?> StatusAsync(int id) => _db.ScalarAsync<string>("SELECT Status FROM Campaigns WHERE Id=@id", new { id });

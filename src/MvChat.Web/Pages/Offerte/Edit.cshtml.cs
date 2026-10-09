@@ -33,7 +33,7 @@ public class EditModel : PageModel
         {
             Id = o.Id, GymId = o.GymId, Title = o.Title, Description = o.Description, Price = Fmt(o.Price), FullPrice = Fmt(o.FullPrice),
             PriceNote = o.PriceNote, Conditions = o.Conditions, ValidFrom = o.ValidFrom, ValidTo = o.ValidTo,
-            MaxExtraDiscountPct = o.MaxExtraDiscountPct, ActionUrl = o.ActionUrl, IsActive = o.IsActive
+            MaxExtraDiscountPct = o.MaxExtraDiscountPct, ActionUrl = o.ActionUrl, BookUrl = o.BookUrl, IsActive = o.IsActive
         };
         return Page();
     }
@@ -61,6 +61,8 @@ public class EditModel : PageModel
             ModelState.AddModelError("Input.ValidTo", "La fine non può essere prima dell'inizio.");
         if (!string.IsNullOrWhiteSpace(Input.ActionUrl) && (!Uri.TryCreate(Input.ActionUrl.Trim(), UriKind.Absolute, out var u) || u.Scheme is not ("https" or "http")))
             ModelState.AddModelError("Input.ActionUrl", "Indirizzo non valido: deve iniziare con https://");
+        if (!string.IsNullOrWhiteSpace(Input.BookUrl) && (!Uri.TryCreate(Input.BookUrl.Trim(), UriKind.Absolute, out var b) || b.Scheme is not ("https" or "http")))
+            ModelState.AddModelError("Input.BookUrl", "Indirizzo non valido: deve iniziare con https://");
         if (!ModelState.IsValid) return Page();
 
         var id = await _catalog.SaveOfferAsync(new Offer
@@ -68,7 +70,7 @@ public class EditModel : PageModel
             Id = Input.Id, OrganizationId = gym!.OrganizationId, GymId = gym.Id, Title = Input.Title.Trim(), Description = T(Input.Description),
             Price = price, FullPrice = full, PriceNote = T(Input.PriceNote), Conditions = T(Input.Conditions),
             ValidFrom = Input.ValidFrom, ValidTo = Input.ValidTo, MaxExtraDiscountPct = Input.MaxExtraDiscountPct,
-            ActionUrl = T(Input.ActionUrl), IsActive = Input.IsActive
+            ActionUrl = T(Input.ActionUrl), BookUrl = T(Input.BookUrl), IsActive = Input.IsActive
         }, me.UserId);
         await _repos.AuditAsync(me, IsNew ? "offer.created" : "offer.updated", $"{Input.Title} · {Input.Price}", HttpContext.Connection.RemoteIpAddress?.ToString(), gym.OrganizationId, gym.Id);
         TempData["Ok"] = IsNew ? "Offerta creata." : "Offerta aggiornata.";
@@ -105,6 +107,7 @@ public class EditModel : PageModel
         [DataType(DataType.Date)] public DateTime? ValidTo { get; set; }
         [Range(0, 30, ErrorMessage = "Lo sconto extra va da 0 a 30%.")] public int MaxExtraDiscountPct { get; set; }
         [StringLength(400)] public string? ActionUrl { get; set; }
+        [StringLength(400)] public string? BookUrl { get; set; }
         public bool IsActive { get; set; } = true;
     }
 }

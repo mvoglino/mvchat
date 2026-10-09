@@ -16,9 +16,12 @@ public class DettaglioModel : PageModel
 {
     private readonly ConversationRepo _convs; private readonly WaRepo _wa; private readonly WaService _send;
     private readonly WebhookHandler _hook; private readonly ContactsRepo _contacts; private readonly AiQueue _queue; private readonly Repos _repos;
-    private readonly QuickReplyRepo _quick; private readonly MediaStore _media;
-    public DettaglioModel(ConversationRepo convs, WaRepo wa, WaService send, WebhookHandler hook, ContactsRepo contacts, AiQueue queue, Repos repos, QuickReplyRepo quick, MediaStore media)
-    { _convs = convs; _wa = wa; _send = send; _hook = hook; _contacts = contacts; _queue = queue; _repos = repos; _quick = quick; _media = media; }
+    private readonly QuickReplyRepo _quick; private readonly MediaStore _media; private readonly TagRepo _tags;
+    public DettaglioModel(ConversationRepo convs, WaRepo wa, WaService send, WebhookHandler hook, ContactsRepo contacts, AiQueue queue, Repos repos, QuickReplyRepo quick, MediaStore media, TagRepo tags)
+    { _convs = convs; _wa = wa; _send = send; _hook = hook; _contacts = contacts; _queue = queue; _repos = repos; _quick = quick; _media = media; _tags = tags; }
+
+    public List<TagItem> Tags { get; private set; } = new();
+    public List<string> TagSuggestions { get; private set; } = new();
 
     public List<QuickReply> QuickReplies { get; private set; } = new();
     public List<UserRow> Colleagues { get; private set; } = new();
@@ -48,6 +51,8 @@ public class DettaglioModel : PageModel
         Number = await _wa.NumberAsync(c.WaNumberId);
         Messages = await _convs.MessagesAsync(id);
         QuickReplies = await _quick.ForGymAsync(c.OrganizationId, c.GymId);
+        Tags = await _tags.ForConversationAsync(c.Id, c.GymId, c.ContactPhone);
+        TagSuggestions = await _tags.SuggestionsAsync(c.GymId);
         if (Me.CanManageUsers)
             Colleagues = (await _repos.UsersAsync(Me)).Where(u => u.IsActive && u.GymId == c.GymId).OrderBy(u => u.FullName).ToList();
         return true;
@@ -57,6 +62,29 @@ public class DettaglioModel : PageModel
     private IActionResult Back() => Redirect($"/Conversazioni/{Conv.Id}");
 
     public async Task<IActionResult> OnGetAsync(long id) => await LoadAsync(id) ? Page() : NotFound();
+
+    /// <summary>
+    /// Etichette: «su=cliente» resta sul cliente anche nelle prossime campagne, «su=conversazione» vale solo qui.
+    /// Le mette e le toglie chiunque lavori sulla conversazione (anche gli operatori).
+    /// </summary>
+    public async Task<IActionResult> OnPostTagAsync(long id, string? tag, string? su, bool togli = false)
+    {
+        if (!await LoadAsync(id)) return NotFound(); // perimetro
+        var t = TagRepo.Clean(tag);
+        if (t is null) { if (!togli) TempData["Err"] = "Scrivi l'etichetta (lettere e numeri, al massimo 30 caratteri)."; return Back(); }
+        var onContact = su != "conversazione";
+        if (togli)
+        {
+            if (onContact) await _tags.RemoveFromContactAsync(Conv.GymId, Conv.ContactPhone, t); else await _tags.RemoveFromConversationAsync(id, t);
+        }
+        else
+        {
+            if (Tags.Count >= 20) { TempData["Err"] = "Massimo 20 etichette."; return Back(); }
+            if (onContact) await _tags.AddToContactAsync(Conv.OrganizationId, Conv.GymId, Conv.ContactPhone, t, Me.UserId); else await _tags.AddToConversationAsync(id, t, Me.UserId);
+        }
+        await _repos.AuditAsync(Me, togli ? "tag.removed" : "tag.added", $"#{id} {(onContact ? "cliente" : "conversazione")}: {t}", Ip, Conv.OrganizationId, Conv.GymId);
+        return Back();
+    }
 
     /// <summary>Vocale o foto mandati dal cliente: solo a chi vede la conversazione. Se non è ancora stato scaricato, lo prende da Meta.</summary>
     public async Task<IActionResult> OnGetMediaAsync(long id, long msg)

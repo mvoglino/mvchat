@@ -66,6 +66,7 @@ public static class Bench
             var reply = Guardrails.Parse(r.Text);
             if (reply is null) { checks.Add(new("ko", "Risposta non nel formato richiesto: in una conversazione vera sarebbe passata alla reception.")); return new(s.Key, false, outcome, turns, checks, cost); }
             if (Guardrails.PriceProblem(reply.Text, offer) is { } p) checks.Add(new("ko", $"Prezzo bloccato da mvchat: {p}."));
+            if (Guardrails.LinkProblem(reply.Text, system) is { } lp) checks.Add(new("ko", $"Link bloccato da mvchat: {lp}."));
             if (replies == 0 && Guardrails.EnsureDisclosure(reply.Text, true, profile.AssistantName, "") != reply.Text)
                 checks.Add(new("warn", "Nella prima risposta non si è presentato come assistente virtuale: lo aggiunge mvchat."));
             if (reply.Text.Length > 700) checks.Add(new("warn", $"Risposta lunga ({reply.Text.Length} caratteri): su WhatsApp meglio messaggi brevi."));

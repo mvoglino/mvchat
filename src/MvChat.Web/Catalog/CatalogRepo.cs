@@ -14,6 +14,8 @@ public sealed class GymProfile
     public string? ExtraInfo { get; set; }
     public string AssistantName { get; set; } = "assistente virtuale";
     public string Formality { get; set; } = "tu";
+    /// <summary>Link per prenotare una visita, una prova o un appuntamento (vale anche senza offerta).</summary>
+    public string? BookingUrl { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
     /// <summary>Quanto è completa la scheda: serve a ricordare all'attività cosa manca.</summary>
@@ -35,7 +37,10 @@ public sealed class Offer
     public DateTime? ValidFrom { get; set; }
     public DateTime? ValidTo { get; set; }
     public int MaxExtraDiscountPct { get; set; }
+    /// <summary>Link per pagare / acquistare / aderire all'offerta.</summary>
     public string? ActionUrl { get; set; }
+    /// <summary>Link per prenotare (es. la prima lezione o la visita) legato all'offerta.</summary>
+    public string? BookUrl { get; set; }
     public bool IsActive { get; set; } = true;
 
     public bool IsExpired => ValidTo is { } to && to.Date < DateTime.UtcNow.ToRome().Date;
@@ -86,15 +91,15 @@ public sealed class CatalogRepo
         {
             GymId = r.Int("GymId"), OpeningHours = r.Str("OpeningHours"), Services = r.Str("Services"), Classes = r.Str("Classes"),
             HowToReach = r.Str("HowToReach"), ExtraInfo = r.Str("ExtraInfo"), AssistantName = r.Str("AssistantName")!,
-            Formality = r.Str("Formality")!, UpdatedAt = r.Date("UpdatedAt")
+            Formality = r.Str("Formality")!, BookingUrl = r.Str("BookingUrl"), UpdatedAt = r.Date("UpdatedAt")
         }) ?? new GymProfile { GymId = gymId };
 
     public Task SaveProfileAsync(GymProfile p, int userId) => _db.ExecuteAsync(
-        @"INSERT INTO GymProfiles (GymId, OpeningHours, Services, Classes, HowToReach, ExtraInfo, AssistantName, Formality, UpdatedBy)
-          VALUES (@GymId, @OpeningHours, @Services, @Classes, @HowToReach, @ExtraInfo, @AssistantName, @Formality, @userId)
+        @"INSERT INTO GymProfiles (GymId, OpeningHours, Services, Classes, HowToReach, ExtraInfo, AssistantName, Formality, BookingUrl, UpdatedBy)
+          VALUES (@GymId, @OpeningHours, @Services, @Classes, @HowToReach, @ExtraInfo, @AssistantName, @Formality, @BookingUrl, @userId)
           ON DUPLICATE KEY UPDATE OpeningHours=@OpeningHours, Services=@Services, Classes=@Classes, HowToReach=@HowToReach,
-            ExtraInfo=@ExtraInfo, AssistantName=@AssistantName, Formality=@Formality, UpdatedBy=@userId",
-        new { p.GymId, p.OpeningHours, p.Services, p.Classes, p.HowToReach, p.ExtraInfo, p.AssistantName, p.Formality, userId });
+            ExtraInfo=@ExtraInfo, AssistantName=@AssistantName, Formality=@Formality, BookingUrl=@BookingUrl, UpdatedBy=@userId",
+        new { p.GymId, p.OpeningHours, p.Services, p.Classes, p.HowToReach, p.ExtraInfo, p.AssistantName, p.Formality, p.BookingUrl, userId });
 
     public async Task<Dictionary<int, int>> CompletenessAsync(IEnumerable<int> gymIds)
     {
@@ -126,7 +131,7 @@ public sealed class CatalogRepo
         Id = r.Int("Id"), OrganizationId = r.Int("OrganizationId"), GymId = r.Int("GymId"), GymName = r.Str("GymName")!,
         Title = r.Str("Title")!, Description = r.Str("Description"), Price = Dec(r, "Price"), FullPrice = Dec(r, "FullPrice"),
         PriceNote = r.Str("PriceNote"), Conditions = r.Str("Conditions"), ValidFrom = r.Date("ValidFrom"), ValidTo = r.Date("ValidTo"),
-        MaxExtraDiscountPct = Convert.ToInt32(r["MaxExtraDiscountPct"]), ActionUrl = r.Str("ActionUrl"), IsActive = r.Bool("IsActive")
+        MaxExtraDiscountPct = Convert.ToInt32(r["MaxExtraDiscountPct"]), ActionUrl = r.Str("ActionUrl"), BookUrl = r.Str("BookUrl"), IsActive = r.Bool("IsActive")
     };
 
     private static decimal? Dec(DbDataReader r, string col) { var i = r.GetOrdinal(col); return r.IsDBNull(i) ? null : r.GetDecimal(i); }
@@ -134,16 +139,16 @@ public sealed class CatalogRepo
     public async Task<int> SaveOfferAsync(Offer o, int userId)
     {
         var args = new { o.Id, o.OrganizationId, o.GymId, o.Title, o.Description, o.Price, o.FullPrice, o.PriceNote, o.Conditions,
-                         o.ValidFrom, o.ValidTo, o.MaxExtraDiscountPct, o.ActionUrl, o.IsActive, userId };
+                         o.ValidFrom, o.ValidTo, o.MaxExtraDiscountPct, o.ActionUrl, o.BookUrl, o.IsActive, userId };
         if (o.Id == 0)
             return await _db.ScalarAsync<int>(
-                @"INSERT INTO Offers (OrganizationId, GymId, Title, Description, Price, FullPrice, PriceNote, Conditions, ValidFrom, ValidTo, MaxExtraDiscountPct, ActionUrl, IsActive, CreatedBy)
-                  VALUES (@OrganizationId, @GymId, @Title, @Description, @Price, @FullPrice, @PriceNote, @Conditions, @ValidFrom, @ValidTo, @MaxExtraDiscountPct, @ActionUrl, @IsActive, @userId);
+                @"INSERT INTO Offers (OrganizationId, GymId, Title, Description, Price, FullPrice, PriceNote, Conditions, ValidFrom, ValidTo, MaxExtraDiscountPct, ActionUrl, BookUrl, IsActive, CreatedBy)
+                  VALUES (@OrganizationId, @GymId, @Title, @Description, @Price, @FullPrice, @PriceNote, @Conditions, @ValidFrom, @ValidTo, @MaxExtraDiscountPct, @ActionUrl, @BookUrl, @IsActive, @userId);
                   SELECT LAST_INSERT_ID();", args);
         await _db.ExecuteAsync(
             @"UPDATE Offers SET Title=@Title, Description=@Description, Price=@Price, FullPrice=@FullPrice, PriceNote=@PriceNote,
               Conditions=@Conditions, ValidFrom=@ValidFrom, ValidTo=@ValidTo, MaxExtraDiscountPct=@MaxExtraDiscountPct,
-              ActionUrl=@ActionUrl, IsActive=@IsActive WHERE Id=@Id AND GymId=@GymId", args);
+              ActionUrl=@ActionUrl, BookUrl=@BookUrl, IsActive=@IsActive WHERE Id=@Id AND GymId=@GymId", args);
         return o.Id;
     }
 

@@ -60,9 +60,71 @@ public sealed class CampaignSender
                 }
                 catch (Exception ex) { _log.LogError(ex, "Campagna {Id}: errore nel giro di invio", id); }
             }
+            // Promemoria a chi non ha risposto (se resta tempo nel giro).
+            var followUps = 0;
+            if (onlyCampaignId is null && DateTime.UtcNow < deadline)
+            {
+                try { followUps = await FollowUpsAsync(deadline); }
+                catch (Exception ex) { _log.LogError(ex, "Promemoria delle campagne: errore nel giro di invio"); }
+                if (followUps > 0) summary.Notes.Add($"promemoria inviati: {followUps}");
+            }
             return summary with { Sent = sent, Skipped = skipped, Errors = errors };
         }
         finally { Gate.Release(); }
+    }
+
+    /// <summary>I dati del destinatario per i segnaposto del template (gli stessi per il primo messaggio e per il promemoria).</summary>
+    private static Dictionary<string, string?> Values(Campaign c, CampaignRecipient r, Catalog.Offer? offer) => new()
+    {
+        ["nome"] = r.FirstName, ["cognome"] = r.LastName, ["abbonamento"] = r.Membership,
+        ["scadenza"] = r.ExpiresOn?.ToString("dd/MM/yyyy"), ["palestra"] = c.GymName, ["sede"] = c.GymName, ["offerta"] = offer?.Title,
+        ["servizio"] = r.Service, ["note"] = r.Notes
+    };
+
+    /// <summary>
+    /// Promemoria automatico: a chi non ha risposto al primo messaggio dopo i giorni scelti, un secondo template (una volta sola).
+    /// Rispetta lista STOP, orari di invio dell'attività e limite di Meta del numero; se il cliente ha risposto nel frattempo non parte.
+    /// </summary>
+    private async Task<int> FollowUpsAsync(DateTime deadline)
+    {
+        var sent = 0;
+        var campaigns = new Dictionary<int, (Campaign C, WaNumber? N, WaTemplate? T, Catalog.Offer? O, bool Open, int Room)>();
+        foreach (var (r, campaignId) in await _repo.FollowUpsDueAsync(BatchSize))
+        {
+            if (DateTime.UtcNow >= deadline) break;
+            if (!campaigns.TryGetValue(campaignId, out var k))
+            {
+                var c = await _repo.GetAsync(campaignId);
+                if (c is null) continue;
+                var n = await _wa.NumberAsync(c.WaNumberId);
+                var t = c.FollowUpTemplateId is int ft ? await _wa.TemplateAsync(ft) : null;
+                var o = c.OfferId is int oid ? (await _catalog.OffersAsync(AllScope, offerId: oid)).FirstOrDefault() : null;
+                var open = n is not null && SendWindows.IsOpen(await _repo.WindowsAsync(c.GymId), DateTime.UtcNow);
+                var room = n is null ? 0 : SendWindows.MetaDailyLimit(n.MessagingLimit, n.IsSimulated) is int lim ? lim - await _repo.FirstContactsLast24hAsync(n.Id) : int.MaxValue;
+                campaigns[campaignId] = k = (c, n, t, o, open, room);
+            }
+            if (k.N is null || !k.Open || k.Room <= 0) continue; // si riprova al giro dopo (finché resta nei 3 giorni utili)
+            if (k.T is null || !k.T.IsApproved || k.T.WaNumberId != k.N.Id)
+            {
+                if (await _repo.ClaimFollowUpAsync(r.Id)) await _repo.MarkFollowUpAsync(r.Id, "saltato", "template del promemoria non approvato o non più disponibile");
+                continue;
+            }
+            // Il cliente potrebbe aver scritto proprio adesso: si ricontrolla prima di prenotare.
+            var conv = r.ConversationId is long cid ? await _convs.GetAsync(cid) : null;
+            if (conv is null || conv.LastInboundAt is not null || conv.Status != "ai") continue;
+            if (!await _repo.ClaimFollowUpAsync(r.Id)) continue;
+            if (await _contacts.IsOptedOutAsync(k.C.OrganizationId, r.Phone)) { await _repo.MarkFollowUpAsync(r.Id, "saltato", "nella lista STOP"); continue; }
+            var values = Values(k.C, r, k.O);
+            var missing = k.T.Variables.FirstOrDefault(v => !TemplateText.TryValue(values, v, out var x) || string.IsNullOrWhiteSpace(x));
+            if (missing is not null) { await _repo.MarkFollowUpAsync(r.Id, "saltato", $"manca il dato «{missing}» richiesto dal promemoria"); continue; }
+            var res = await _send.SendTemplateAsync(k.N, k.T, r.Phone, values, null, conv.Id);
+            if (!res.Ok) { await _repo.MarkFollowUpAsync(r.Id, "errore", res.Error); continue; }
+            if (res.MessageId > 0) await _wa.SetMessageConversationAsync(res.MessageId, conv.Id);
+            await _repo.MarkFollowUpAsync(r.Id, "inviato", null);
+            campaigns[campaignId] = k with { Room = k.Room - 1 };
+            sent++;
+        }
+        return sent;
     }
 
     private async Task Pause(int id, string reason)
@@ -136,12 +198,7 @@ public sealed class CampaignSender
                     && await _repo.RecentCampaignsAsync(c.OrganizationId, r.Phone, c.Id) >= maxC)
                 { await _repo.MarkAsync(r.Id, "saltato", $"ha già ricevuto {maxC} {(maxC == 1 ? "campagna" : "campagne")} negli ultimi 30 giorni", null); skipped++; continue; }
 
-                var values = new Dictionary<string, string?>
-                {
-                    ["nome"] = r.FirstName, ["cognome"] = r.LastName, ["abbonamento"] = r.Membership,
-                    ["scadenza"] = r.ExpiresOn?.ToString("dd/MM/yyyy"), ["palestra"] = c.GymName, ["sede"] = c.GymName, ["offerta"] = offer?.Title,
-                    ["servizio"] = r.Service, ["note"] = r.Notes
-                };
+                var values = Values(c, r, offer);
                 // Un dato mancante non si sostituisce con un trattino: il cliente riceverebbe un messaggio strano.
                 var missing = template!.Variables.FirstOrDefault(v => !TemplateText.TryValue(values, v, out var x) || string.IsNullOrWhiteSpace(x));
                 if (missing is not null) { await _repo.MarkAsync(r.Id, "saltato", $"manca il dato «{missing}» richiesto dal primo messaggio", null); skipped++; continue; }
