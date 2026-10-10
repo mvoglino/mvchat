@@ -88,6 +88,8 @@ public class NumeroModel : PageModel
             if (string.IsNullOrWhiteSpace(PhoneNumberId) || !PhoneNumberId.Trim().All(char.IsDigit)) { Error = "L'identificativo del numero (Phone number ID) è fatto solo di cifre: copialo dalla pagina Configurazione API di Meta."; return Page(); }
             if (string.IsNullOrWhiteSpace(WabaId) || !WabaId.Trim().All(char.IsDigit)) { Error = "L'identificativo dell'account WhatsApp (WABA ID) è fatto solo di cifre."; return Page(); }
             if (string.IsNullOrWhiteSpace(AccessToken) && (n.IsSimulated || !n.HasToken)) { Error = "Inserisci la chiave di accesso."; return Page(); }
+            if (!string.IsNullOrWhiteSpace(AccessToken) && (AccessToken.Trim().Contains('@') || AccessToken.Trim().Any(char.IsWhiteSpace) || AccessToken.Trim().Length < 10))
+            { Error = "La chiave di accesso non sembra quella di Meta (di solito inizia con «EAA» ed è molto lunga): ricopiala dall'utente di sistema. Attenzione al browser che a volte inserisce da solo la password."; return Page(); }
             n.PhoneNumberId = PhoneNumberId.Trim(); n.WabaId = WabaId.Trim();
             if (!string.IsNullOrWhiteSpace(AccessToken)) n.AccessTokenEnc = _service.Protect(AccessToken);
             n.Status = "da controllare";

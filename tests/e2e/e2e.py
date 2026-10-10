@@ -271,9 +271,12 @@ import hmac, hashlib, json as _json, sys as _sys, os as _os
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 import fake_meta
 fake = fake_meta.start(5079)
-s,_,_ = sa.post("/Impostazioni/WhatsApp", {"AppId":"123456","AppSecret":"testsecret","GraphVersion":"v23.0","GraphBaseUrl":"http://127.0.0.1:5079"})
+s,_,_ = sa.post("/Impostazioni/WhatsApp", {"AppId":"123456","AppSecret":"0123456789abcdef0123456789abcdef","GraphVersion":"v23.0","GraphBaseUrl":"http://127.0.0.1:5079"})
 _,html,_ = sa.req("/Impostazioni/WhatsApp"); vt = re.search(r'id="verifyToken">([a-f0-9]+)<', html)
-check("impostazioni Meta salvate e token di verifica mostrato", s == 302 and vt is not None and "testsecret" not in html, str(s))
+check("impostazioni Meta salvate e token di verifica mostrato", s == 302 and vt is not None and "0123456789abcdef0123456789abcdef" not in html, str(s))
+s,_,_ = sa.post("/Impostazioni/WhatsApp", {"AppId":"123456","AppSecret":"Admin12345x","GraphVersion":"v23.0","GraphBaseUrl":"http://127.0.0.1:5079"})
+_,html,_ = sa.req("/Impostazioni/WhatsApp")
+check("chiave segreta non di Meta (es. password inserita dal browser) rifiutata", "non sembra quella di Meta" in html, html[html.find("flash"):][:200])
 s,body,_ = Client().req(f"/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token={vt.group(1)}&hub.challenge=ok123")
 s2,_,_ = Client().req("/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=sbagliato&hub.challenge=ok123")
 check("verifica webhook di Meta", s == 200 and body == "ok123" and s2 == 403, f"{s} {body} {s2}")
@@ -321,7 +324,7 @@ payload = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[
   "statuses":[{"id":wamid,"status":"read","timestamp":"1","recipient_id":"393475551212"}],
   "messages":[{"from":"393475551212","id":"wamid.IN1","timestamp":"1","type":"text","text":{"body":"Quanto costa?"}}]}}]}]}
 raw = _json.dumps(payload).encode()
-sig = "sha256=" + hmac.new(b"testsecret", raw, hashlib.sha256).hexdigest()
+sig = "sha256=" + hmac.new(b"0123456789abcdef0123456789abcdef", raw, hashlib.sha256).hexdigest()
 def post_raw(sig_header):
     req = urllib.request.Request(BASE + "/webhooks/whatsapp", data=raw, headers={"Content-Type":"application/json","X-Hub-Signature-256":sig_header})
     try: return urllib.request.urlopen(req).status
@@ -332,12 +335,12 @@ post_raw(sig)  # Meta a volte ripete: non deve duplicare
 _,html,_ = d.req(bra_wa)
 check("stato 'letto' e messaggio del cliente registrati una volta sola", "Letto" in html and html.count("Quanto costa?") == 1)
 tev = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[{"field":"message_template_status_update","value":{"event":"REJECTED","message_template_id":"tpl123","message_template_name":"rinnovo_bra","reason":"INVALID_FORMAT"}}]}]}
-raw = _json.dumps(tev).encode(); sig = "sha256=" + hmac.new(b"testsecret", raw, hashlib.sha256).hexdigest(); post_raw(sig)
+raw = _json.dumps(tev).encode(); sig = "sha256=" + hmac.new(b"0123456789abcdef0123456789abcdef", raw, hashlib.sha256).hexdigest(); post_raw(sig)
 _,html,_ = d.req(tpl_b); check("avviso di Meta sul template registrato", "rifiutato" in html and "INVALID_FORMAT" in html)
 s,_,_ = oth.req(alba_wa); check("un altro gruppo non vede il WhatsApp dell'attività", s == 404, str(s))
 p999 = {"object":"whatsapp_business_account","entry":[{"id":"x","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"999"},
     "messages":[{"from":"393401234567","id":"wamid.UNK1","timestamp":"1","type":"text","text":{"body":"Ciao"}}]}}]}]}
-raw = _json.dumps(p999).encode(); post_raw("sha256=" + hmac.new(b"testsecret", raw, hashlib.sha256).hexdigest())
+raw = _json.dumps(p999).encode(); post_raw("sha256=" + hmac.new(b"0123456789abcdef0123456789abcdef", raw, hashlib.sha256).hexdigest())
 _,html,_ = sa.req("/Impostazioni/WhatsApp")
 check("diagnostica Meta: avvisi ricevuti in chiaro, numero non collegato, firme sbagliate contate", "Collegamento con Meta: cosa è arrivato" in html
       and "numero 999 non collegato a nessuna attività" in html and re.search(r"firma non valida: <b>[1-9]", html) is not None and "Ultima verifica dell'indirizzo riuscita: <b>mai</b>" not in html,
@@ -710,7 +713,7 @@ s,_,_ = sa.post("/Impostazioni/AI", voice_form)
 _,html,_ = sa.req("/Impostazioni/AI"); check("trascrizione dei vocali accesa da MVitalia", s == 302 and "Vocali dei clienti" in html and 'name="Transcribe" value="true" checked' in html, str(s))
 def hook_bra(msgs):
     p = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"111"},"messages":msgs}}]}]}
-    raw_ = _json.dumps(p).encode(); sig_ = "sha256=" + hmac.new(b"testsecret", raw_, hashlib.sha256).hexdigest()
+    raw_ = _json.dumps(p).encode(); sig_ = "sha256=" + hmac.new(b"0123456789abcdef0123456789abcdef", raw_, hashlib.sha256).hexdigest()
     rq = urllib.request.Request(BASE + "/webhooks/whatsapp", data=raw_, headers={"Content-Type":"application/json","X-Hub-Signature-256":sig_})
     try: return urllib.request.urlopen(rq).status
     except urllib.error.HTTPError as e: return e.code
@@ -853,7 +856,7 @@ alba_pid = f"sim-{alba}"
 _cg = [0]
 def hook(msgs):
     p = {"object":"whatsapp_business_account","entry":[{"id":"sim","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":alba_pid},"messages":msgs}}]}]}
-    raw_ = _json.dumps(p).encode(); sig_ = "sha256=" + hmac.new(b"testsecret", raw_, hashlib.sha256).hexdigest()
+    raw_ = _json.dumps(p).encode(); sig_ = "sha256=" + hmac.new(b"0123456789abcdef0123456789abcdef", raw_, hashlib.sha256).hexdigest()
     rq = urllib.request.Request(BASE + "/webhooks/whatsapp", data=raw_, headers={"Content-Type":"application/json","X-Hub-Signature-256":sig_})
     try: return urllib.request.urlopen(rq).status
     except urllib.error.HTTPError as e: return e.code

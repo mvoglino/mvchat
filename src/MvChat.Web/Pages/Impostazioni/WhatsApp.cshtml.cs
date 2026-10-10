@@ -73,6 +73,18 @@ public class WhatsAppModel : PageModel
     public async Task<IActionResult> OnPostAsync()
     {
         var c = _config.Current;
+        // La chiave segreta di Meta è fatta di 32 caratteri (cifre e lettere a-f): così si blocca, per esempio,
+        // la password di mvchat inserita per sbaglio dal browser.
+        if (!string.IsNullOrWhiteSpace(AppSecret) && !System.Text.RegularExpressions.Regex.IsMatch(AppSecret.Trim(), "^[0-9a-fA-F]{32}$"))
+        {
+            TempData["Err"] = "La chiave segreta dell'app non sembra quella di Meta (sono 32 caratteri, cifre e lettere a-f): ricopiala da Impostazioni dell'app → Di base → Chiave segreta. Niente è stato salvato.";
+            return Redirect("/Impostazioni/WhatsApp");
+        }
+        if (!string.IsNullOrWhiteSpace(AppId) && !AppId.Trim().All(char.IsDigit))
+        {
+            TempData["Err"] = "L'ID app di Meta è fatto solo di cifre. Niente è stato salvato.";
+            return Redirect("/Impostazioni/WhatsApp");
+        }
         c.Meta.AppId = (AppId ?? "").Trim();
         if (!string.IsNullOrWhiteSpace(AppSecret)) c.Meta.AppSecret = AppSecret.Trim(); // vuoto = resta quella di prima
         c.Meta.GraphVersion = System.Text.RegularExpressions.Regex.IsMatch(GraphVersion ?? "", @"^v\d+\.\d+$") ? GraphVersion! : "v23.0";

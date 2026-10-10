@@ -14,7 +14,7 @@
         var p = name == "Anthropic" ? Model.Anthropic : Model.OpenAi;
         <div class="panel-h" style="border-top:1px solid var(--line)"><h2>@label</h2></div>
         <div class="panel-b form">
-            <div class="field full"><label for="@(name)_Key">Chiave API</label><input id="@(name)_Key" name="@(name).Key" type="password" autocomplete="off" placeholder="@(hasKey ? "già inserita · lascia vuoto per non cambiarla" : "non ancora inserita")"><small>Viene salvata cifrata e non si rivede più.</small></div>
+            <div class="field full"><label for="@(name)_Key">Chiave API</label><input id="@(name)_Key" name="@(name).Key" type="password" autocomplete="new-password" placeholder="@(hasKey ? "già inserita · lascia vuoto per non cambiarla" : "non ancora inserita")"><small>Viene salvata cifrata e non si rivede più.</small></div>
             <div class="field"><label for="@(name)_Model">Modello</label><input id="@(name)_Model" name="@(name).Model" value="@p.Model"><small>Il nome esatto si trova nella documentazione del fornitore.</small></div>
             <div class="field"><label for="@(name)_BaseUrl">Indirizzo API</label><input id="@(name)_BaseUrl" name="@(name).BaseUrl" value="@p.BaseUrl"><small>Da non toccare: @url</small></div>
             <div class="field"><label for="@(name)_InputPrice">Prezzo testo letto ($ per milione di token)</label><input id="@(name)_InputPrice" name="@(name).InputPrice" value="@p.InputPrice" inputmode="decimal"></div>
