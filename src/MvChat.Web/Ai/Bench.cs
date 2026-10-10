@@ -64,7 +64,21 @@ public static class Bench
             await logUsage(r, c);
             if (!r.Ok) { checks.Add(new("ko", "L'AI non ha risposto: " + r.Error)); return new(s.Key, false, outcome, turns, checks, cost); }
             var reply = Guardrails.Parse(r.Text);
-            if (reply is null) { checks.Add(new("ko", "Risposta non nel formato richiesto: in una conversazione vera sarebbe passata alla reception.")); return new(s.Key, false, outcome, turns, checks, cost); }
+            if (reply is null)
+            {
+                // Come nelle conversazioni vere: un secondo tentativo chiedendo il formato giusto.
+                var retry = await ai.ChatAsync(system, turns.Append(new AiTurn("assistant", r.Text ?? "")).Append(new AiTurn("user", Guardrails.FormatRetry)).ToList());
+                var c2 = retry.CostUsd(ai.Settings); cost += c2;
+                await logUsage(retry, c2);
+                reply = retry.Ok ? Guardrails.Parse(retry.Text) : null;
+                if (reply is null)
+                {
+                    var raw = (r.Text ?? "").Trim();
+                    checks.Add(new("ko", "Risposta non nel formato richiesto nemmeno al secondo tentativo: in una conversazione vera sarebbe passata alla reception. L'AI aveva scritto: «" + (raw.Length > 300 ? raw[..300] + "…" : raw) + "»"));
+                    return new(s.Key, false, outcome, turns, checks, cost);
+                }
+                checks.Add(new("warn", "La prima risposta non era nel formato richiesto: mvchat ha chiesto di riscriverla e al secondo tentativo è andata bene."));
+            }
             if (Guardrails.PriceProblem(reply.Text, offer) is { } p) checks.Add(new("ko", $"Prezzo bloccato da mvchat: {p}."));
             if (Guardrails.LinkProblem(reply.Text, system) is { } lp) checks.Add(new("ko", $"Link bloccato da mvchat: {lp}."));
             if (replies == 0 && Guardrails.EnsureDisclosure(reply.Text, true, profile.AssistantName, "") != reply.Text)

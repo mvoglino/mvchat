@@ -811,6 +811,16 @@ hH = page(m, cidH)
 check("chiede una persona: passa alla reception anche se l'AI non lo fa", state(m, cidH).get("status") == "operatore" and "chiesto di parlare con una persona" in hH
       and "collega della reception" in hH and "Vuoi che ti racconti l'offerta" not in hH, hH[hH.find('class="stats"'):][:300])
 
+# Risposte dell'AI in formato imperfetto: lette lo stesso, o riscritte con un secondo tentativo
+cidJ,_,_ = start_conv(m, "333 777 0004", name="Ada")
+say(m, cidJ, "Formato rotto: come funziona?")
+check("risposta con testo attorno al JSON: letta lo stesso", "Vuoi che ti racconti l'offerta" in page(m, cidJ) and state(m, cidJ).get("status") == "ai")
+say(m, cidJ, "Formato pessimo, dimmi tutto")
+hJ = page(m, cidJ)
+check("risposta senza JSON: mvchat chiede di riscriverla e la conversazione continua", "Ti spiego volentieri come funziona" in hJ and "senza JSON" not in hJ and state(m, cidJ).get("status") == "ai", hJ[hJ.find('class="stats"'):][:200])
+say(m, cidJ, "Quanto risparmio rispetto al prezzo pieno?")
+check("il risparmio rispetto al prezzo pieno non è un prezzo inventato", "Risparmi 66 €" in page(m, cidJ) and state(m, cidJ).get("status") == "ai")
+
 # 5j-quinquies. Etichette sul cliente e sulla conversazione
 cvT = cvr[51]
 m.post(f"/Conversazioni/{cvT}?handler=Tag", {"tag":"VIP","su":"cliente"}, form_path=f"/Conversazioni/{cvT}")

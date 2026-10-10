@@ -21,6 +21,7 @@ def answer(system, last):
     if "reception" in t or "persona" in t: return r("Certo, ti faccio contattare da un collega della reception.", "operatore", "chiede una persona")
     if "docce" in t or "arrabbiato" in t or "ernia" in t: return r("Mi dispiace, passo subito la tua richiesta alla reception.", "operatore", "reclamo")
     if "va bene" in t or "procediamo" in t: return r("Perfetto! Ti aspettiamo in reception per completare il rinnovo.", "obiettivo_raggiunto", "ha accettato il rinnovo")
+    if "quanto risparmio" in t: return r("Risparmi 66 € rispetto al prezzo pieno di 465 €: il rinnovo costa 399 €.")
     if "mandami il link" in t:
         u = re.search(r"Link per aderire e pagare l'offerta: (\S+)", system)
         return r(f"Ecco il link per aderire: {u.group(1)}" if u else "Per aderire passa in reception.")
@@ -62,6 +63,9 @@ class Handler(BaseHTTPRequestHandler):
             if "errore ai" in last.lower(): return self._send(500, {"type": "error", "error": {"type": "api_error", "message": "Internal server error"}})
             system = body["system"][0]["text"]
             text = json.dumps(answer(system, last), ensure_ascii=False)
+            if "formato rotto" in last.lower(): text = "Ecco la risposta:\n```json\n" + text + "\n```\nSpero vada bene {ciao}"
+            if "formato pessimo" in last.lower(): text = "Certo, ti spiego tutto io senza JSON!"
+            if "nota del sistema" in last.lower(): text = json.dumps({"risposta": "Ti spiego volentieri come funziona l'offerta.", "esito": "in_corso", "nota": "riscritta"}, ensure_ascii=False)
             return self._send(200, {"id": "msg_1", "type": "message", "role": "assistant", "content": [{"type": "text", "text": text}],
                                     "usage": {"input_tokens": 120, "output_tokens": 40, "cache_read_input_tokens": 1800, "cache_creation_input_tokens": 0}})
         if self.path == "/v1/chat/completions":

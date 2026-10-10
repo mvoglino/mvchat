@@ -50,7 +50,7 @@ public sealed class AiClient
     public AiProviderSettings Settings => _config.Current.Ai.Current;
     public AiSettings AiConfig => _config.Current.Ai;
 
-    public async Task<AiResult> ChatAsync(string system, IReadOnlyList<AiTurn> turns, int maxTokens = 600)
+    public async Task<AiResult> ChatAsync(string system, IReadOnlyList<AiTurn> turns, int maxTokens = 1000)
     {
         var provider = Provider;
         var s = Settings;

@@ -137,6 +137,17 @@ public sealed class AssistantService
         if (!r.Ok) { await HandOffAsync(c, number, "l'AI non ha risposto: " + r.Error, sendHolding: true); return false; }
 
         var reply = Guardrails.Parse(r.Text);
+        if (reply is null)
+        {
+            // Un solo nuovo tentativo, chiedendo il formato giusto (succede di rado: testo prima del JSON, risposta troncata…).
+            _log.LogWarning("Assistente: risposta non leggibile nella conversazione {Id}: {Text}", c.Id, (r.Text ?? "").Length > 300 ? r.Text![..300] : r.Text);
+            var retryTurns = turns.Append(new AiTurn("assistant", r.Text ?? "")).Append(new AiTurn("user", Guardrails.FormatRetry)).ToList();
+            var r2 = await _ai.ChatAsync(system, retryTurns);
+            await _conv.LogUsageAsync(c.OrganizationId, c.GymId, c.Id, c.IsTest ? "prova" : "chat", r2, r2.CostUsd(_ai.Settings));
+            reply = r2.Ok ? Guardrails.Parse(r2.Text) : null;
+            if (await _conv.FreshStateAsync(c.Id) is not { Status: "ai" } fresh2) return false;
+            if (fresh2.NeedsReply) return true;
+        }
         if (reply is null) { await HandOffAsync(c, number, "risposta dell'AI non leggibile", sendHolding: true); return false; }
         // Il cliente ha chiesto una persona e l'AI non l'ha passata alla reception: lo fa mvchat, con il messaggio di cortesia.
         var lastCustomer = string.Join("\n", messages.AsEnumerable().Reverse().TakeWhile(m => m.Direction == "in").Select(m => m.Body));

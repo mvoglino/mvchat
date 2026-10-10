@@ -26,7 +26,6 @@ Rispondi SOLO con un oggetto JSON, senza altro testo prima o dopo:
 Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che ha detto il cliente (se non lo dice: non_interessato):
 " + string.Join("\n", RefusalReasons.All.Select(r => $"- {r.Code}: {r.ForAi}"));
 
-    private static readonly Regex Json = new(@"\{[\s\S]*\}");
 
     private static readonly Regex Url = new(@"(?:https?://|www\.)[^\s<>""«»]+", RegexOptions.IgnoreCase);
     private static string NormUrl(string u)
@@ -63,29 +62,63 @@ Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che 
         return null;
     }
 
-    /// <summary>Legge la risposta dell'AI. Se non è nel formato richiesto restituisce null: in quel caso non si manda nulla.</summary>
+    /// <summary>
+    /// Legge la risposta dell'AI. Accetta anche JSON dentro ```json … ``` o con del testo prima e dopo:
+    /// prova uno per uno gli oggetti {…} completi e usa il primo che ha la «risposta». Se non ce n'è nessuno restituisce null.
+    /// </summary>
     public static AiReply? Parse(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
-        var m = Json.Match(raw);
-        if (!m.Success) return null;
+        foreach (var candidate in JsonObjects(raw))
+            if (ParseOne(candidate) is { } reply) return reply;
+        return null;
+    }
+
+    /// <summary>Gli oggetti {…} bilanciati nel testo (le graffe dentro le stringhe non contano).</summary>
+    private static IEnumerable<string> JsonObjects(string s)
+    {
+        for (var start = s.IndexOf('{'); start >= 0; start = s.IndexOf('{', start + 1))
+        {
+            int depth = 0; var inString = false; var escape = false;
+            for (var i = start; i < s.Length; i++)
+            {
+                var ch = s[i];
+                if (inString)
+                {
+                    if (escape) escape = false;
+                    else if (ch == '\\') escape = true;
+                    else if (ch == '"') inString = false;
+                    continue;
+                }
+                if (ch == '"') inString = true;
+                else if (ch == '{') depth++;
+                else if (ch == '}' && --depth == 0) { yield return s[start..(i + 1)]; break; }
+            }
+        }
+    }
+
+    private static AiReply? ParseOne(string json)
+    {
         try
         {
-            var j = JsonNode.Parse(m.Value);
-            var text = j?["risposta"]?.GetValue<string>()?.Trim();
-            var esito = j?["esito"]?.GetValue<string>()?.Trim().ToLowerInvariant() ?? Outcomes.InCorso;
-            var nota = j?["nota"]?.GetValue<string>()?.Trim();
+            var j = JsonNode.Parse(json);
+            string? Str(string key) { try { return j?[key]?.ToString(); } catch { return null; } }
+            var text = Str("risposta")?.Trim();
+            var esito = Str("esito")?.Trim().ToLowerInvariant() ?? Outcomes.InCorso;
+            var nota = Str("nota")?.Trim();
             if (string.IsNullOrWhiteSpace(text)) return null;
             if (!new[] { Outcomes.InCorso, Outcomes.Raggiunto, Outcomes.Rifiuto, Outcomes.Operatore, Outcomes.OptOut }.Contains(esito)) esito = Outcomes.InCorso;
-            var motivo = j?["motivo"]?.GetValue<string>()?.Trim().ToLowerInvariant();
+            var motivo = Str("motivo")?.Trim().ToLowerInvariant();
             var reason = esito == Outcomes.Rifiuto ? (RefusalReasons.IsValid(motivo) ? motivo : RefusalReasons.Other) : null;
-            var ask = false;
-            try { ask = esito == Outcomes.Rifiuto && j?["chiedi_motivo"]?.GetValue<bool>() == true; } catch { }
+            var ask = esito == Outcomes.Rifiuto && string.Equals(Str("chiedi_motivo"), "true", StringComparison.OrdinalIgnoreCase);
             if (text.Length > 1000) text = text[..(char.IsHighSurrogate(text[999]) ? 999 : 1000)]; // senza spezzare un'emoji
             return new AiReply(text, esito, string.IsNullOrWhiteSpace(nota) ? null : (nota.Length > 480 ? nota[..480] : nota), reason, ask);
         }
         catch { return null; }
     }
+
+    /// <summary>Messaggio per chiedere all'AI di rifare la risposta nel formato giusto (un solo tentativo).</summary>
+    public const string FormatRetry = "(Nota del sistema, non del cliente) La tua risposta precedente non era nel formato richiesto. Riscrivila ora SOLO come oggetto JSON, come indicato nelle istruzioni, senza altro testo.";
 
     // Importi in euro scritti in tutti i modi comuni: «€ 49», «49€», «49,90 euro», «euro 299», «EUR 1.299,00», «€1299».
     private const string Num = @"\d{1,3}(?:[.'\u00A0\u202F]\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?";
@@ -96,6 +129,22 @@ Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che 
     private static readonly Regex Percent = new(
         @"sconto\s+(?:del\s+|di\s+|pari\s+al\s+)?(?<p>\d{1,3}(?:[.,]\d{1,2})?)\s*(?:%|per\s*cento)|(?<p>\d{1,3}(?:[.,]\d{1,2})?)\s*(?:%|per\s*cento)\s+(?:di\s+)?sconto|-\s?(?<p>\d{1,3}(?:[.,]\d{1,2})?)\s*%",
         RegexOptions.IgnoreCase);
+
+    private static readonly Regex SavingBefore = new(@"(risparmi\w*|sconto|riduzione|in\s+meno|meno\s+di|ti\s+togli\w*|abbuono)\W{0,3}(\w+\W+){0,3}$", RegexOptions.IgnoreCase);
+    private static readonly Regex SavingAfter = new(@"^\W{0,3}(di\s+)?(risparmio|sconto|in\s+meno|di\s+riduzione)", RegexOptions.IgnoreCase);
+
+    /// <summary>Gli importi che nel testo sono un risparmio o uno sconto, non un prezzo da pagare.</summary>
+    public static HashSet<decimal> SavingAmounts(string text)
+    {
+        var set = new HashSet<decimal>();
+        foreach (Match m in Money.Matches(text))
+        {
+            var before = text[Math.Max(0, m.Index - 40)..m.Index];
+            var after = text[(m.Index + m.Length)..Math.Min(text.Length, m.Index + m.Length + 25)];
+            if ((SavingBefore.IsMatch(before) || SavingAfter.IsMatch(after)) && Amounts(m.Value) is [var v]) set.Add(v);
+        }
+        return set;
+    }
 
     public static List<decimal> Amounts(string text)
     {
@@ -121,9 +170,13 @@ Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che 
         if (amounts.Count == 0) return null;
         if (offer?.Price is not decimal price) return $"l'assistente ha citato un importo ({amounts[0]:0.##} €) senza un'offerta con prezzo";
         var min = price * (1 - offer.MaxExtraDiscountPct / 100m) - 0.5m;
+        // Un risparmio («risparmi 100 €», «100 € di sconto») può arrivare al massimo a: prezzo pieno − prezzo + sconto extra concesso.
+        var maxSaving = (offer.FullPrice is decimal full && full > price ? full - price : 0m) + price * offer.MaxExtraDiscountPct / 100m + 0.5m;
+        var savings = SavingAmounts(text);
         foreach (var a in amounts)
         {
-            var ok = Math.Abs(a - price) < 0.01m || (offer.FullPrice is decimal f && Math.Abs(a - f) < 0.01m) || (a >= min && a <= price);
+            var ok = Math.Abs(a - price) < 0.01m || (offer.FullPrice is decimal f && Math.Abs(a - f) < 0.01m) || (a >= min && a <= price)
+                     || (savings.Contains(a) && a <= maxSaving);
             if (!ok) return $"l'assistente ha proposto {a:0.##} €, fuori da prezzo e sconto consentiti";
         }
         return null;
