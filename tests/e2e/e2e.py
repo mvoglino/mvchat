@@ -335,6 +335,13 @@ tev = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[{"fi
 raw = _json.dumps(tev).encode(); sig = "sha256=" + hmac.new(b"testsecret", raw, hashlib.sha256).hexdigest(); post_raw(sig)
 _,html,_ = d.req(tpl_b); check("avviso di Meta sul template registrato", "rifiutato" in html and "INVALID_FORMAT" in html)
 s,_,_ = oth.req(alba_wa); check("un altro gruppo non vede il WhatsApp dell'attività", s == 404, str(s))
+p999 = {"object":"whatsapp_business_account","entry":[{"id":"x","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"999"},
+    "messages":[{"from":"393401234567","id":"wamid.UNK1","timestamp":"1","type":"text","text":{"body":"Ciao"}}]}}]}]}
+raw = _json.dumps(p999).encode(); post_raw("sha256=" + hmac.new(b"testsecret", raw, hashlib.sha256).hexdigest())
+_,html,_ = sa.req("/Impostazioni/WhatsApp")
+check("diagnostica Meta: avvisi ricevuti in chiaro, numero non collegato, firme sbagliate contate", "Collegamento con Meta: cosa è arrivato" in html
+      and "numero 999 non collegato a nessuna attività" in html and re.search(r"firma non valida: <b>[1-9]", html) is not None and "Ultima verifica dell'indirizzo riuscita: <b>mai</b>" not in html,
+      html[html.find("Collegamento con Meta"):][:800])
 fake.shutdown()
 
 # 5e. Passo 5: assistente AI (verso un finto fornitore AI)

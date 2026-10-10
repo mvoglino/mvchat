@@ -3,13 +3,32 @@
 @{ ViewData["Title"] = "Impostazioni Meta"; }
 <p class="muted" style="margin:0">Dati dell'app Meta di MVitalia, uguali per tutti i gruppi. I numeri delle singole attività si collegano dalla pagina WhatsApp.</p>
 <section class="panel">
-    <div class="panel-h"><h2>Da copiare su Meta</h2><span class="muted">developers.facebook.com → la tua app → WhatsApp → Configurazione → Webhook</span></div>
+    <div class="panel-h"><h2>Da copiare su Meta</h2><span class="muted">developers.facebook.com → la tua app → Casi d'uso → Connettiti su WhatsApp → Personalizza → Configurazione (Passaggio 2)</span></div>
     <div class="panel-b form">
         <div class="field full"><label>URL di callback</label><code id="hookUrl">@Model.WebhookUrl</code></div>
         <div class="field full"><label>Token di verifica</label><code id="verifyToken">@Model.VerifyToken</code>
-            <small>Dopo averli inseriti su Meta, iscriviti ai campi <b>messages</b> e <b>message_template_status_update</b>.</small></div>
+            <small>Dopo averli inseriti su Meta, iscriviti ai campi <b>messages</b>, <b>message_template_status_update</b>, <b>phone_number_quality_update</b> e <b>account_update</b>. Prima di «Verifica e salva» su Meta salva qui sotto ID app e chiave segreta.</small></div>
     </div>
     <form method="post" asp-page-handler="NewToken" class="actions"><button class="btn sm" type="submit">Crea un nuovo token di verifica</button></form>
+</section>
+<section class="panel">
+    <div class="panel-h"><h2>Collegamento con Meta: cosa è arrivato</h2><span class="muted">per capire subito se i messaggi dei clienti arrivano a mvchat</span></div>
+    <div class="panel-b">
+        @{ string T(DateTime? d) => d is DateTime x ? x.ToRome().ToString("dd/MM HH:mm:ss") : "mai"; }
+        <ul style="margin:0 0 8px;padding-left:18px">
+            <li>Ultima verifica dell'indirizzo riuscita: <b>@T(MvChat.Web.WhatsApp.WebhookHandler.Stats.LastVerifyOk)</b>@if (MvChat.Web.WhatsApp.WebhookHandler.Stats.LastVerifyFailed is not null) {<span class="chip warn" style="margin-left:6px">verifica non riuscita alle @T(MvChat.Web.WhatsApp.WebhookHandler.Stats.LastVerifyFailed): token di verifica diverso</span>}</li>
+            <li>Ultimo avviso accettato: <b>@T(MvChat.Web.WhatsApp.WebhookHandler.Stats.LastAccepted)</b></li>
+            <li>Avvisi rifiutati per firma non valida: <b>@MvChat.Web.WhatsApp.WebhookHandler.Stats.Rejected</b>@if (MvChat.Web.WhatsApp.WebhookHandler.Stats.Rejected > 0) {<span class="chip bad" style="margin-left:6px">l'ultimo alle @T(MvChat.Web.WhatsApp.WebhookHandler.Stats.LastRejected): la «Chiave segreta dell'app» qui sotto non è quella giusta</span>}</li>
+        </ul>
+        <small class="muted">Questi tre dati si azzerano quando l'hosting riavvia mvchat. Se scrivi al numero e qui sotto non compare nulla, Meta non sta mandando gli avvisi: controlla su Meta che l'app sia pubblicata (Live), che il campo «messages» sia attivo e che l'URL di callback sia quello sopra.</small>
+    </div>
+    <div class="tbl"><table>
+        <thead><tr><th>Quando</th><th>Cosa</th><th>Esito</th></tr></thead>
+        <tbody>
+        @foreach (var e in Model.Events) { <tr><td class="muted">@e.At.ToRome().ToString("dd/MM HH:mm:ss")</td><td>@e.What</td><td><span class="chip @e.Css">@e.Outcome</span></td></tr> }
+        @if (Model.Events.Count == 0) { <tr><td colspan="3" class="muted">Nessun avviso ricevuto da Meta finora.</td></tr> }
+        </tbody>
+    </table></div>
 </section>
 <form method="post" class="panel">
     <div class="panel-h"><h2>Dati dell'app Meta</h2><span class="muted">developers.facebook.com → la tua app → Impostazioni dell'app → Di base</span></div>

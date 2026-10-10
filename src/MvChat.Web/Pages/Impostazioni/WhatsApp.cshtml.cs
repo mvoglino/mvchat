@@ -10,7 +10,32 @@ public class WhatsAppModel : PageModel
 {
     private readonly AppConfigStore _config;
     private readonly Repos _repos;
-    public WhatsAppModel(AppConfigStore config, Repos repos) { _config = config; _repos = repos; }
+    private readonly MvChat.Web.WhatsApp.WaRepo _wa;
+    public WhatsAppModel(AppConfigStore config, Repos repos, MvChat.Web.WhatsApp.WaRepo wa) { _config = config; _repos = repos; _wa = wa; }
+
+    /// <summary>Gli ultimi avvisi di Meta in parole semplici (per capire se il collegamento funziona).</summary>
+    public List<(DateTime At, string What, string Outcome, string Css)> Events { get; private set; } = new();
+
+    public static string Describe(string payload)
+    {
+        try
+        {
+            var j = System.Text.Json.Nodes.JsonNode.Parse(payload);
+            var ch = j?["entry"]?[0]?["changes"]?[0];
+            var field = ch?["field"]?.ToString() ?? "?";
+            var v = ch?["value"];
+            var pid = v?["metadata"]?["phone_number_id"]?.ToString();
+            var msgs = v?["messages"]?.AsArray().Count ?? 0;
+            var sts = v?["statuses"]?.AsArray().Count ?? 0;
+            var parts = new List<string> { field };
+            if (msgs > 0) parts.Add($"{msgs} messaggio/i del cliente ({v!["messages"]![0]?["type"]})");
+            if (sts > 0) parts.Add($"{sts} stato/i ({v!["statuses"]![0]?["status"]})");
+            if (field == "message_template_status_update") parts.Add($"template {v?["message_template_name"]}: {v?["event"]}");
+            if (pid is not null) parts.Add("numero " + pid);
+            return string.Join(" · ", parts);
+        }
+        catch { return "avviso non leggibile"; }
+    }
 
     [BindProperty] public string? AppId { get; set; }
     [BindProperty] public string? AppSecret { get; set; }
@@ -27,7 +52,14 @@ public class WhatsAppModel : PageModel
     public string VerifyToken { get; private set; } = "";
     public string WebhookUrl => $"{Request.Scheme}://{Request.Host}/webhooks/whatsapp";
 
-    public void OnGet() => Load();
+    public async Task OnGetAsync()
+    {
+        Load();
+        foreach (var e in await _wa.LastEventsAsync(15))
+            Events.Add((e.At, Describe(e.Payload),
+                e.Error is not null ? "errore: " + e.Error : e.Note is not null ? "non usato: " + e.Note : "lavorato",
+                e.Error is not null ? "bad" : e.Note is not null ? "warn" : "good"));
+    }
 
     private void Load()
     {

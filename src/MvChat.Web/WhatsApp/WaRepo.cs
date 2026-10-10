@@ -180,8 +180,14 @@ public sealed class WaRepo
     public Task<long> LogEventAsync(string payload) =>
         _db.ScalarAsync<long>("INSERT INTO WaWebhookEvents (Payload) VALUES (@payload); SELECT LAST_INSERT_ID();", new { payload });
 
-    public Task MarkEventAsync(long id, string? error) =>
-        _db.ExecuteAsync("UPDATE WaWebhookEvents SET Processed=@ok, Error=@error WHERE Id=@id", new { id, ok = error is null, error = Clip(error, 500) });
+    public Task MarkEventAsync(long id, string? error, string? note = null) =>
+        _db.ExecuteAsync("UPDATE WaWebhookEvents SET Processed=@ok, Error=@error, Note=COALESCE(@note, Note) WHERE Id=@id",
+            new { id, ok = error is null, error = Clip(error, 500), note = Clip(note, 300) });
+
+    /// <summary>Gli ultimi avvisi arrivati da Meta, per capire subito se il collegamento funziona.</summary>
+    public Task<List<(long Id, DateTime At, string Payload, bool Processed, string? Error, string? Note)>> LastEventsAsync(int limit) => _db.QueryAsync(
+        "SELECT Id, ReceivedAt, Payload, Processed, Error, Note FROM WaWebhookEvents ORDER BY Id DESC LIMIT @limit", new { limit },
+        r => (r.GetInt64(0), r.GetDateTime(1), r.GetString(2), r.GetBoolean(3), r.Str("Error"), r.Str("Note")));
 
     /// <summary>Avvisi non elaborati per un problema momentaneo (database occupato, errore imprevisto): si riprovano fino a 5 volte nelle 24 ore.</summary>
     public async Task<List<(long Id, string Payload)>> RetryEventsAsync(int limit)

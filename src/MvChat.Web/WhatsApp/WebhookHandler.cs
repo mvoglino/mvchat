@@ -26,19 +26,38 @@ public sealed class WebhookHandler
     public WebhookHandler(AppConfigStore config, WaRepo repo, WaService wa, ContactsRepo contacts, ConversationRepo convs, AiQueue queue, MediaStore media, AiClient ai, ILogger<WebhookHandler> log)
     { _config = config; _repo = repo; _wa = wa; _contacts = contacts; _convs = convs; _queue = queue; _media = media; _ai = ai; _log = log; }
 
+    /// <summary>Per la pagina Impostazioni Meta: cosa è arrivato da Meta dall'ultimo avvio (si azzera quando l'hosting riavvia mvchat).</summary>
+    public static class Stats
+    {
+        public static DateTime? LastVerifyOk, LastVerifyFailed, LastAccepted, LastRejected;
+        public static int Rejected;
+    }
+
+    /// <summary>Nota sull'avviso in lavorazione (es. «numero non collegato»), salvata insieme all'avviso.</summary>
+    private string? _note;
+
     /// <summary>Conferma iniziale dell'indirizzo: Meta manda una parola d'ordine e si aspetta indietro il "challenge".</summary>
     public string? Verify(string? mode, string? token, string? challenge)
     {
         var expected = _config.Current.Meta.WebhookVerifyToken;
-        return mode == "subscribe" && !string.IsNullOrEmpty(expected) && FixedEquals(token ?? "", expected) ? challenge : null;
+        var ok = mode == "subscribe" && !string.IsNullOrEmpty(expected) && FixedEquals((token ?? "").Trim(), expected);
+        if (ok) Stats.LastVerifyOk = DateTime.UtcNow;
+        else { Stats.LastVerifyFailed = DateTime.UtcNow; _log.LogWarning("Verifica del webhook da Meta non riuscita: token di verifica diverso da quello di mvchat"); }
+        return ok ? challenge : null;
     }
 
     public bool SignatureOk(byte[] body, string? header)
     {
         var secret = _config.Current.Meta.AppSecret;
-        if (string.IsNullOrEmpty(secret) || string.IsNullOrEmpty(header) || !header.StartsWith("sha256=")) return false;
-        var expected = "sha256=" + Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), body)).ToLowerInvariant();
-        return FixedEquals(header.ToLowerInvariant(), expected);
+        var ok = !string.IsNullOrEmpty(secret) && !string.IsNullOrEmpty(header) && header.StartsWith("sha256=")
+                 && FixedEquals(header.ToLowerInvariant(), "sha256=" + Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), body)).ToLowerInvariant());
+        if (ok) { Stats.LastAccepted = DateTime.UtcNow; return true; }
+        // Un avviso con la firma sbagliata di solito vuol dire chiave segreta dell'app non inserita o copiata male.
+        var first = Stats.Rejected == 0 || Stats.LastRejected < DateTime.UtcNow.AddMinutes(-10);
+        Stats.Rejected++; Stats.LastRejected = DateTime.UtcNow;
+        if (first) _log.LogWarning("Avviso di Meta rifiutato: firma non valida. Controlla la «Chiave segreta dell'app» in Impostazioni Meta{Missing}",
+            string.IsNullOrEmpty(secret) ? " (non è stata inserita)" : "");
+        return false;
     }
 
     private static bool FixedEquals(string a, string b) =>
@@ -51,7 +70,7 @@ public sealed class WebhookHandler
         try
         {
             await DispatchAsync(payload);
-            await _repo.MarkEventAsync(eventId, null);
+            await _repo.MarkEventAsync(eventId, null, _note);
         }
         catch (Exception ex)
         {
@@ -126,10 +145,20 @@ public sealed class WebhookHandler
         var phoneNumberId = value["metadata"]?["phone_number_id"]?.GetValue<string>();
         if (phoneNumberId is null) return;
         var number = await _repo.NumberByPhoneNumberIdAsync(phoneNumberId);
-        if (number is null) { _log.LogWarning("Messaggio per un numero sconosciuto: {Id}", phoneNumberId); return; }
+        if (number is null)
+        {
+            _note = $"numero {phoneNumberId} non collegato a nessuna attività in mvchat";
+            _log.LogWarning("Messaggio per un numero sconosciuto: {Id} (collegalo a un'attività in WhatsApp: numero e template)", phoneNumberId);
+            return;
+        }
         // Un numero Meta riceve i messaggi solo se Meta ha confermato almeno una volta numero e chiave:
         // nessuno può "prenotare" il numero di un altro. Se poi la chiave scade, i messaggi (e gli STOP) continuano ad arrivare.
-        if (!number.IsSimulated && number.VerifiedAt is null) { _log.LogWarning("Messaggio per un numero mai verificato: {Id}", phoneNumberId); return; }
+        if (!number.IsSimulated && number.VerifiedAt is null)
+        {
+            _note = $"numero {phoneNumberId} collegato ma mai verificato con Meta (chiave di accesso da controllare)";
+            _log.LogWarning("Messaggio per un numero mai verificato: {Id}", phoneNumberId);
+            return;
+        }
 
         Exception? failure = null;
         foreach (var st in value["statuses"]?.AsArray() ?? new())
