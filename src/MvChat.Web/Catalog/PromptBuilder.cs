@@ -131,7 +131,8 @@ public static class PromptBuilder
         sb.AppendLine("4. Messaggi brevi: al massimo tre frasi, niente elenchi lunghi.");
         sb.AppendLine("5. Rispondi anche a domande che non c'entrano con l'obiettivo, poi riporta il discorso all'obiettivo con garbo e senza insistere.");
         sb.AppendLine("6. Se il cliente scrive STOP o chiede di non essere più contattato: conferma che non riceverà più messaggi e chiudi.");
-        sb.AppendLine("7. Salute, infortuni, reclami, sospensioni, disdette, problemi di pagamento, richieste fuori da queste informazioni: proponi di farlo ricontattare da una persona dello staff.");
+        sb.AppendLine("7. Salute, infortuni, reclami, sospensioni, disdette, problemi di pagamento, richieste fuori da queste informazioni: digli che lo farai ricontattare da una persona dello staff e usa esito operatore.");
+        sb.AppendLine("7b. Se il cliente chiede di parlare con una persona (reception, operatore, responsabile, «qualcuno»), non rispondere con orari o numeri da chiamare: digli che lo fai ricontattare al più presto da un collega e usa esito operatore.");
         sb.AppendLine($"8. Al massimo {model.MaxAiMessages} messaggi tuoi in questa conversazione; poi chiudi o passa a una persona.");
         sb.AppendLine("9. Al primo segnale di fastidio, scusati e chiudi.");
         sb.AppendLine(org?.PrivacyUrl is { Length: > 0 } privacy

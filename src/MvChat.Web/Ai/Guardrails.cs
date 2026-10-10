@@ -37,6 +37,19 @@ Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che 
         return u.TrimEnd('/');
     }
 
+    // Il cliente chiede una persona: «posso parlare con qualcuno della reception?», «vorrei un operatore», «chiamatemi».
+    private static readonly Regex HumanRequest = new(
+        @"\b(parlare|parlarne|sentire|chiamare|contattare|passa(mi|temi)|mi\s+passi|mi\s+passate|mettermi\s+in\s+contatto)\b[^.?!\n]{0,40}\b(person[ae]|qualcuno|operator[ei]|operatrice|umano|reception|responsabile|direttor[ei]|direttrice|segreteria|staff|collega|titolare)\b"
+        + @"|\b(voglio|vorrei|posso\s+avere|mi\s+serve|chiedo)\b[^.?!\n]{0,25}\b(un[ao']?\s*)?(operator[ei]|operatrice|persona\s+(vera|reale)|essere\s+umano|umano)\b"
+        + @"|\b(richiamatemi|chiamatemi|mi\s+(ri)?chiam(i|ate)|potete\s+(ri)?chiamarmi|puoi\s+(ri)?chiamarmi)\b",
+        RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Il cliente ha chiesto esplicitamente di parlare con una persona. Se l'AI non passa la conversazione alla reception
+    /// (a volte risponde con gli orari), lo fa mvchat: la regola non dipende da quanto è bravo il modello.
+    /// </summary>
+    public static bool WantsHuman(string? text) => !string.IsNullOrWhiteSpace(text) && HumanRequest.IsMatch(text);
+
     /// <summary>
     /// L'assistente può mandare solo i link scritti nelle sue istruzioni (offerta, prenotazione, informativa privacy, sito):
     /// un link inventato o modificato non parte e la conversazione passa a una persona.

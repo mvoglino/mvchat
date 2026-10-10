@@ -138,6 +138,10 @@ public sealed class AssistantService
 
         var reply = Guardrails.Parse(r.Text);
         if (reply is null) { await HandOffAsync(c, number, "risposta dell'AI non leggibile", sendHolding: true); return false; }
+        // Il cliente ha chiesto una persona e l'AI non l'ha passata alla reception: lo fa mvchat, con il messaggio di cortesia.
+        var lastCustomer = string.Join("\n", messages.AsEnumerable().Reverse().TakeWhile(m => m.Direction == "in").Select(m => m.Body));
+        if (Guardrails.WantsHuman(lastCustomer) && reply.Outcome is not (Outcomes.Operatore or Outcomes.OptOut))
+        { await HandOffAsync(c, number, "il cliente ha chiesto di parlare con una persona", sendHolding: true); return false; }
         if (Guardrails.PriceProblem(reply.Text, offer) is { } priceIssue) { await HandOffAsync(c, number, priceIssue, sendHolding: true); return false; }
         if (Guardrails.PercentProblem(reply.Text, offer) is { } pctIssue) { await HandOffAsync(c, number, pctIssue, sendHolding: true); return false; }
         if (Guardrails.LinkProblem(reply.Text, system) is { } linkIssue) { await HandOffAsync(c, number, linkIssue, sendHolding: true); return false; }

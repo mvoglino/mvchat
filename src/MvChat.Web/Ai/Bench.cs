@@ -70,6 +70,14 @@ public static class Bench
             if (replies == 0 && Guardrails.EnsureDisclosure(reply.Text, true, profile.AssistantName, "") != reply.Text)
                 checks.Add(new("warn", "Nella prima risposta non si è presentato come assistente virtuale: lo aggiunge mvchat."));
             if (reply.Text.Length > 700) checks.Add(new("warn", $"Risposta lunga ({reply.Text.Length} caratteri): su WhatsApp meglio messaggi brevi."));
+            if (Guardrails.WantsHuman(line) && reply.Outcome is not (Outcomes.Operatore or Outcomes.OptOut))
+            {
+                // Come nelle conversazioni vere: mvchat passa comunque la conversazione alla reception.
+                checks.Add(new("warn", "L'AI non ha passato da sola la conversazione alla reception: lo ha fatto mvchat, mandando al cliente il messaggio di cortesia."));
+                turns.Add(new AiTurn("assistant", Guardrails.HoldingMessage + "  (messaggio di mvchat al posto di: «" + reply.Text + "»)"));
+                outcome = Outcomes.Operatore;
+                break;
+            }
             turns.Add(new AiTurn("assistant", reply.Text));
             replies++;
             outcome = reply.Outcome;

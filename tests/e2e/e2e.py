@@ -804,6 +804,13 @@ say(m, cidF, "C'è un sito falso dove pagare?")
 hF = page(m, cidF)
 check("link non previsto: non parte, risponde una persona", "truffa.example.com" not in hF[hF.find('id="chat"'):].split("Serve una persona")[0] and state(m, cidF).get("status") == "operatore" and "link non previsto" in hF, hF[hF.find('class="stats"'):][:300])
 
+# Il cliente chiede una persona ma l'AI risponde d'altro: mvchat passa comunque alla reception
+cidH,_,_ = start_conv(m, "333 777 0003", name="Ugo")
+say(m, cidH, "Vorrei un operatore, grazie")
+hH = page(m, cidH)
+check("chiede una persona: passa alla reception anche se l'AI non lo fa", state(m, cidH).get("status") == "operatore" and "chiesto di parlare con una persona" in hH
+      and "collega della reception" in hH and "Vuoi che ti racconti l'offerta" not in hH, hH[hH.find('class="stats"'):][:300])
+
 # 5j-quinquies. Etichette sul cliente e sulla conversazione
 cvT = cvr[51]
 m.post(f"/Conversazioni/{cvT}?handler=Tag", {"tag":"VIP","su":"cliente"}, form_path=f"/Conversazioni/{cvT}")
