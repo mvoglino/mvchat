@@ -130,10 +130,25 @@ public sealed class WaService
         if (NotReady(n, token) is { } why) { await _repo.SetNumberCheckAsync(n.Id, "incompleto", null, null, null, why); return why; }
         var r = await _api.PhoneInfoAsync(n.PhoneNumberId!, token!);
         if (!r.Ok) { await _repo.SetNumberCheckAsync(n.Id, "errore", null, null, null, r.Error); return r.Error; }
+        var warning = await EnsureSubscribedAsync(n, token!);
         await _repo.SetNumberCheckAsync(n.Id, "attivo",
             r.Body?["quality_rating"]?.GetValue<string>(), r.Body?["messaging_limit_tier"]?.GetValue<string>(),
-            r.Body?["verified_name"]?.GetValue<string>(), null);
-        return null;
+            r.Body?["verified_name"]?.GetValue<string>(), warning);
+        return warning;
+    }
+
+    /// <summary>
+    /// Perché Meta mandi a mvchat i messaggi dei clienti, l'app deve essere iscritta all'account WhatsApp Business.
+    /// A volte (account creati a mano, numeri di prova) l'iscrizione manca: mvchat la controlla e, se serve, la fa da sé.
+    /// Restituisce un avviso da mostrare se non ci riesce.
+    /// </summary>
+    private async Task<string?> EnsureSubscribedAsync(WaNumber n, string token)
+    {
+        if (string.IsNullOrEmpty(n.WabaId)) return null;
+        var list = await _api.SubscribedAppsAsync(n.WabaId, token);
+        if (list.Ok && list.Body?["data"] is System.Text.Json.Nodes.JsonArray apps && apps.Count > 0) return null; // già iscritta
+        var sub = await _api.SubscribeAppAsync(n.WabaId, token);
+        return sub.Ok ? null : "Meta non manderà a mvchat i messaggi dei clienti finché l'app non è iscritta all'account WhatsApp: iscrizione non riuscita (" + sub.Error + ")";
     }
 
     public static string MapTemplateStatus(string meta) => meta.ToUpperInvariant() switch

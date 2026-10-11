@@ -76,6 +76,13 @@ public sealed class CloudApi
     public Task<ApiResult> PhoneInfoAsync(string phoneNumberId, string token) =>
         GetAsync($"{phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier", token);
 
+    /// <summary>Le app iscritte agli avvisi dell'account WhatsApp: senza l'iscrizione, Meta non manda a mvchat i messaggi dei clienti.</summary>
+    public Task<ApiResult> SubscribedAppsAsync(string wabaId, string token) => GetAsync($"{wabaId}/subscribed_apps", token);
+
+    /// <summary>Iscrive l'app (quella della chiave di accesso) agli avvisi dell'account WhatsApp.</summary>
+    public Task<ApiResult> SubscribeAppAsync(string wabaId, string token) =>
+        PostAsync($"{wabaId}/subscribed_apps", token, new JsonObject(), r => r?["success"]?.ToString());
+
     /// <summary>Dove scaricare un file mandato dal cliente (vocale, foto): Meta risponde con un indirizzo valido pochi minuti.</summary>
     public Task<ApiResult> MediaInfoAsync(string mediaId, string token) => GetAsync(Uri.EscapeDataString(mediaId), token);
 

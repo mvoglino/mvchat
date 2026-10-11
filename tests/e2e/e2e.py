@@ -304,6 +304,8 @@ s,_,_ = d.post(bra_wa + "?handler=Save", {"Mode":"meta","DisplayPhone":"0172 000
 _,html,_ = d.req(bra_wa)
 check("numero Meta collegato e controllato (qualità letta da Meta)", s == 302 and "GREEN" in html and "TIER_1K" in html, str(s))
 check("chiave di accesso mai mostrata in pagina", "good-token" not in html)
+subs = [r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/222/subscribed_apps")]
+check("collegando il numero, mvchat iscrive l'app agli avvisi dell'account WhatsApp (una volta sola)", len(subs) == 1, str(len(subs)))
 tpl_b = f"/WhatsApp/Template/{gym['FitActive Bra']}"
 s,_,_ = d.post(tpl_b + "?handler=Create", {"Name":"rinnovo_bra","Category":"MARKETING","Body":body_tpl}, form_path=tpl_b)
 sent = [r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/222/message_templates")]
