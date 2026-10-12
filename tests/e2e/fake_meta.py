@@ -5,7 +5,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 REQUESTS = []
 TOKEN = "good-token"
 MEDIA = {}  # file mandati dai clienti: id → (tipo, contenuto)
-SUBSCRIBED = False  # l'app è iscritta agli avvisi dell'account WhatsApp?
+SUBSCRIBED = []  # ID delle app iscritte agli avvisi dell'account WhatsApp
+TOKEN_APP = "123456"  # l'app per cui è stata generata la chiave di accesso
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -32,7 +33,7 @@ class Handler(BaseHTTPRequestHandler):
             if mid not in MEDIA: return self._send(400, {"error": {"message": "Unsupported get request", "code": 100}})
             return self._send(200, {"url": f"http://127.0.0.1:5079/download/{mid}", "mime_type": MEDIA[mid][0], "file_size": len(MEDIA[mid][1]), "id": mid})
         if self.path.endswith("/subscribed_apps"):
-            return self._send(200, {"data": [{"whatsapp_business_api_data": {"id": "123456"}}] if SUBSCRIBED else []})
+            return self._send(200, {"data": [{"whatsapp_business_api_data": {"id": a, "name": "App " + a}} for a in SUBSCRIBED]})
         if "/message_templates" in self.path:
             return self._send(200, {"data": [{"id": "tpl123", "name": "x", "status": "APPROVED", "language": "it"}]})
         return self._send(200, {"display_phone_number": "+39 0172 000000", "verified_name": "FitActive Bra", "quality_rating": "GREEN", "messaging_limit_tier": "TIER_1K", "id": "111"})
@@ -43,8 +44,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.endswith("/message_templates"):
             return self._send(200, {"id": "tpl123", "status": "PENDING", "category": body.get("category")})
         if self.path.endswith("/subscribed_apps"):
-            global SUBSCRIBED
-            SUBSCRIBED = True
+            if TOKEN_APP not in SUBSCRIBED: SUBSCRIBED.append(TOKEN_APP)
             return self._send(200, {"success": True})
         if self.path.endswith("/messages"):
             return self._send(200, {"messaging_product": "whatsapp", "contacts": [{"wa_id": body.get("to")}], "messages": [{"id": f"wamid.TEST{len(REQUESTS)}"}]})

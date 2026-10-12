@@ -13,9 +13,10 @@ public sealed class WaService
     private readonly WaRepo _repo;
     private readonly CloudApi _api;
     private readonly IDataProtector _protector;
-    public WaService(WaRepo repo, CloudApi api, IDataProtectionProvider dp)
+    private readonly MvChat.Web.Infrastructure.AppConfigStore _config;
+    public WaService(WaRepo repo, CloudApi api, IDataProtectionProvider dp, MvChat.Web.Infrastructure.AppConfigStore config)
     {
-        _repo = repo; _api = api;
+        _repo = repo; _api = api; _config = config;
         _protector = dp.CreateProtector("mvchat.wa.token.v1");
     }
 
@@ -145,10 +146,34 @@ public sealed class WaService
     private async Task<string?> EnsureSubscribedAsync(WaNumber n, string token)
     {
         if (string.IsNullOrEmpty(n.WabaId)) return null;
+        var appId = _config.Current.Meta.AppId?.Trim() ?? "";
         var list = await _api.SubscribedAppsAsync(n.WabaId, token);
-        if (list.Ok && list.Body?["data"] is System.Text.Json.Nodes.JsonArray apps && apps.Count > 0) return null; // già iscritta
+        // Non basta che ci sia "un'app" iscritta: deve esserci proprio quella di mvchat (ID app in Impostazioni Meta).
+        if (list.Ok && IsSubscribed(list.Body, appId)) return null;
         var sub = await _api.SubscribeAppAsync(n.WabaId, token);
-        return sub.Ok ? null : "Meta non manderà a mvchat i messaggi dei clienti finché l'app non è iscritta all'account WhatsApp: iscrizione non riuscita (" + sub.Error + ")";
+        if (!sub.Ok) return "Meta non manderà a mvchat i messaggi dei clienti finché l'app non è iscritta all'account WhatsApp: iscrizione non riuscita (" + sub.Error + ")";
+        if (appId.Length == 0) return null;
+        var after = await _api.SubscribedAppsAsync(n.WabaId, token);
+        if (!after.Ok || IsSubscribed(after.Body, appId)) return null;
+        return $"Meta non manderà a mvchat i messaggi dei clienti: all'account WhatsApp è iscritta un'altra app ({AppNames(after.Body)}), non quella di mvchat (ID app {appId}). "
+             + "La chiave di accesso è stata generata per un'altra app: rigenerala dall'utente di sistema scegliendo l'app con ID " + appId + ", inseriscila qui e premi «Controlla collegamento».";
+    }
+
+    private static IEnumerable<System.Text.Json.Nodes.JsonNode?> Apps(System.Text.Json.Nodes.JsonNode? body) =>
+        body?["data"] is System.Text.Json.Nodes.JsonArray a ? a : Enumerable.Empty<System.Text.Json.Nodes.JsonNode?>();
+
+    private static bool IsSubscribed(System.Text.Json.Nodes.JsonNode? body, string appId)
+    {
+        var apps = Apps(body).ToList();
+        if (appId.Length == 0) return apps.Count > 0; // ID app non inserito: ci si accontenta come prima
+        return apps.Any(x => (x?["whatsapp_business_api_data"]?["id"]?.ToString() ?? x?["id"]?.ToString()) == appId);
+    }
+
+    private static string AppNames(System.Text.Json.Nodes.JsonNode? body)
+    {
+        var names = Apps(body).Select(x => x?["whatsapp_business_api_data"]?["name"]?.ToString() is { Length: > 0 } nm
+            ? $"{nm}, ID {x?["whatsapp_business_api_data"]?["id"]}" : "ID " + x?["whatsapp_business_api_data"]?["id"]).ToList();
+        return names.Count == 0 ? "nessuna" : string.Join("; ", names);
     }
 
     public static string MapTemplateStatus(string meta) => meta.ToUpperInvariant() switch

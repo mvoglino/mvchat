@@ -300,12 +300,19 @@ check("chi scrive STOP finisce nella lista STOP e riceve conferma", "+3933399988
 s,html,_ = m.post(alba_wa + "?handler=Test", {"TemplateId":tid,"To":"333 999 8877"}, form_path=alba_wa)
 check("nessun invio a chi è nella lista STOP", s == 200 and "lista STOP" in html)
 bra_wa = f"/WhatsApp/Numero/{gym['FitActive Bra']}"
+fake_meta.SUBSCRIBED[:] = ["999"]  # sull'account WhatsApp c'è già un'altra app iscritta, non quella di mvchat
 s,_,_ = d.post(bra_wa + "?handler=Save", {"Mode":"meta","DisplayPhone":"0172 000000","DisplayName":"FitActive Bra","PhoneNumberId":"111","WabaId":"222","AccessToken":"good-token"}, form_path=bra_wa)
 _,html,_ = d.req(bra_wa)
 check("numero Meta collegato e controllato (qualità letta da Meta)", s == 302 and "GREEN" in html and "TIER_1K" in html, str(s))
 check("chiave di accesso mai mostrata in pagina", "good-token" not in html)
 subs = [r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/222/subscribed_apps")]
 check("collegando il numero, mvchat iscrive l'app agli avvisi dell'account WhatsApp (una volta sola)", len(subs) == 1, str(len(subs)))
+fake_meta.SUBSCRIBED[:] = ["999"]; fake_meta.TOKEN_APP = "777"  # chiave di accesso generata per un'altra app
+s,_,_ = d.post(bra_wa + "?handler=Check", {}, form_path=bra_wa)
+_,html,_ = d.req(bra_wa)
+check("chiave di un'altra app: mvchat avvisa che Meta non manderà i messaggi e dice quale app serve", "ID app 123456" in html and "App 777" in html, html[:0])
+fake_meta.SUBSCRIBED[:] = ["123456"]; fake_meta.TOKEN_APP = "123456"
+d.post(bra_wa + "?handler=Check", {}, form_path=bra_wa)
 tpl_b = f"/WhatsApp/Template/{gym['FitActive Bra']}"
 s,_,_ = d.post(tpl_b + "?handler=Create", {"Name":"rinnovo_bra","Category":"MARKETING","Body":body_tpl}, form_path=tpl_b)
 sent = [r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/222/message_templates")]
