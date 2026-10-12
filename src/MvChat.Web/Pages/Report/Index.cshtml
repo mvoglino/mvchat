@@ -9,7 +9,7 @@
     string Usd(decimal v) => "$ " + v.ToString(v < 10 ? "0.00" : "#,0", it);
     var levelName = Model.Level switch { "clienti" => "Cliente", "attivita" => "Attività", _ => "Campagna" };
 }
-@section Actions { <a class="btn" href="@Model.Url(Model.Group, Model.Activity, "Csv")">Scarica per Excel</a> }
+@section Actions { <a class="btn primary" href="@Model.ExcelUrl()" title="Un file Excel con un foglio per ogni tipologia: riepilogo, dettaglio, tipi di campagna, offerte, primi messaggi, motivi, giorni, clienti da ricontattare">Scarica Excel</a> }
 <nav class="crumbs" aria-label="Percorso">
     @for (var i = 0; i < Model.Crumbs.Count; i++)
     {
@@ -44,17 +44,24 @@
 </nav>
 <p class="muted" style="margin:0">Dal @Model.From.ToString("d MMMM yyyy", it) al @Model.To.ToString("d MMMM yyyy", it) · le conversazioni di prova non sono conteggiate.</p>
 
+@{
+    var prevLabel = $"rispetto a {Model.PrevFrom.ToString("d MMM", it)} – {Model.PrevTo.ToString("d MMM", it)}";
+    var tp = Model.Prev;
+    string D(decimal cur, decimal prev, bool lower = false) { var (txt, css) = IndexModel.Delta(cur, prev, lower); return $"<em class=\"delta {css}\" title=\"{prevLabel}\">{txt}</em>"; }
+    var costNow = Model.CostEur(t); var costPrev = Model.CostEur(tp);
+}
 <div class="stats report-kpis">
-    <div class="stat"><b>@t.Sent.ToString("N0", it)</b><span>primi messaggi inviati · @ReportRow.Pct(t.Read, t.Sent)% letti</span></div>
-    <div class="stat"><b>@ReportRow.Pct(t.Replied, t.Conversations)%</b><span>hanno risposto · @t.Replied.ToString("N0", it) clienti</span></div>
-    <div class="stat ok"><b>@t.Reached.ToString("N0", it)</b><span>obiettivi raggiunti · @ReportRow.Pct(t.Reached, t.Conversations)% dei contattati</span></div>
-    <div class="stat"><b>@ReportRow.Pct(t.AiOnly, t.Replied)%</b><span>dialoghi gestiti solo dall'assistente · @t.WithOperator con operatore</span></div>
-    <div class="stat"><b>@Eur(t.MetaCostEur(meta))</b><span>costo Meta stimato (fatturato alle attività)</span></div>
-    <div class="stat"><b>@Usd(t.AiCostUsd)</b><span>consumo AI nel periodo</span></div>
+    <div class="stat"><b>@t.Sent.ToString("N0", it)</b><span>primi messaggi inviati · @ReportRow.Pct(t.Read, t.Sent)% letti</span>@Html.Raw(D(t.Sent, tp.Sent))</div>
+    <div class="stat"><b>@ReportRow.Pct(t.Replied, t.Conversations)%</b><span>hanno risposto · @t.Replied.ToString("N0", it) clienti</span>@Html.Raw(D(ReportRow.Pct(t.Replied, t.Conversations), ReportRow.Pct(tp.Replied, tp.Conversations)))</div>
+    <div class="stat ok"><b>@t.Reached.ToString("N0", it)</b><span>obiettivi raggiunti · @ReportRow.Pct(t.Reached, t.Conversations)% dei contattati</span>@Html.Raw(D(t.Reached, tp.Reached))</div>
+    <div class="stat ok"><b>@Eur(Model.Value)</b><span>valore stimato generato · adesioni × prezzo dell'offerta</span>@Html.Raw(D(Model.Value, Model.PrevValue))</div>
+    <div class="stat"><b>@Eur(costNow)</b><span>costo Meta + AI · @(t.Reached > 0 ? Eur(Math.Round(costNow / t.Reached, 2)) + " per obiettivo" : "nessun obiettivo")@(costNow > 0 && Model.Value > 0 ? $" · ogni € ne ha generati {(Model.Value / costNow).ToString("0.#", it)}" : "")</span>@Html.Raw(D(costNow, costPrev, true))</div>
+    <div class="stat"><b>@ReportRow.Pct(t.AiOnly, t.Replied)%</b><span>dialoghi gestiti solo dall'assistente · @t.WithOperator con operatore</span>@Html.Raw(D(ReportRow.Pct(t.AiOnly, t.Replied), ReportRow.Pct(tp.AiOnly, tp.Replied)))</div>
 </div>
+<p class="muted" style="margin:0;font-size:12.5px">Le frecce confrontano con lo stesso numero di giorni subito prima (@prevLabel). Costo Meta stimato dal listino (lo paga ogni attività a Meta); consumo AI convertito in euro con il cambio dei rendiconti.</p>
 
 <section class="panel">
-    <div class="panel-h"><h2>Andamento giorno per giorno</h2><span class="muted">passa sopra le barre per i numeri</span></div>
+    <div class="panel-h"><h2>Andamento giorno per giorno</h2><span class="muted">passa sopra le barre per i numeri · <a href="@Model.ExcelUrl("giorni")">scarica Excel</a></span></div>
     <div class="panel-b charts">
         @foreach (var (label, pick) in new (string, Func<DayPoint, int>)[] { ("Primi messaggi inviati", d => d.Sent), ("Messaggi ricevuti dai clienti", d => d.Received), ("Obiettivi raggiunti", d => d.Reached) })
         {
@@ -76,8 +83,89 @@
     </div>
 </section>
 
+<section class="panel" id="tipologie">
+    <div class="panel-h"><h2>Risultati per tipologia</h2><span class="muted">quale tipo di campagna, offerta e primo messaggio funziona meglio</span></div>
+    <nav class="tabs" style="padding:0 16px" aria-label="Tipologie">
+        <a href="#tip-tipi" onclick="return showTip('tipi')" id="tab-tipi" aria-current="page">Tipo di campagna</a>
+        <a href="#tip-offerte" onclick="return showTip('offerte')" id="tab-offerte">Offerta</a>
+        <a href="#tip-template" onclick="return showTip('template')" id="tab-template">Primo messaggio</a>
+    </nav>
+    @foreach (var (code, head, rows, withGym, withValue) in new (string, string, List<BreakdownRow>, bool, bool)[] {
+        ("tipi", "Tipo di campagna", Model.ByGoal, false, false), ("offerte", "Offerta", Model.ByOffer, true, true), ("template", "Primo messaggio", Model.ByTemplate, true, false) })
+    {
+        var best = rows.Where(r => r.Contacted >= 5).OrderByDescending(r => (double)r.Reached / r.Contacted).FirstOrDefault();
+        <div class="tip-pane" id="tip-@code" hidden="@(code != "tipi")">
+            <div class="tbl"><table class="report-table">
+                <thead><tr><th>@head</th>@if (withGym) {<th>Attività</th>}<th class="num">Contattati</th><th class="num">Risposte</th><th class="num">Obiettivi</th><th class="num">Rifiuti / stop</th>@if (withValue) {<th class="num">Prezzo</th><th class="num">Valore stimato</th>}<th style="width:22%"></th></tr></thead>
+                <tbody>
+                @foreach (var r in rows)
+                {
+                    var pct = ReportRow.Pct(r.Reached, r.Contacted);
+                    <tr>
+                        <td><b>@r.Label</b>@if (best is not null && r == best && rows.Count > 1) {<span class="chip good" style="margin-left:6px">migliore</span>}</td>
+                        @if (withGym) {<td>@r.Detail</td>}
+                        <td class="num">@r.Contacted</td>
+                        <td class="num">@r.Replied <span class="muted">(@ReportRow.Pct(r.Replied, r.Contacted)%)</span></td>
+                        <td class="num"><b>@r.Reached</b> <span class="muted">(@pct%)</span></td>
+                        <td class="num">@r.Refused / @r.OptOut</td>
+                        @if (withValue) {<td class="num">@(r.Price is decimal p ? Eur(p) : "–")</td><td class="num"><b>@Eur(r.Value)</b></td>}
+                        <td><span class="hbar" style="--w:@pct%" title="@pct% dei contattati ha raggiunto l'obiettivo"></span></td>
+                    </tr>
+                }
+                @if (rows.Count == 0) { <tr><td colspan="9" class="muted">Nessun dato nel periodo scelto.</td></tr> }
+                </tbody>
+            </table></div>
+            <div class="panel-b muted" style="font-size:12.5px">La barra è la % di obiettivi raggiunti sui contattati; «migliore» va alla riga con la % più alta tra quelle con almeno 5 contattati. <a href="@Model.ExcelUrl(code)">Scarica Excel</a></div>
+        </div>
+    }
+    <script>
+        function showTip(code) {
+            document.querySelectorAll('.tip-pane').forEach(p => p.hidden = p.id !== 'tip-' + code);
+            document.querySelectorAll('#tipologie .tabs a').forEach(a => a.setAttribute('aria-current', a.id === 'tab-' + code ? 'page' : 'false'));
+            return false;
+        }
+    </script>
+</section>
+
+<section class="panel" id="ricontattare">
+    @{ var rc = Model.Recontact; }
+    <div class="panel-h"><h2>Clienti da ricontattare</h2><span class="muted">@rc.Count.ToString("N0", it) clienti · <a href="@Model.ExcelUrl("ricontattare")">scarica Excel</a></span></div>
+    <div class="stats" style="padding:12px 16px 0">
+        @foreach (var c in RecontactRow.Categories)
+        {
+            <div class="stat"><b>@rc.Count(x => x.Category == c).ToString("N0", it)</b><span>@RecontactRow.Label(c)</span></div>
+        }
+    </div>
+    @{ var top = rc.Where(x => x.Category != RecontactRow.Silent).Take(30).ToList(); }
+    @if (top.Count == 0)
+    {
+        <div class="panel-b muted">Nessun cliente da richiamare nel periodo (oltre a chi non ha risposto, che trovi nel file Excel).</div>
+    }
+    else
+    {
+        <div class="tbl"><table class="report-table">
+            <thead><tr><th>Cliente</th><th>Motivo</th><th>Attività · campagna</th><th>Nota</th><th>Ultimo messaggio</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var r in top)
+            {
+                <tr>
+                    <td><b>@r.Name</b><div class="muted">@r.Phone</div></td>
+                    <td>@RecontactRow.Label(r.Category)</td>
+                    <td>@r.GymName<div class="muted">@(r.CampaignName ?? r.GoalName)</div></td>
+                    <td class="muted">@r.Note</td>
+                    <td class="muted">@(r.LastInboundAt?.ToRome().ToString("dd/MM HH:mm"))</td>
+                    <td><a class="btn sm" href="/Conversazioni/@r.ConversationId">Apri</a></td>
+                </tr>
+            }
+            </tbody>
+        </table></div>
+        @if (rc.Count(x => x.Category != RecontactRow.Silent) > top.Count) { <div class="panel-b muted">Mostrati i primi @top.Count: l'elenco completo è nel file Excel.</div> }
+    }
+    <div class="panel-b muted" style="font-size:12.5px">Esclusi i clienti nella lista STOP e chi in seguito ha raggiunto l'obiettivo. Nel file Excel ci sono anche i clienti che non hanno risposto; con le frecce dell'intestazione scegli il motivo.</div>
+</section>
+
 <section class="panel" id="motivi">
-    <div class="panel-h"><h2>Motivi dei rifiuti</h2><span class="muted">@Model.ReasonsTotal.ToString("N0", it) rifiuti nel periodo · <a href="@Model.Url(Model.Group, Model.Activity, "Motivi")">scarica per Excel</a></span></div>
+    <div class="panel-h"><h2>Motivi dei rifiuti</h2><span class="muted">@Model.ReasonsTotal.ToString("N0", it) rifiuti nel periodo · <a href="@Model.ExcelUrl("motivi")">scarica Excel</a></span></div>
     @if (Model.ReasonsTotal == 0)
     {
         <div class="panel-b muted">Nessun rifiuto nel periodo scelto.</div>
@@ -102,7 +190,7 @@
 </section>
 
 <section class="panel">
-    <div class="panel-h"><h2>@(Model.Level switch { "clienti" => "Gruppi e attività singole", "attivita" => "Confronto tra le attività", _ => "Campagne nel periodo" })</h2></div>
+    <div class="panel-h"><h2>@(Model.Level switch { "clienti" => "Gruppi e attività singole", "attivita" => "Confronto tra le attività", _ => "Campagne nel periodo" })</h2><span class="muted"><a href="@Model.ExcelUrl("dettaglio")">scarica Excel</a></span></div>
     <div class="tbl"><table class="report-table">
         <thead><tr><th>@levelName</th><th class="num">Inviati</th><th class="num">Risposte</th><th class="num">Obiettivi</th><th class="num">Rifiuti / stop</th><th class="num">Solo AI / operatore</th><th class="num">Meta</th><th class="num">AI</th></tr></thead>
         <tbody>

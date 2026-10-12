@@ -68,6 +68,26 @@ public class IndexModel : PageModel
         return Redirect($"/Fatturazione?mese={Month}");
     }
 
+    /// <summary>I rendiconti del mese in Excel: un foglio di riepilogo per intestatario e uno con tutte le righe.</summary>
+    public async Task<IActionResult> OnGetExcelAsync(string? mese)
+    {
+        if (!await LoadAsync(mese)) return Forbid();
+        var wb = new Xlsx();
+        var sum = wb.Sheet("Riepilogo").Title($"Rendiconti {Month}").Blank()
+            .Header("Intestatario", "Ragione sociale", "Partita IVA", "Email", "Imponibile", "IVA %", "IVA", "Totale", "Stato");
+        foreach (var s in Items)
+        {
+            sum.Row(s.RecipientName, s.LegalName ?? "", s.VatNumber ?? "", s.Email ?? "", new XEur(s.Subtotal), s.VatPct, new XEur(s.VatAmount), new XEur(s.Total), s.Closed ? "chiuso" : "provvisorio");
+        }
+        var det = wb.Sheet("Righe").Title($"Righe dei rendiconti {Month}").Blank()
+            .Header("Mese", "Intestatario", "Ragione sociale", "Partita IVA", "Indirizzo", "Email", "Attività", "Voce", "Descrizione", "Importo", "IVA %", "Stato");
+        foreach (var s in Items)
+            foreach (var l in s.Lines)
+                det.Row(s.Month, s.RecipientName, s.LegalName ?? "", s.VatNumber ?? "", s.Address ?? "", s.Email ?? "", l.Activity,
+                    l.Kind == "canone" ? "Abbonamento" : "Consumo AI", l.Description, new XEur(l.Amount), s.VatPct, s.Closed ? "chiuso" : "provvisorio");
+        return File(wb.ToBytes(), Xlsx.ContentType, $"rendiconti-{Month}.xlsx");
+    }
+
     /// <summary>Tutte le righe del mese per il programma di contabilità (si apre con Excel).</summary>
     public async Task<IActionResult> OnGetCsvAsync(string? mese)
     {

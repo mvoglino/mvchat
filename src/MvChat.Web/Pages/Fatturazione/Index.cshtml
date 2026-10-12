@@ -8,7 +8,8 @@
     var open = Model.Items.Count(x => !x.Closed);
 }
 @section Actions {
-    <a class="btn" href="/Fatturazione?mese=@Model.Month&handler=Csv">Scarica per Excel</a>
+    <a class="btn" href="/Fatturazione?mese=@Model.Month&handler=Excel">Scarica Excel</a>
+    <a class="btn" href="/Fatturazione?mese=@Model.Month&handler=Csv" title="Formato semplice per importare le righe nel programma di contabilità">CSV per la contabilità</a>
     @if (Model.Me.IsSuperAdmin) { <a class="btn" href="/Impostazioni/Fatturazione">Impostazioni</a> }
 }
 <p class="muted" style="margin:0">@(Model.Me.IsSuperAdmin ? "Quanto fatturare a ogni cliente: abbonamento per ogni attività più il consumo dell'assistente AI. Le attività di un gruppo sono nel rendiconto del gruppo." : "Il riepilogo di quanto MVitalia ti fattura: abbonamento per ogni attività più il consumo dell'assistente AI.") Non è una fattura elettronica: è la base per emetterla.</p>

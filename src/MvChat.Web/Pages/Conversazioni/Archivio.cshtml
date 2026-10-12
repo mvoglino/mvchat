@@ -4,7 +4,7 @@
     ViewData["Title"] = "Archivio dialoghi";
     var f = Model.F; var st = Model.Stats; var many = Model.Gyms.Count > 1;
 }
-@section Actions { <a class="btn" href="/Conversazioni">Postazione reception</a><a class="btn" href="@Model.Url(f.Kind)&handler=Csv">Scarica per Excel</a> }
+@section Actions { <a class="btn" href="/Conversazioni">Postazione reception</a><a class="btn" href="@Model.Url(f.Kind)&handler=Excel">Scarica Excel</a> }
 <p class="muted" style="margin:0">Tutti i dialoghi con i clienti. <b>Solo assistente AI</b>: nessuna persona dell'attività è intervenuta. <b>Con operatore</b>: la conversazione è passata alla reception o un operatore ha scritto almeno un messaggio.</p>
 <div class="stats">
     <a class="stat" href="@Model.Url("")"><b>@st.Total</b><span>dialoghi · @st.Replied con risposta del cliente</span></a>
@@ -49,5 +49,5 @@
     @if (Model.Items.Count == 0) { <tr><td colspan="8" class="muted">Nessun dialogo con questi filtri.</td></tr> }
     </tbody>
 </table></div>
-@if (Model.Items.Count == ArchivioModel.PageSize) { <div class="panel-b muted">Mostrati i @ArchivioModel.PageSize più recenti: restringi i filtri o scarica il file per Excel.</div> }
+@if (Model.Items.Count == ArchivioModel.PageSize) { <div class="panel-b muted">Mostrati i @ArchivioModel.PageSize più recenti: restringi i filtri o scarica il file Excel.</div> }
 </section>

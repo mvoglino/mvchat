@@ -40,6 +40,29 @@ public sealed class ReportRow
 /// <summary>Un motivo di rifiuto con quante volte compare.</summary>
 public sealed record ReasonCount(string? Code, string Label, int Count);
 
+/// <summary>Una riga dei risultati divisi per tipo di campagna, offerta o template.</summary>
+public sealed record BreakdownRow(string Label, string? Detail, int Contacted, int Replied, int Reached, int Refused, int OptOut, decimal? Price)
+{
+    /// <summary>Valore stimato: adesioni × prezzo dell'offerta (solo per le offerte con prezzo).</summary>
+    public decimal Value => Reached * (Price ?? 0m);
+}
+
+/// <summary>Un cliente da ricontattare, con il motivo per cui compare nell'elenco.</summary>
+public sealed record RecontactRow(long ConversationId, int GymId, string Category, string Name, string Phone, string GymName, string? CampaignName,
+    string GoalName, string? Membership, DateTime? ExpiresOn, string? Service, string Outcome, string? RefusalReason, string? Note,
+    DateTime? LastInboundAt, DateTime CreatedAt)
+{
+    public const string Later = "rimanda", Open = "aperta", Silent = "silenzio";
+    public static readonly string[] Categories = { Later, Open, Silent };
+    public static string Label(string c) => c switch
+    {
+        Later => "Ha chiesto di risentirsi più avanti",
+        Open => "Ha risposto, non ancora concluso",
+        Silent => "Non ha risposto",
+        _ => c
+    };
+}
+
 /// <summary>Un giorno del grafico (ora italiana).</summary>
 public sealed record DayPoint(DateTime Day, int Sent, int Received, int Reached);
 
@@ -140,6 +163,67 @@ public sealed class ReportRepo
         var unknown = rows.Where(r => !Ai.RefusalReasons.IsValid(r.Code)).Sum(r => r.N);
         if (unknown > 0) list.Add(new ReasonCount(null, "Non indicato", unknown));
         return list.OrderByDescending(x => x.Count).ThenBy(x => x.Code == Ai.RefusalReasons.Other || x.Code is null).ToList();
+    }
+
+    private const string GymFilter = "(@FOrg=-1 OR g.OrganizationId=@FOrg) AND (@FGym=-1 OR g.Id=@FGym)";
+
+    /// <summary>
+    /// Risultati divisi per tipo di campagna (modello di obiettivo), per offerta o per template (primo messaggio).
+    /// Si contano le conversazioni nate nel periodo, come nel resto del report; prove escluse.
+    /// </summary>
+    public async Task<List<BreakdownRow>> BreakdownAsync(Scope s, DateTime fromUtc, DateTime toUtc, int? orgId, int? gymId, string by)
+    {
+        var (select, join, group) = by switch
+        {
+            "offerta" => ("o.Title AS L, g.Name AS D, o.Price AS P", "JOIN Offers o ON o.Id=v.OfferId", "o.Id, o.Title, g.Name, o.Price"),
+            "template" => ("t.Name AS L, g.Name AS D, NULL AS P", "JOIN Campaigns k ON k.Id=v.CampaignId JOIN WaTemplates t ON t.Id=k.TemplateId", "t.Id, t.Name, g.Name"),
+            _ => ("COALESCE(m.Name, 'Messaggio spontaneo') AS L, NULL AS D, NULL AS P", "LEFT JOIN GoalModels m ON m.Id=v.GoalModelId", "COALESCE(m.Name, 'Messaggio spontaneo')")
+        };
+        return await _db.QueryAsync(
+            $@"SELECT {select}, COUNT(*) AS N, SUM(v.LastInboundAt IS NOT NULL) AS R, SUM(v.Outcome='obiettivo_raggiunto') AS G,
+                      SUM(v.Outcome='rifiuto') AS X, SUM(v.Outcome='opt_out') AS S
+               FROM Conversations v JOIN Gyms g ON g.Id=v.GymId {join}
+               WHERE {ScopeWhere} AND {GymFilter} AND v.IsTest=0 AND v.CreatedAt>=@fromUtc AND v.CreatedAt<@toUtc
+               GROUP BY {group} ORDER BY N DESC, L",
+            Args(s, fromUtc, toUtc, orgId, gymId),
+            r => new BreakdownRow(r.Str("L") ?? "", r.Str("D"), I(r, "N"), I(r, "R"), I(r, "G"), I(r, "X"), I(r, "S"),
+                r.IsDBNull(r.GetOrdinal("P")) ? null : Convert.ToDecimal(r.GetValue(r.GetOrdinal("P")))));
+    }
+
+    private static int I(DbDataReader r, string n) { var o = r.GetOrdinal(n); return r.IsDBNull(o) ? 0 : Convert.ToInt32(r.GetValue(o)); }
+
+    /// <summary>
+    /// Clienti da ricontattare tra le conversazioni nate nel periodo: chi ha chiesto di risentirsi più avanti,
+    /// chi ha risposto senza arrivare a una conclusione, chi non ha mai risposto.
+    /// Esclusi: chi è nella lista STOP e chi poi ha raggiunto l'obiettivo. Un cliente compare una volta sola per attività.
+    /// </summary>
+    public async Task<List<RecontactRow>> RecontactAsync(Scope s, DateTime fromUtc, DateTime toUtc, int? orgId, int? gymId, int max = 20000)
+    {
+        var rows = await _db.QueryAsync(
+            $@"SELECT v.Id, v.GymId, v.ContactName, v.ContactPhone, g.Name AS GymName, k.Name AS CampName, COALESCE(m.Name, 'Messaggio spontaneo') AS Goal,
+                      v.Membership, v.ExpiresOn, v.Service, v.Outcome, v.RefusalReason, v.OutcomeNote, v.LastInboundAt, v.CreatedAt,
+                      CASE WHEN v.Outcome='rifiuto' AND v.RefusalReason='rimanda' THEN 'rimanda'
+                           WHEN v.LastInboundAt IS NOT NULL THEN 'aperta' ELSE 'silenzio' END AS Cat
+               FROM Conversations v JOIN Gyms g ON g.Id=v.GymId
+               LEFT JOIN Campaigns k ON k.Id=v.CampaignId LEFT JOIN GoalModels m ON m.Id=v.GoalModelId
+               WHERE {ScopeWhere} AND {GymFilter} AND v.IsTest=0 AND v.CreatedAt>=@fromUtc AND v.CreatedAt<@toUtc
+                 AND ((v.Outcome='rifiuto' AND v.RefusalReason='rimanda')
+                      OR (v.LastInboundAt IS NOT NULL AND v.Outcome IN ('in_corso','operatore'))
+                      OR (v.LastInboundAt IS NULL AND v.Outcome IN ('in_corso','nessuna_risposta')))
+                 AND NOT EXISTS (SELECT 1 FROM OptOuts x WHERE x.OrganizationId=v.OrganizationId AND x.Phone=v.ContactPhone)
+                 AND NOT EXISTS (SELECT 1 FROM Conversations w WHERE w.GymId=v.GymId AND w.ContactPhone=v.ContactPhone AND w.IsTest=0
+                                   AND w.Outcome IN ('obiettivo_raggiunto','opt_out') AND w.CreatedAt>=v.CreatedAt)
+               ORDER BY FIELD(Cat,'rimanda','aperta','silenzio'), COALESCE(v.LastInboundAt, v.CreatedAt) DESC
+               LIMIT {Math.Clamp(max, 1, 50000)}",
+            Args(s, fromUtc, toUtc, orgId, gymId),
+            r => new RecontactRow(Convert.ToInt64(r.GetValue(r.GetOrdinal("Id"))), r.Int("GymId"), r.Str("Cat")!, r.Str("ContactName") ?? "", r.Str("ContactPhone") ?? "", r.Str("GymName") ?? "",
+                r.Str("CampName"), r.Str("Goal") ?? "", r.Str("Membership"),
+                r.Date("ExpiresOn"), r.Str("Service"), r.Str("Outcome") ?? "",
+                r.Str("RefusalReason"), r.Str("OutcomeNote"),
+                r.Date("LastInboundAt"), r.GetDateTime(r.GetOrdinal("CreatedAt"))));
+        // Stesso cliente in più campagne della stessa attività: resta la riga più importante (l'ordine lo garantisce).
+        var seen = new HashSet<(int, string)>();
+        return rows.Where(x => seen.Add((x.GymId, x.Phone))).ToList();
     }
 
     /// <summary>

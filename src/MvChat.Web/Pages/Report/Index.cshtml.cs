@@ -32,6 +32,18 @@ public class IndexModel : PageModel
     public List<ReasonCount> Reasons { get; private set; } = new();
     public int ReasonsTotal => Reasons.Sum(r => r.Count);
     public MetaSettings Meta => _config.Current.Meta;
+    public List<BreakdownRow> ByGoal { get; private set; } = new();
+    public List<BreakdownRow> ByOffer { get; private set; } = new();
+    public List<BreakdownRow> ByTemplate { get; private set; } = new();
+    public List<RecontactRow> Recontact { get; private set; } = new();
+    /// <summary>Lo stesso numero di giorni subito prima del periodo scelto, per il confronto.</summary>
+    public DateTime PrevFrom { get; private set; }
+    public DateTime PrevTo { get; private set; }
+    public ReportRow Prev { get; private set; } = new();
+    public decimal Value => ByOffer.Sum(o => o.Value);
+    public decimal PrevValue { get; private set; }
+    /// <summary>Costo del periodo in euro: messaggi Meta stimati + AI convertita in euro.</summary>
+    public decimal CostEur(ReportRow r) => Math.Round(r.MetaCostEur(Meta) + r.AiCostUsd * _config.Current.Billing.UsdToEur, 2);
     /// <summary>Le attività visibili, per scegliere subito quella da guardare (solo se sono più di una).</summary>
     public List<Gym> Gyms { get; private set; } = new();
     /// <summary>Periodi pronti: un clic e i totali si aggiornano.</summary>
@@ -101,8 +113,22 @@ public class IndexModel : PageModel
             }
         }
         if (Level != "campagne") { Total = new ReportRow(); foreach (var r in Rows) Total.Add(r); }
-        Days = await _report.DailyAsync(Me, fromUtc, toUtc, gym is null ? Group : null, gym?.Id);
-        Reasons = await _report.RefusalReasonsAsync(Me, fromUtc, toUtc, gym is null ? Group : null, gym?.Id);
+        var fOrg = gym is null ? Group : null; var fGym = gym?.Id;
+        Days = await _report.DailyAsync(Me, fromUtc, toUtc, fOrg, fGym);
+        Reasons = await _report.RefusalReasonsAsync(Me, fromUtc, toUtc, fOrg, fGym);
+        ByGoal = await _report.BreakdownAsync(Me, fromUtc, toUtc, fOrg, fGym, "tipo");
+        ByOffer = await _report.BreakdownAsync(Me, fromUtc, toUtc, fOrg, fGym, "offerta");
+        ByTemplate = await _report.BreakdownAsync(Me, fromUtc, toUtc, fOrg, fGym, "template");
+        Recontact = await _report.RecontactAsync(Me, fromUtc, toUtc, fOrg, fGym);
+
+        // Confronto: stessi giorni subito prima, stesso perimetro.
+        var days = (To - From).Days + 1;
+        PrevTo = From.AddDays(-1); PrevFrom = PrevTo.AddDays(-(days - 1));
+        var pFromUtc = PrevFrom.FromRome(); var pToUtc = PrevTo.AddDays(1).FromRome();
+        var prevList = await _report.ActivitiesAsync(Me, pFromUtc, pToUtc, gym is not null ? gym.OrganizationId : Group);
+        Prev = new ReportRow();
+        foreach (var x in prevList.Where(x => gym is null || x.Row.Id == gym.Id)) Prev.Add(x.Row);
+        PrevValue = (await _report.BreakdownAsync(Me, pFromUtc, pToUtc, fOrg, fGym, "offerta")).Sum(o => o.Value);
         return true;
     }
 
@@ -139,9 +165,138 @@ public class IndexModel : PageModel
         return File(bytes, "text/csv; charset=utf-8", $"motivi-rifiuti-{From:yyyyMMdd}-{To:yyyyMMdd}.csv");
     }
 
+    /// <summary>Le parti del report che si possono scaricare da sole (una per riquadro).</summary>
+    public static readonly (string Code, string Label)[] Parts =
+    {
+        ("riepilogo", "Riepilogo"), ("dettaglio", "Dettaglio"), ("tipi", "Per tipo di campagna"), ("offerte", "Per offerta"),
+        ("template", "Per primo messaggio"), ("motivi", "Motivi dei rifiuti"), ("giorni", "Giorno per giorno"), ("ricontattare", "Da ricontattare")
+    };
+
+    /// <summary>
+    /// Il report in un file Excel con un foglio per tipologia (o solo la parte scelta).
+    /// Ogni tabella ha il filtro automatico: il cliente sceglie le righe con le frecce dell'intestazione.
+    /// </summary>
+    public async Task<IActionResult> OnGetExcelAsync(DateTime? dal, DateTime? al, int? gruppo, int? attivita, string? parte)
+    {
+        if (!await LoadAsync(dal, al, gruppo, attivita)) return NotFound();
+        var only = Parts.Any(p => p.Code == parte) ? parte : null;
+        bool Want(string code) => only is null || only == code;
+        var wb = new Xlsx();
+        var period = $"dal {From:dd/MM/yyyy} al {To:dd/MM/yyyy} · prove escluse";
+        var levelName = Level switch { "clienti" => "Cliente", "attivita" => "Attività", _ => "Campagna" };
+
+        if (Want("riepilogo"))
+        {
+            var sh = wb.Sheet("Riepilogo").Title("Report · " + Title).Note(period)
+                .Note($"Confronto con lo stesso numero di giorni subito prima: dal {PrevFrom:dd/MM/yyyy} al {PrevTo:dd/MM/yyyy}").Blank()
+                .Header("Indicatore", "Periodo scelto", "Periodo precedente", "Differenza");
+            void Line(string name, object cur, object prev, object diff) => sh.Row(name, cur, prev, diff);
+            Line("Primi messaggi inviati", Total.Sent, Prev.Sent, Change(Total.Sent, Prev.Sent));
+            Line("Messaggi letti", Total.Read, Prev.Read, Change(Total.Read, Prev.Read));
+            Line("Clienti contattati", Total.Conversations, Prev.Conversations, Change(Total.Conversations, Prev.Conversations));
+            Line("Clienti che hanno risposto", Total.Replied, Prev.Replied, Change(Total.Replied, Prev.Replied));
+            Line("% di risposta", XPct.Of(Total.Replied, Total.Conversations), XPct.Of(Prev.Replied, Prev.Conversations), "");
+            Line("Obiettivi raggiunti", Total.Reached, Prev.Reached, Change(Total.Reached, Prev.Reached));
+            Line("% obiettivo sui contattati", XPct.Of(Total.Reached, Total.Conversations), XPct.Of(Prev.Reached, Prev.Conversations), "");
+            Line("Rifiuti", Total.Refused, Prev.Refused, Change(Total.Refused, Prev.Refused));
+            Line("Non contattare più (STOP)", Total.OptOut, Prev.OptOut, Change(Total.OptOut, Prev.OptOut));
+            Line("Dialoghi solo con l'assistente AI", Total.AiOnly, Prev.AiOnly, Change(Total.AiOnly, Prev.AiOnly));
+            Line("Dialoghi con operatore", Total.WithOperator, Prev.WithOperator, Change(Total.WithOperator, Prev.WithOperator));
+            Line("Valore stimato generato (adesioni × prezzo offerta)", new XEur(Value), new XEur(PrevValue), ChangeD(Value, PrevValue));
+            Line("Costo Meta stimato", new XEur(Total.MetaCostEur(Meta)), new XEur(Prev.MetaCostEur(Meta)), ChangeD(Total.MetaCostEur(Meta), Prev.MetaCostEur(Meta)));
+            Line("Consumo AI (in euro)", new XEur(Math.Round(Total.AiCostUsd * _config.Current.Billing.UsdToEur, 2)), new XEur(Math.Round(Prev.AiCostUsd * _config.Current.Billing.UsdToEur, 2)), ChangeD(Total.AiCostUsd, Prev.AiCostUsd));
+            Line("Costo totale (Meta + AI)", new XEur(CostEur(Total)), new XEur(CostEur(Prev)), ChangeD(CostEur(Total), CostEur(Prev)));
+            Line("Costo per obiettivo raggiunto", new XEur(Total.Reached == 0 ? 0 : Math.Round(CostEur(Total) / Total.Reached, 2)), new XEur(Prev.Reached == 0 ? 0 : Math.Round(CostEur(Prev) / Prev.Reached, 2)), "");
+            sh.Blank().Note("Il valore stimato conta le adesioni delle campagne con un'offerta che ha un prezzo; non è un incasso registrato.");
+        }
+        if (Want("dettaglio"))
+        {
+            var sh = wb.Sheet(Level switch { "clienti" => "Gruppi e attività", "attivita" => "Attività", _ => "Campagne" })
+                .Title((Level switch { "clienti" => "Gruppi e attività singole", "attivita" => "Confronto tra le attività", _ => "Campagne" }) + " · " + Title).Note(period).Blank()
+                .Header(levelName, "Tipo", "Primi messaggi", "Consegnati", "Letti", "% letti", "Contattati", "Con risposta", "% risposta",
+                    "Obiettivo raggiunto", "% obiettivo", "Rifiuti", "Non contattare più", "Solo assistente AI", "Con operatore", "Costo Meta stimato", "Consumo AI ($)");
+            foreach (var r in Rows) DetailRow(sh.Row, r, r.Name, r.Detail ?? r.Kind);
+            DetailRow(sh.Total, Total, "Totale", "");
+        }
+        if (Want("tipi")) BreakdownSheet(wb, "Per tipo di campagna", "Tipo di campagna (obiettivo)", ByGoal, period, false, false);
+        if (Want("offerte")) BreakdownSheet(wb, "Per offerta", "Offerta", ByOffer, period, true, true);
+        if (Want("template")) BreakdownSheet(wb, "Per primo messaggio", "Primo messaggio (template)", ByTemplate, period, true, false);
+        if (Want("motivi"))
+        {
+            var sh = wb.Sheet("Motivi dei rifiuti").Title("Motivi dei rifiuti · " + Title).Note(period).Blank().Header("Motivo", "Rifiuti", "Percentuale");
+            foreach (var r in Reasons) sh.Row(r.Label, r.Count, XPct.Of(r.Count, ReasonsTotal));
+            sh.Total("Totale", ReasonsTotal, new XPct(ReasonsTotal == 0 ? 0 : 1));
+        }
+        if (Want("giorni"))
+        {
+            var sh = wb.Sheet("Giorno per giorno").Title("Andamento giorno per giorno · " + Title).Note(period).Blank()
+                .Header("Giorno", "Primi messaggi inviati", "Messaggi dei clienti", "Obiettivi raggiunti");
+            foreach (var d in Days) sh.Row(new XDate(d.Day), d.Sent, d.Received, d.Reached);
+            sh.Total("Totale", Days.Sum(d => d.Sent), Days.Sum(d => d.Received), Days.Sum(d => d.Reached));
+        }
+        if (Want("ricontattare"))
+        {
+            var sh = wb.Sheet("Da ricontattare").Title("Clienti da ricontattare · " + Title).Note(period)
+                .Note("Esclusi i clienti nella lista STOP e chi in seguito ha raggiunto l'obiettivo. Usa le frecce dell'intestazione per scegliere il motivo.").Blank()
+                .Header("Motivo", "Cliente", "Cellulare", "Attività", "Campagna", "Tipo di campagna", "Tipo abbonamento", "Scadenza", "Servizio / corso",
+                    "Esito", "Nota", "Ultimo messaggio del cliente", "Contattato il");
+            foreach (var r in Recontact)
+                sh.Row(RecontactRow.Label(r.Category), r.Name, r.Phone, r.GymName, r.CampaignName ?? "", r.GoalName, r.Membership ?? "",
+                    r.ExpiresOn is DateTime e ? new XDate(e) : null, r.Service ?? "", Ai.Outcomes.Label(r.Outcome), r.Note ?? "",
+                    r.LastInboundAt is DateTime li ? li.ToRome() : null, r.CreatedAt.ToRome());
+            await _repos.AuditAsync(Me, "report.export", $"clienti da ricontattare: {Recontact.Count}", HttpContext.Connection.RemoteIpAddress?.ToString());
+        }
+        var name = only is null ? "report" : "report-" + only;
+        return File(wb.ToBytes(), Xlsx.ContentType, $"{name}-{From:yyyyMMdd}-{To:yyyyMMdd}.xlsx");
+    }
+
+    private void DetailRow(Func<object?[], XlsxSheet> add, ReportRow r, string name, string kind) =>
+        add(new object?[] { name, kind, r.Sent, r.Delivered, r.Read, XPct.Of(r.Read, r.Sent), r.Conversations, r.Replied, XPct.Of(r.Replied, r.Conversations),
+            r.Reached, XPct.Of(r.Reached, r.Conversations), r.Refused, r.OptOut, r.AiOnly, r.WithOperator, new XEur(r.MetaCostEur(Meta)), Math.Round(r.AiCostUsd, 4) });
+
+    private void BreakdownSheet(Xlsx wb, string sheet, string first, List<BreakdownRow> rows, string period, bool withGym, bool withValue)
+    {
+        var sh = wb.Sheet(sheet).Title(sheet + " · " + Title).Note(period).Blank();
+        var head = new List<string> { first };
+        if (withGym) head.Add("Attività");
+        head.AddRange(new[] { "Contattati", "Con risposta", "% risposta", "Obiettivo raggiunto", "% obiettivo", "Rifiuti", "Non contattare più" });
+        if (withValue) head.AddRange(new[] { "Prezzo offerta", "Valore stimato" });
+        sh.Header(head.ToArray());
+        object?[] Cells(BreakdownRow r, string label, string? gym)
+        {
+            var c = new List<object?> { label };
+            if (withGym) c.Add(gym ?? "");
+            c.AddRange(new object?[] { r.Contacted, r.Replied, XPct.Of(r.Replied, r.Contacted), r.Reached, XPct.Of(r.Reached, r.Contacted), r.Refused, r.OptOut });
+            if (withValue) c.AddRange(new object?[] { r.Price is decimal p ? new XEur(p) : "", new XEur(r.Value) });
+            return c.ToArray();
+        }
+        foreach (var r in rows) sh.Row(Cells(r, r.Label, r.Detail));
+        var tot = new BreakdownRow("Totale", null, rows.Sum(r => r.Contacted), rows.Sum(r => r.Replied), rows.Sum(r => r.Reached), rows.Sum(r => r.Refused), rows.Sum(r => r.OptOut), null);
+        var t = Cells(tot, "Totale", "");
+        if (withValue) t[^1] = new XEur(rows.Sum(r => r.Value));
+        sh.Total(t);
+    }
+
+    /// <summary>Variazione percentuale rispetto al periodo precedente (vuota se prima era zero).</summary>
+    public static object Change(int cur, int prev) => prev == 0 ? (cur == 0 ? new XPct(0) : "nuovo") : new XPct((double)(cur - prev) / prev);
+    public static object ChangeD(decimal cur, decimal prev) => prev == 0 ? (cur == 0 ? new XPct(0) : "nuovo") : new XPct((double)((cur - prev) / prev));
+
+    /// <summary>Freccia e percentuale per la pagina: ▲ +12% · ▼ −5% · = .</summary>
+    public static (string Text, string Css) Delta(decimal cur, decimal prev, bool lowerIsBetter = false)
+    {
+        if (prev == 0) return cur == 0 ? ("= come prima", "") : ("nuovo", "up");
+        var pct = (cur - prev) / prev * 100m;
+        if (Math.Abs(pct) < 0.5m) return ("= come prima", "");
+        var up = pct > 0;
+        var good = up != lowerIsBetter;
+        return ($"{(up ? "▲ +" : "▼ −")}{Math.Abs(pct):0}%", good ? "up" : "down");
+    }
+
     /// <summary>Stessa vista, altro periodo.</summary>
     public string PeriodUrl(DateTime from, DateTime to) =>
         $"/Report?dal={from:yyyy-MM-dd}&al={to:yyyy-MM-dd}" + (Group is int g ? $"&gruppo={g}" : "") + (Activity is int a ? $"&attivita={a}" : "");
+
+    public string ExcelUrl(string? parte = null) => Url(Group, Activity, "Excel") + (parte is null ? "" : "&parte=" + parte);
 
     public string Url(int? gruppo, int? attivita, string? handler = null) =>
         $"/Report?dal={From:yyyy-MM-dd}&al={To:yyyy-MM-dd}" + (gruppo is int g ? $"&gruppo={g}" : "") + (attivita is int a ? $"&attivita={a}" : "") + (handler is null ? "" : $"&handler={handler}");

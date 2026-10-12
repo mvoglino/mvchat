@@ -19,6 +19,13 @@ class Client:
             return r.status, html_lib.unescape(r.read().decode(errors="replace")), r.headers.get("Location")
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode(errors="ignore"), e.headers.get("Location")
+    def raw(self, path):
+        """Scarica un file (Excel e simili): stato, byte e tipo di contenuto."""
+        try:
+            r = self.op.open(urllib.request.Request(BASE + path))
+            return r.status, r.read(), r.headers.get("Content-Type") or ""
+        except urllib.error.HTTPError as e:
+            return e.code, e.read(), e.headers.get("Content-Type") or ""
     def token(self, path):
         s, html, _ = self.req(path)
         m = re.search(r'name="__RequestVerificationToken" type="hidden" value="([^"]+)"', html)
@@ -50,6 +57,22 @@ class Client:
     def post(self, path, data, form_path=None):
         data = dict(data); data["__RequestVerificationToken"] = self.token(form_path or path)
         return self.req(path, data)
+
+import zipfile as _zip, io as _io
+def xlsx(client, path):
+    """Apre un file Excel scaricato: nomi dei fogli e testo di ogni foglio (None se non è un .xlsx valido)."""
+    st, data, ctype = client.raw(path)
+    if st != 200 or "spreadsheetml" not in ctype: return None
+    if os.environ.get("MVCHAT_SAVE_XLSX"):  # per controllarli a mano con Excel/LibreOffice
+        with open(os.path.join(os.environ["MVCHAT_SAVE_XLSX"], re.sub(r"[^a-zA-Z0-9]+", "_", path)[:80] + f"_{id(client) % 1000}.xlsx"), "wb") as fh: fh.write(data)
+    try:
+        z = _zip.ZipFile(_io.BytesIO(data))
+        wbx = z.read("xl/workbook.xml").decode()
+        names = [html_lib.unescape(n) for n in re.findall(r'<sheet name="([^"]+)"', wbx)]
+        sheets = {n: html_lib.unescape(z.read(f"xl/worksheets/sheet{i+1}.xml").decode()) for i, n in enumerate(names)}
+        return names, sheets
+    except Exception as ex:
+        return None
 
 def temp_pwd(html):
     m = re.search(r"<code>([A-Za-z0-9]{12})</code>", html); return m.group(1) if m else None
@@ -679,6 +702,9 @@ check("lista STOP: l'attività vede solo i suoi numeri, il gruppo tutti", "+3934
 aurc.post(f"/Attivita/{aur}", {"Input.Name":"Centro Benessere Aurora","Input.LegalName":"=1+1","Input.PrivacyUrl":"https://www.aurora.test/privacy"}, form_path=f"/Attivita/{aur}")
 _,csv,_ = sa.req(f"/Fatturazione?mese={cur_m}&handler=Csv")
 check("file per Excel: le formule nei dati vengono neutralizzate", "\"'=1+1\"" in csv and "\"=1+1\"" not in csv, csv[csv.find("Aurora"):][:120])
+xb = xlsx(sa, f"/Fatturazione?mese={cur_m}&handler=Excel")
+check("rendiconti in Excel: riepilogo per intestatario e righe", xb is not None and xb[0] == ["Riepilogo", "Righe"] and "Abbonamento" in xb[1]["Righe"] and 's="7"' in xb[1]["Riepilogo"]
+      and "=1+1" in xb[1]["Righe"] and "<f>" not in xb[1]["Righe"], str(xb[0] if xb else None))
 s,html,_ = aurc.post(f"/Attivita/{aur}", {"Input.Name":"Centro Benessere Aurora","Input.PrivacyUrl":"non è un link"}, form_path=f"/Attivita/{aur}")
 check("informativa privacy: serve un link valido", s == 200 and "indirizzo completo dell'informativa" in html, str(s))
 _,html,_ = aurc.req(f"/Modelli/Anteprima?model={rinnovo}&gym={aur}")
@@ -804,6 +830,38 @@ _,an2,_ = m.req(f"/Modelli/Anteprima?campagna={cR2}")
 check("domanda sul motivo: si sceglie campagna per campagna (di base sì)", "chiedigli una sola volta" in an and "non chiedergli il motivo" in an2 and "chiedigli una sola volta" not in an2)
 hc = cpage(m, cR)
 check("campagna: riepilogo dei motivi dei rifiuti", "Motivi dei rifiuti" in hc and "Prezzo / costo 2" in hc and "Motivi di salute 1" in hc, hc[hc.find("Motivi dei rifiuti"):][:300])
+# 5j-ter-bis. Report: risultati per tipologia, valore stimato, confronto, clienti da ricontattare, file Excel veri
+m.post(f"/Conversazioni/{cvr[52]}?handler=Outcome", {"Outcome":"rifiuto","Reason":"rimanda","Note":"richiamare a gennaio"}, form_path=f"/Conversazioni/{cvr[52]}")
+_,rep,_ = m.req("/Report")
+tip = rep[rep.find('id="tipologie"'):rep.find('id="ricontattare"')]
+check("report: risultati per tipo di campagna, offerta e primo messaggio", "Risultati per tipologia" in tip and "Rinnovo abbonamento" in tip
+      and "Rinnovo con 2 mesi omaggio" in tip and "399,00 €" in tip, tip[:400])
+kp = rep[rep.find('report-kpis'):][:2500]
+check("report: valore stimato generato e confronto con il periodo precedente", "valore stimato generato" in kp and re.search(r"<b>[1-9][\d.]*,\d\d €</b><span>valore stimato", kp) is not None
+      and 'class="delta' in kp and "rispetto a" in kp, kp[:600])
+rc = rep[rep.find('id="ricontattare"'):][:5000]
+check("report: clienti da ricontattare (chi ha chiesto di risentirsi più avanti)", "Clienti da ricontattare" in rc and "+393200000052" in rc
+      and "richiamare a gennaio" in rc and f'/Conversazioni/{cvr[52]}' in rc, rc[:800])
+check("report: chi è nella lista STOP non è tra i clienti da ricontattare", "+393339998877" not in rc)
+xf = xlsx(m, "/Report?handler=Excel")
+want = ["Riepilogo", "Campagne", "Per tipo di campagna", "Per offerta", "Per primo messaggio", "Motivi dei rifiuti", "Giorno per giorno", "Da ricontattare"]
+check("report in Excel vero: un foglio per tipologia", xf is not None and xf[0] == want, str(xf[0] if xf else None))
+if xf:
+    sh = xf[1]
+    check("Excel: numeri come numeri, percentuali e euro, filtro automatico sull'intestazione",
+          re.search(r'<c r="B\d+" s="7"><v>399</v></c>', sh["Per offerta"]) is None and "Rinnovo con 2 mesi omaggio" in sh["Per offerta"]
+          and re.search(r's="7"><v>399(\.0+)?</v>', sh["Per offerta"]) is not None and "<autoFilter ref=" in sh["Per offerta"]
+          and re.search(r's="6"><v>0\.\d+', sh["Riepilogo"]) is not None, sh["Per offerta"][-1500:])
+    check("Excel: clienti da ricontattare con motivo, nota e cellulare", "Ha chiesto di risentirsi più avanti" in sh["Da ricontattare"]
+          and "richiamare a gennaio" in sh["Da ricontattare"] and "+393200000052" in sh["Da ricontattare"])
+    check("Excel: i testi non diventano mai formule", all("<f>" not in x for x in sh.values()))
+xp = xlsx(m, "/Report?handler=Excel&parte=motivi")
+check("ogni riquadro si scarica da solo in Excel", xp is not None and xp[0] == ["Motivi dei rifiuti"] and "Prezzo / costo" in xp[1]["Motivi dei rifiuti"], str(xp[0] if xp else None))
+xo = xlsx(oth, "/Report?handler=Excel")
+check("Excel del report: le altre attività non vedono i dati", xo is not None and all("Rinnovo con 2 mesi omaggio" not in x and "+393200000052" not in x for x in xo[1].values()))
+st_o,_,_ = o.raw("/Report?handler=Excel"); check("l'operatore non scarica il report", st_o in (302,403), str(st_o))
+xa = xlsx(m, "/Conversazioni/Archivio?handler=Excel")
+check("archivio dialoghi in Excel", xa is not None and xa[0] == ["Archivio dialoghi"] and "Messaggi cliente" in xa[1]["Archivio dialoghi"] and "+393200000052" in xa[1]["Archivio dialoghi"])
 # 5j-quater. Link di pagamento e prenotazione: solo quelli scritti dall'attività
 off_form = {"Input.Id":offer_alba,"Input.GymId":alba,"Input.Title":"Rinnovo con 2 mesi omaggio","Input.Description":"14 mesi al prezzo di 12","Input.Price":"399","Input.FullPrice":"465",
     "Input.PriceNote":"una tantum","Input.MaxExtraDiscountPct":"10","Input.ValidTo":"2099-10-31","Input.IsActive":"true","Input.ActionUrl":"https://pay.example.com/rinnovo"}

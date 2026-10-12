@@ -68,6 +68,25 @@ public class ArchivioModel : PageModel
         return File(bytes, "text/csv; charset=utf-8", $"dialoghi-{DateTime.UtcNow.ToRome():yyyyMMdd-HHmm}.csv");
     }
 
+    /// <summary>Lo stesso elenco in un file Excel vero: date e numeri come tali, filtro automatico sull'intestazione.</summary>
+    public async Task<IActionResult> OnGetExcelAsync(int? gym, string? tipo, string? esito, DateTime? dal, DateTime? al, int? campagna, string? q, bool prove = false, string? etichetta = null)
+    {
+        await LoadAsync(gym, tipo, esito, dal, al, campagna, q, prove, etichetta);
+        var rows = await _archive.ListAsync(User.Scope(), F, 50000);
+        var tags = await _tags.ForConversationsAsync(rows.Select(i => i.Id));
+        var wb = new Xlsx();
+        var sh = wb.Sheet("Archivio dialoghi").Title("Archivio dialoghi")
+            .Note($"{rows.Count} dialoghi" + (F.From is DateTime f ? $" dal {f:dd/MM/yyyy}" : "") + (F.To is DateTime t ? $" al {t:dd/MM/yyyy}" : "")).Blank()
+            .Header("Data", "Attività", "Cliente", "Cellulare", "Obiettivo", "Campagna", "Gestione", "Operatori", "Messaggi cliente", "Risposte assistente",
+                "Risposte operatori", "Esito", "Stato", "Etichette");
+        foreach (var r in rows)
+            sh.Row(r.CreatedAt.ToRome(), r.GymName, r.ContactName, r.ContactPhone, r.GoalName, r.CampaignName ?? (r.IsTest ? "prova" : ""),
+                r.HumanInvolved ? "Con operatore" : "Solo assistente AI", r.Operators ?? "", r.CustomerMsgs, r.AiMsgs, r.HumanMsgs,
+                Outcomes.Label(r.Outcome), r.Status, string.Join(", ", tags[r.Id].Select(x => x.Tag)));
+        await _repos.AuditAsync(User.Scope(), "archive.export", $"{rows.Count} dialoghi", HttpContext.Connection.RemoteIpAddress?.ToString());
+        return File(wb.ToBytes(), Xlsx.ContentType, $"dialoghi-{DateTime.UtcNow.ToRome():yyyyMMdd-HHmm}.xlsx");
+    }
+
     public static int Pct(int part, int total) => total == 0 ? 0 : (int)Math.Round(100.0 * part / total);
 
     public string Url(string? tipo) =>

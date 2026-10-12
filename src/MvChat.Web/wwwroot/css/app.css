@@ -175,6 +175,7 @@ audio.msg-media{width:260px}
 .crumbs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--ink-2)}
 .crumbs a{color:inherit}
 .report-kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.delta{display:block;font-style:normal;font-size:12px;margin-top:4px;color:var(--ink-2)} .delta.up{color:var(--good)} .delta.down{color:var(--bad)}
 .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
 .bars-chart{margin:0}
 .bars-chart figcaption{margin-bottom:8px}
