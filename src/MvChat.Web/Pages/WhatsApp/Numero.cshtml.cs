@@ -25,6 +25,9 @@ public class NumeroModel : PageModel
     public Scope Me { get; private set; } = new();
     public bool CanConfigure => Me.CanManageGyms;
     public string? Error { get; private set; }
+    /// <summary>Altri numeri dello stesso account WhatsApp: condividono limite di invio, template e (di solito) la chiave.</summary>
+    public List<WaNumber> SameAccount { get; private set; } = new();
+    [BindProperty] public bool TokenForAll { get; set; }
 
     // Collegamento
     [BindProperty] public string Mode { get; set; } = "simulato";
@@ -50,6 +53,9 @@ public class NumeroModel : PageModel
         {
             Approved = (await _wa.TemplatesAsync(id)).Where(t => t.IsApproved).ToList();
             Messages = await _wa.MessagesAsync(id, 50);
+            // Solo i numeri che chi guarda può vedere (perimetro).
+            var visible = (await _repos.GymsAsync(Me)).Select(g => g.Id).ToHashSet();
+            SameAccount = (await _wa.SameAccountNumbersAsync(Number)).Where(x => visible.Contains(x.GymId)).ToList();
         }
         return true;
     }
@@ -102,7 +108,21 @@ public class NumeroModel : PageModel
         await _repos.AuditAsync(Me, "wa.number.saved", $"{n.DisplayPhone} ({(n.IsSimulated ? "simulato" : "Meta")})", HttpContext.Connection.RemoteIpAddress?.ToString(), Gym.OrganizationId, Gym.Id);
         var saved = await _wa.NumberAsync(n.Id);
         var err = await _service.CheckNumberAsync(saved!);
-        TempData[err is null ? "Ok" : "Err"] = err is null ? "Numero salvato e controllato." : "Numero salvato, ma Meta segnala un problema: " + err;
+        // La stessa chiave per gli altri numeri dello stesso account (es. un gestore con più attività): si aggiornano tutti insieme.
+        var others = 0;
+        if (!n.IsSimulated && TokenForAll && !string.IsNullOrWhiteSpace(AccessToken))
+        {
+            var visible = (await _repos.GymsAsync(Me)).Select(g => g.Id).ToHashSet();
+            foreach (var o in (await _wa.SameAccountNumbersAsync(saved!)).Where(x => visible.Contains(x.GymId)))
+            {
+                await _wa.SetNumberTokenAsync(o.Id, n.AccessTokenEnc!);
+                await _service.CheckNumberAsync((await _wa.NumberAsync(o.Id))!);
+                others++;
+            }
+            if (others > 0) await _repos.AuditAsync(Me, "wa.number.token_shared", $"chiave aggiornata su altri {others} numeri dello stesso account", HttpContext.Connection.RemoteIpAddress?.ToString(), Gym.OrganizationId, Gym.Id);
+        }
+        var extra = others > 0 ? $" Chiave aggiornata anche su altri {others} numeri dello stesso account." : "";
+        TempData[err is null ? "Ok" : "Err"] = (err is null ? "Numero salvato e controllato." : "Numero salvato, ma Meta segnala un problema: " + err) + extra;
         return Redirect($"/WhatsApp/Numero/{id}");
     }
 

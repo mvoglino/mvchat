@@ -287,9 +287,19 @@ public sealed class CampaignRepo
     }
 
     /// <summary>Persone diverse contattate per primi da questo numero nelle ultime 24 ore (il limite di Meta).</summary>
-    public Task<int> FirstContactsLast24hAsync(int waNumberId) => _db.ScalarAsync<int>(
-        @"SELECT COUNT(DISTINCT ContactPhone) FROM WaMessages WHERE WaNumberId=@waNumberId AND Direction='out' AND Kind='template'
-          AND Status<>'failed' AND CreatedAt > UTC_TIMESTAMP() - INTERVAL 24 HOUR", new { waNumberId });
+    /// <summary>
+    /// Persone nuove contattate con un template nelle ultime 24 ore. Dal 7 ottobre 2025 Meta conta il limite per azienda:
+    /// i numeri dello stesso account WhatsApp Business lo condividono, quindi si contano insieme.
+    /// Le attività con un proprio account non si tolgono limite a vicenda.
+    /// </summary>
+    public Task<int> FirstContactsLast24hAsync(MvChat.Web.WhatsApp.WaNumber n) => string.IsNullOrEmpty(n.WabaId) || n.IsSimulated
+        ? _db.ScalarAsync<int>(
+            @"SELECT COUNT(DISTINCT ContactPhone) FROM WaMessages WHERE WaNumberId=@id AND Direction='out' AND Kind='template'
+              AND Status<>'failed' AND CreatedAt > UTC_TIMESTAMP() - INTERVAL 24 HOUR", new { id = n.Id })
+        : _db.ScalarAsync<int>(
+            @"SELECT COUNT(DISTINCT m.ContactPhone) FROM WaMessages m JOIN WaNumbers w ON w.Id=m.WaNumberId
+              WHERE w.WabaId=@waba AND w.IsSimulated=0 AND m.Direction='out' AND m.Kind='template'
+                AND m.Status<>'failed' AND m.CreatedAt > UTC_TIMESTAMP() - INTERVAL 24 HOUR", new { waba = n.WabaId });
 
     public Task<int> SentSinceAsync(int campaignId, DateTime sinceUtc) => _db.ScalarAsync<int>(
         "SELECT COUNT(*) FROM CampaignRecipients WHERE CampaignId=@campaignId AND Status='inviato' AND SentAt >= @sinceUtc", new { campaignId, sinceUtc });

@@ -18,6 +18,21 @@ else
         <tr><td><code>@t.Name</code></td><td style="white-space:pre-wrap;max-width:460px">@t.Body</td><td>@(t.Category == "UTILITY" ? "Servizio" : "Marketing")</td>
             <td><span class="chip @(t.IsApproved ? "good" : t.Status is "rifiutato" or "errore" ? "bad" : "")">@t.Status</span>@if (t.RejectReason is not null) {<div class="muted">@t.RejectReason</div>}
                 @if (t.Status == "errore") { <form method="post" asp-page-handler="Resubmit" style="margin-top:6px"><input type="hidden" name="TemplateId" value="@t.Id"><button class="btn sm" type="submit">Rimanda a Meta</button></form> }
+                @if (Model.CopyTargets.Count > 0 && t.Status is not ("errore" or "rifiutato" or "bozza"))
+                {
+                    <details class="copy-tpl" style="margin-top:6px"><summary class="btn sm">Copia sulle altre attività</summary>
+                        <form method="post" asp-page-handler="Copy" style="margin-top:8px;display:grid;gap:4px">
+                            <input type="hidden" name="TemplateId" value="@t.Id">
+                            <label class="check"><input type="checkbox" onclick="this.closest('form').querySelectorAll('input[name=Targets]').forEach(c => c.checked = this.checked)"> <b>Tutte</b></label>
+                            @foreach (var (g, num) in Model.CopyTargets)
+                            {
+                                var same = !num.IsSimulated && !Model.Number.IsSimulated && num.WabaId == Model.Number.WabaId;
+                                <label class="check"><input type="checkbox" name="Targets" value="@g.Id"> @g.Name <span class="muted">@(same ? "· stesso account: subito pronto" : "· da approvare su Meta")</span></label>
+                            }
+                            <button class="btn sm primary" type="submit" style="justify-self:start">Copia</button>
+                        </form>
+                    </details>
+                }
                 @if (t.Status is "errore" or "rifiutato" or "bozza") { <form method="post" asp-page-handler="Delete" style="margin-top:6px" onsubmit="return confirm('Eliminare il template?')"><input type="hidden" name="TemplateId" value="@t.Id"><button class="btn sm" type="submit">Elimina</button></form> }
             </td></tr>
     }

@@ -28,6 +28,10 @@ public class EditModel : PageModel
     [BindProperty] public string? Fee { get; set; }
     [BindProperty] public DateTime? FeeFrom { get; set; }
     [BindProperty] public DateTime? FeeTo { get; set; }
+    // A chi va il rendiconto (solo MVitalia, solo attività di un gruppo): gruppo · attivita · gestore.
+    [BindProperty] public string BillTo { get; set; } = "gruppo";
+    [BindProperty] public int? EntityId { get; set; }
+    public List<MvChat.Web.Billing.BillingEntity> Entities { get; private set; } = new();
 
     public async Task<IActionResult> OnGetAsync(int? id, int? gruppo)
     {
@@ -41,6 +45,8 @@ public class EditModel : PageModel
         if (Existing is null) return NotFound();
         var (fee, from, to) = await _repos.FeeAsync(Existing.Id);
         Fee = fee?.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("it-IT")); FeeFrom = from; FeeTo = to;
+        (BillTo, EntityId) = await Billing.BillToAsync(Existing.Id);
+        if (Existing.InGroup) Entities = await Billing.EntitiesAsync(Existing.OrganizationId);
         Input = new GymInput { Id = Existing.Id, OrganizationId = Existing.InGroup ? Existing.OrganizationId : null, Name = Existing.Name, City = Existing.City,
             Address = Existing.Address, Phone = Existing.Phone, IsActive = Existing.IsActive, Sector = Existing.Sector };
         return Page();
@@ -67,6 +73,11 @@ public class EditModel : PageModel
             else ModelState.AddModelError("Fee", "Scrivi il canone in euro, ad esempio 49,90.");
         }
         if (Me.IsSuperAdmin && FeeFrom is DateTime ff && FeeTo is DateTime ft && ft < ff) ModelState.AddModelError("FeeTo", "La fine dell'abbonamento è prima dell'inizio.");
+        var groupId = Existing is not null ? (Existing.InGroup ? Existing.OrganizationId : (int?)null) : Input.OrganizationId;
+        if (groupId is int gid) Entities = await Billing.EntitiesAsync(gid);
+        if (BillTo is not ("gruppo" or "attivita" or "gestore")) BillTo = "gruppo";
+        if (Me.IsSuperAdmin && groupId is not null && BillTo == "gestore" && !Entities.Any(x => x.Id == EntityId && x.IsActive))
+            ModelState.AddModelError("EntityId", "Scegli il gestore (si creano in Rendiconti → Gestori).");
         if (!ModelState.IsValid) return Page();
 
         int id; int orgId;
@@ -87,11 +98,18 @@ public class EditModel : PageModel
             orgId = Input.OrganizationId!.Value;
             id = await _repos.SaveGymAsync(null, orgId, name, Input.City?.Trim(), Input.Address?.Trim(), Input.Phone?.Trim(), Input.IsActive);
         }
-        if (Me.IsSuperAdmin) await _repos.SaveFeeAsync(id, feeValue, FeeFrom?.Date, FeeTo?.Date);
+        if (Me.IsSuperAdmin)
+        {
+            await _repos.SaveFeeAsync(id, feeValue, FeeFrom?.Date, FeeTo?.Date);
+            // L'attività singola riceve sempre il suo rendiconto: la scelta vale solo dentro un gruppo.
+            if (groupId is not null) await Billing.SetBillToAsync(id, BillTo, BillTo == "gestore" ? EntityId : null);
+        }
         await _repos.AuditAsync(Me, IsNew ? "gym.created" : "gym.updated", name + (IsNew && single ? " (attività singola)" : ""), HttpContext.Connection.RemoteIpAddress?.ToString(), orgId, id);
         TempData["Ok"] = IsNew ? "Attività creata: ora aggiungi il suo amministratore e completa dati e logo." : "Attività aggiornata.";
         return Redirect(IsNew ? $"/Attivita/{id}" : "/Gyms");
     }
+
+    private MvChat.Web.Billing.BillingService Billing => HttpContext.RequestServices.GetRequiredService<MvChat.Web.Billing.BillingService>();
 
     private async Task LoadAsync()
     {

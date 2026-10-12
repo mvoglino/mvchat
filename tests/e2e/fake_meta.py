@@ -7,6 +7,8 @@ TOKEN = "good-token"
 MEDIA = {}  # file mandati dai clienti: id → (tipo, contenuto)
 SUBSCRIBED = []  # ID delle app iscritte agli avvisi dell'account WhatsApp
 TOKEN_APP = "123456"  # l'app per cui è stata generata la chiave di accesso
+PORTFOLIO_LIMIT = None  # limite di invio dell'azienda (dal 7/10/2025), es. "TIER_2K"
+OLD_API = False  # versione dell'API che non conosce ancora il campo del limite dell'azienda
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -36,7 +38,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"data": [{"whatsapp_business_api_data": {"id": a, "name": "App " + a}} for a in SUBSCRIBED]})
         if "/message_templates" in self.path:
             return self._send(200, {"data": [{"id": "tpl123", "name": "x", "status": "APPROVED", "language": "it"}]})
-        return self._send(200, {"display_phone_number": "+39 0172 000000", "verified_name": "FitActive Bra", "quality_rating": "GREEN", "messaging_limit_tier": "TIER_1K", "id": "111"})
+        info = {"display_phone_number": "+39 0172 000000", "verified_name": "FitActive Bra", "quality_rating": "GREEN", "messaging_limit_tier": "TIER_1K", "id": "111"}
+        if "whatsapp_business_manager_messaging_limit" in self.path:
+            if OLD_API: return self._send(400, {"error": {"message": "(#100) Tried accessing nonexisting field (whatsapp_business_manager_messaging_limit)", "code": 100}})
+            if PORTFOLIO_LIMIT: info["whatsapp_business_manager_messaging_limit"] = PORTFOLIO_LIMIT
+        return self._send(200, info)
     def do_POST(self):
         n = int(self.headers.get("Content-Length", "0")); body = json.loads(self.rfile.read(n) or b"{}")
         REQUESTS.append({"method": "POST", "path": self.path, "body": body})

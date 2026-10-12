@@ -63,6 +63,14 @@ public sealed class WaRepo
         new { All = s.IsSuperAdmin ? 1 : 0, IsOrg = s.IsOrgAdmin ? 1 : 0, Org = s.OrganizationId ?? -1, Gym = s.GymId ?? -1, Gyms = s.AreaGymsCsv }, MapNumber);
 
     /// <summary>Numero di un'attività, senza filtro di perimetro: chi chiama deve aver già controllato l'attività.</summary>
+    /// <summary>Gli altri numeri Meta collegati allo stesso account WhatsApp Business (condividono limite di invio e template).</summary>
+    public Task<List<WaNumber>> SameAccountNumbersAsync(WaNumber n) => string.IsNullOrEmpty(n.WabaId) || n.IsSimulated
+        ? Task.FromResult(new List<WaNumber>())
+        : _db.QueryAsync(NumberSelect + " WHERE n.WabaId=@waba AND n.IsSimulated=0 AND n.Id<>@id ORDER BY g.Name", new { waba = n.WabaId, id = n.Id }, MapNumber);
+
+    public Task SetNumberTokenAsync(int id, string tokenEnc) => _db.ExecuteAsync(
+        "UPDATE WaNumbers SET AccessTokenEnc=@tokenEnc, Status='da controllare' WHERE Id=@id AND IsSimulated=0", new { id, tokenEnc });
+
     public Task<WaNumber?> NumberForGymAsync(int gymId) => _db.FirstAsync(NumberSelect + " WHERE n.GymId=@gymId", new { gymId }, MapNumber);
     public Task<WaNumber?> NumberAsync(int id) => _db.FirstAsync(NumberSelect + " WHERE n.Id=@id", new { id }, MapNumber);
     public Task<WaNumber?> NumberByPhoneNumberIdAsync(string phoneNumberId) =>
@@ -121,6 +129,13 @@ public sealed class WaRepo
     public async Task<bool> TemplateNameTakenAsync(int waNumberId, string name, string language) =>
         await _db.ScalarAsync<long>("SELECT COUNT(*) FROM WaTemplates WHERE WaNumberId=@waNumberId AND Name=@name AND Language=@language",
             new { waNumberId, name, language }) > 0;
+
+    /// <summary>Un'altra attività con lo stesso account WhatsApp ha già un template con questo nome (su Meta il nome vale per tutto l'account).</summary>
+    public Task<string?> TemplateNameInAccountAsync(WaNumber n, string name, string language) => string.IsNullOrEmpty(n.WabaId) || n.IsSimulated
+        ? Task.FromResult<string?>(null)
+        : _db.FirstAsync(@"SELECT g.Name FROM WaTemplates t JOIN WaNumbers w ON w.Id=t.WaNumberId JOIN Gyms g ON g.Id=t.GymId
+                           WHERE w.WabaId=@waba AND w.IsSimulated=0 AND w.Id<>@id AND t.Name=@name AND t.Language=@language LIMIT 1",
+            new { waba = n.WabaId, id = n.Id, name, language }, r => r.GetString(0));
 
     public Task<int> InsertTemplateAsync(WaTemplate t, int userId) => _db.ScalarAsync<int>(
         @"INSERT INTO WaTemplates (OrganizationId, GymId, WaNumberId, GoalModelId, Name, Language, Category, Body, Variables, Status, MetaTemplateId, RejectReason, CreatedBy)

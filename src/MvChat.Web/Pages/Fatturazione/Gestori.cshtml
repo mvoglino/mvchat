@@ -1,0 +1,34 @@
+@page
+@model MvChat.Web.Pages.Fatturazione.GestoriModel
+@{ ViewData["Title"] = "Gestori"; var e = Model.Input; }
+@section Actions { <a class="btn" href="/Fatturazione">Rendiconti</a> }
+<p class="muted" style="margin:0">Un gestore è una società che detiene più attività di un gruppo (es. un affiliato FitActive con 3 palestre): riceve un solo rendiconto per tutte. Le attività si collegano dalla loro scheda: Attività → Modifica → «Rendiconto intestato a».</p>
+@if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
+<section class="panel"><div class="tbl"><table>
+    <thead><tr><th>Gestore</th><th>Gruppo</th><th>Dati fiscali</th><th class="num">Attività collegate</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var x in Model.Items)
+    {
+        <tr class="@(x.IsActive ? "" : "muted")"><td><b>@x.Name</b>@if (!x.IsActive) {<div class="muted">disattivato</div>}</td><td>@x.OrgName</td>
+            <td>@(x.LegalName ?? "—")@if (x.VatNumber is not null) {<div class="muted">P.IVA @x.VatNumber</div>}@if (x.LegalName is null || x.VatNumber is null) {<span class="chip warn">mancano ragione sociale o P.IVA</span>}</td>
+            <td class="num">@x.Gyms</td><td><a class="btn sm" href="?id=@x.Id">Modifica</a></td></tr>
+    }
+    @if (Model.Items.Count == 0) { <tr><td colspan="5" class="muted">Nessun gestore: le attività dei gruppi ricevono il rendiconto del gruppo o il proprio.</td></tr> }
+    </tbody>
+</table></div></section>
+<form method="post" class="panel">
+    <div class="panel-h"><h2>@(e.Id > 0 ? "Modifica " + e.Name : "Nuovo gestore")</h2>@if (e.Id > 0) {<span style="flex:1"></span><a class="btn sm" href="/Fatturazione/Gestori">Nuovo</a>}</div>
+    <input type="hidden" name="Input.Id" value="@e.Id">
+    <div class="panel-b form">
+        <div class="field"><label for="org">Gruppo</label>
+            <select id="org" name="Input.OrganizationId" disabled="@(e.Id > 0)">@foreach (var g in Model.Groups) { <option value="@g.Id" selected="@(g.Id == e.OrganizationId)">@g.Name</option> }</select></div>
+        <div class="field"><label for="n">Nome</label><input id="n" name="Input.Name" value="@e.Name" placeholder="es. Fit Langhe srl (3 palestre)" required></div>
+        <div class="field"><label for="l">Ragione sociale</label><input id="l" name="Input.LegalName" value="@e.LegalName"></div>
+        <div class="field"><label for="v">Partita IVA</label><input id="v" name="Input.VatNumber" value="@e.VatNumber" inputmode="numeric"></div>
+        <div class="field"><label for="a">Indirizzo</label><input id="a" name="Input.Address" value="@e.Address"></div>
+        <div class="field"><label for="c">Città</label><input id="c" name="Input.City" value="@e.City"></div>
+        <div class="field"><label for="m">Email per i rendiconti</label><input id="m" name="Input.Email" value="@e.Email" type="email"></div>
+        <div class="field"><label class="check"><input type="checkbox" name="Input.IsActive" value="true" checked="@(e.Id == 0 || e.IsActive)"> Attivo</label><small>Disattivato: le sue attività tornano nel rendiconto del gruppo.</small><input type="hidden" name="Input.IsActive" value="false"></div>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
+</form>

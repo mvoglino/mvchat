@@ -19,7 +19,7 @@
                 @if (s.Email is not null) {<span>@s.Email</span>}</div>
             <div><span class="muted">Mese</span><b>@BillingService.MonthName(s.Month)</b><span>@(s.Closed ? $"chiuso il {s.ClosedAt?.ToRome():dd/MM/yyyy}" : "provvisorio")</span></div>
         </div>
-        @if (s.MissingData) { <div class="note warn no-print">Mancano ragione sociale o partita IVA: completali in «Dati e logo» @(s.IsGroup ? "del gruppo" : "dell'attività") prima di fatturare.</div> }
+        @if (s.MissingData) { <div class="note warn no-print">Mancano ragione sociale o partita IVA: completali @(s.RecipientKind switch { "gruppo" => "in «Dati e logo» del gruppo", "gestore" => "nella scheda del gestore (Rendiconti → Gestori)", _ => "in «Dati e logo» dell'attività" }) prima di fatturare.</div> }
     </div>
     <div class="tbl"><table>
         <thead><tr><th>Attività</th><th>Voce</th><th class="num">Importo</th></tr></thead>

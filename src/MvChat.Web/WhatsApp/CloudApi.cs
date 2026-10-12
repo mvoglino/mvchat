@@ -73,8 +73,16 @@ public sealed class CloudApi
     public Task<ApiResult> TemplatesAsync(string wabaId, string token) =>
         GetAsync($"{wabaId}/message_templates?fields=name,status,language,rejected_reason,id&limit=200", token);
 
-    public Task<ApiResult> PhoneInfoAsync(string phoneNumberId, string token) =>
-        GetAsync($"{phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier", token);
+    /// <summary>
+    /// Dati del numero. Il limite di invio ora è dell'azienda (whatsapp_business_manager_messaging_limit):
+    /// se la versione dell'API non conosce ancora quel campo si richiede senza, con il limite del numero.
+    /// </summary>
+    public async Task<ApiResult> PhoneInfoAsync(string phoneNumberId, string token)
+    {
+        var r = await GetAsync($"{phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier,whatsapp_business_manager_messaging_limit", token);
+        if (r.Ok || !(r.Error ?? "").Contains("(codice 100)")) return r;
+        return await GetAsync($"{phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier", token);
+    }
 
     /// <summary>Le app iscritte agli avvisi dell'account WhatsApp: senza l'iscrizione, Meta non manda a mvchat i messaggi dei clienti.</summary>
     public Task<ApiResult> SubscribedAppsAsync(string wabaId, string token) => GetAsync($"{wabaId}/subscribed_apps", token);

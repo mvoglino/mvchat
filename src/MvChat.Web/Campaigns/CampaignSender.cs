@@ -100,7 +100,7 @@ public sealed class CampaignSender
                 var t = c.FollowUpTemplateId is int ft ? await _wa.TemplateAsync(ft) : null;
                 var o = c.OfferId is int oid ? (await _catalog.OffersAsync(AllScope, offerId: oid)).FirstOrDefault() : null;
                 var open = n is not null && SendWindows.IsOpen(await _repo.WindowsAsync(c.GymId), DateTime.UtcNow);
-                var room = n is null ? 0 : SendWindows.MetaDailyLimit(n.MessagingLimit, n.IsSimulated) is int lim ? lim - await _repo.FirstContactsLast24hAsync(n.Id) : int.MaxValue;
+                var room = n is null ? 0 : SendWindows.MetaDailyLimit(n.MessagingLimit, n.IsSimulated) is int lim ? lim - await _repo.FirstContactsLast24hAsync(n) : int.MaxValue;
                 campaigns[campaignId] = k = (c, n, t, o, open, room);
             }
             if (k.N is null || !k.Open || k.Room <= 0) continue; // si riprova al giro dopo (finché resta nei 3 giorni utili)
@@ -167,8 +167,8 @@ public sealed class CampaignSender
         string? limitNote = null;
         if (SendWindows.MetaDailyLimit(number!.MessagingLimit, number.IsSimulated) is int metaLimit)
         {
-            var free = metaLimit - await _repo.FirstContactsLast24hAsync(number.Id);
-            if (free < room) { room = Math.Max(0, free); limitNote = $"raggiunto il limite di Meta del numero ({metaLimit} persone nuove in 24 ore): si riparte quando si libera"; }
+            var free = metaLimit - await _repo.FirstContactsLast24hAsync(number);
+            if (free < room) { room = Math.Max(0, free); limitNote = $"raggiunto il limite di Meta ({metaLimit} persone nuove in 24 ore, condiviso dai numeri dello stesso account WhatsApp): si riparte quando si libera"; }
         }
         if (c.DailyLimit is int daily)
         {

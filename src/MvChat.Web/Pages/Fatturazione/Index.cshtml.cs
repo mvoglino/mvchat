@@ -10,8 +10,8 @@ using MvChat.Web.Security;
 namespace MvChat.Web.Pages.Fatturazione;
 
 /// <summary>
-/// Rendiconti mensili da fatturare. MVitalia vede e chiude tutti i mesi; il gruppo vede i suoi rendiconti,
-/// l'attività singola il suo. Non è una fattura elettronica: è la base per farla nel programma di contabilità.
+/// Rendiconti mensili da fatturare. MVitalia vede e chiude tutti i mesi; il gruppo vede i rendiconti del gruppo;
+/// l'attività (singola o che paga da sé) il suo; il responsabile di area quelli delle sue attività e del loro gestore. Non è una fattura elettronica: è la base per farla nel programma di contabilità.
 /// </summary>
 public class IndexModel : PageModel
 {
@@ -27,7 +27,7 @@ public class IndexModel : PageModel
     private async Task<bool> LoadAsync(string? mese)
     {
         Me = User.Scope();
-        if (Me.Role is Roles.Operator or Roles.AreaManager) return false; // i rendiconti non sono per operatori e responsabili di area
+        if (Me.Role is Roles.Operator) return false; // i rendiconti non sono per gli operatori
         var now = DateTime.UtcNow.ToRome();
         var current = new DateTime(now.Year, now.Month, 1);
         for (var i = 0; i < 18; i++) Months.Add(current.AddMonths(-i).ToString("yyyy-MM"));
@@ -58,12 +58,15 @@ public class IndexModel : PageModel
         return Redirect($"/Fatturazione?mese={Month}");
     }
 
-    public async Task<IActionResult> OnPostReopenAsync(string? mese, int org)
+    public async Task<IActionResult> OnPostReopenAsync(string? mese, string? chi, int? org)
     {
         if (!await LoadAsync(mese)) return Forbid();
         if (!Me.IsSuperAdmin) return Forbid();
-        await _billing.ReopenAsync(Month, org);
-        await _repos.AuditAsync(Me, "billing.reopened", $"{Month} · cliente {org}", HttpContext.Connection.RemoteIpAddress?.ToString(), org);
+        var key = !string.IsNullOrEmpty(chi) ? chi : org is int o ? "o" + o : "";
+        var st = Items.FirstOrDefault(x => x.RecipientKey == key);
+        if (st is null) return NotFound();
+        await _billing.ReopenAsync(Month, key);
+        await _repos.AuditAsync(Me, "billing.reopened", $"{Month} · {st.RecipientName}", HttpContext.Connection.RemoteIpAddress?.ToString(), st.OrganizationId);
         TempData["Ok"] = "Rendiconto riaperto: ora si ricalcola con le regole attuali.";
         return Redirect($"/Fatturazione?mese={Month}");
     }

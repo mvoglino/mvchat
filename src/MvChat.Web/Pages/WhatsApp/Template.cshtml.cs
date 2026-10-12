@@ -20,6 +20,9 @@ public class TemplateModel : PageModel
     public List<WaTemplate> Items { get; private set; } = new();
     public List<GoalModel> Models { get; private set; } = new();
     public List<string> Problems { get; private set; } = new();
+    /// <summary>Le altre attività dello stesso gruppo con un numero collegato: lì si può copiare un template.</summary>
+    public List<(Gym Gym, WaNumber Number)> CopyTargets { get; private set; } = new();
+    [BindProperty] public List<int> Targets { get; set; } = new();
 
     [BindProperty(SupportsGet = true)] public int? Model { get; set; }
     [BindProperty] public string? Name { get; set; }
@@ -35,6 +38,9 @@ public class TemplateModel : PageModel
         Number = await _wa.NumberForGymAsync(id);
         Items = await _wa.TemplatesAsync(id);
         Models = await _catalog.ModelsAsync(me, onlyActive: true);
+        if (g.InGroup)
+            foreach (var other in (await _repos.GymsAsync(me)).Where(x => x.Id != g.Id && x.OrganizationId == g.OrganizationId).OrderBy(x => x.Name))
+                if (await _wa.NumberForGymAsync(other.Id) is { } on) CopyTargets.Add((other, on));
         return true;
     }
 
@@ -59,6 +65,8 @@ public class TemplateModel : PageModel
         Problems.AddRange(TemplateText.Problems(Body));
         if (Category is not ("MARKETING" or "UTILITY")) Category = "MARKETING";
         if (Problems.Count == 0 && await _wa.TemplateNameTakenAsync(Number.Id, name, "it")) Problems.Add("Esiste già un template con questo nome per questo numero.");
+        if (Problems.Count == 0 && await _wa.TemplateNameInAccountAsync(Number, name, "it") is string owner)
+            Problems.Add($"Questo nome è già usato da {owner}, che ha lo stesso account WhatsApp: apri i template di {owner} e usa «Copia sulle altre attività», oppure scegli un altro nome.");
         if (Problems.Count > 0) return Page();
 
         var t = new WaTemplate
@@ -97,6 +105,42 @@ public class TemplateModel : PageModel
         var n = await _wa.DeleteTemplateAsync(t.Id, Gym.Id);
         if (n > 0) await _repos.AuditAsync(User.Scope(), "wa.template.deleted", t.Name, HttpContext.Connection.RemoteIpAddress?.ToString(), Gym.OrganizationId, Gym.Id);
         TempData[n > 0 ? "Ok" : "Err"] = n > 0 ? "Template eliminato." : "Si possono eliminare solo template non approvati e non usati da una campagna.";
+        return Redirect($"/WhatsApp/Template/{id}");
+    }
+
+    /// <summary>
+    /// Copia un template sulle altre attività del gruppo. Se l'attività usa lo stesso account WhatsApp il template è già lì
+    /// (stesso stato, nessun nuovo invio a Meta); altrimenti viene mandato a Meta per l'approvazione sul suo account.
+    /// </summary>
+    public async Task<IActionResult> OnPostCopyAsync(int id)
+    {
+        if (!await LoadAsync(id) || Number is null) return NotFound();
+        var src = Items.FirstOrDefault(x => x.Id == TemplateId);
+        if (src is null || src.Status is "bozza" or "errore" or "rifiutato") { TempData["Err"] = "Si copiano solo template approvati o in revisione."; return Redirect($"/WhatsApp/Template/{id}"); }
+        var chosen = CopyTargets.Where(t => Targets.Contains(t.Gym.Id)).ToList();
+        if (chosen.Count == 0) { TempData["Err"] = "Scegli almeno un'attività."; return Redirect($"/WhatsApp/Template/{id}"); }
+        var me = User.Scope();
+        var done = new List<string>(); var skipped = new List<string>(); var failed = new List<string>();
+        foreach (var (gym, num) in chosen)
+        {
+            if (await _wa.TemplateNameTakenAsync(num.Id, src.Name, src.Language)) { skipped.Add(gym.Name); continue; }
+            var sameAccount = !num.IsSimulated && !Number.IsSimulated && num.WabaId == Number.WabaId && src.MetaTemplateId is not null;
+            var t = new WaTemplate
+            {
+                OrganizationId = gym.OrganizationId, GymId = gym.Id, WaNumberId = num.Id, GoalModelId = src.GoalModelId,
+                Name = src.Name, Language = src.Language, Category = src.Category, Body = src.Body, Variables = src.Variables,
+                Status = sameAccount ? src.Status : "bozza", MetaTemplateId = sameAccount ? src.MetaTemplateId : null
+            };
+            t.Id = await _wa.InsertTemplateAsync(t, me.UserId);
+            if (sameAccount) { done.Add(gym.Name); continue; }
+            var (ok, error) = await _service.SubmitTemplateAsync(num, t);
+            if (ok) done.Add(gym.Name); else failed.Add($"{gym.Name} ({error})");
+        }
+        await _repos.AuditAsync(me, "wa.template.copied", $"{src.Name} → {string.Join(", ", done)}", HttpContext.Connection.RemoteIpAddress?.ToString(), Gym.OrganizationId, Gym.Id);
+        var msg = done.Count > 0 ? $"Template «{src.Name}» copiato su: {string.Join(", ", done)}. Sulle attività con un proprio account WhatsApp va approvato da Meta (di solito pochi minuti)." : "";
+        if (skipped.Count > 0) msg += $" Già presente su: {string.Join(", ", skipped)}.";
+        if (failed.Count > 0) msg += $" Non riuscito su: {string.Join("; ", failed)}.";
+        TempData[failed.Count == 0 && done.Count > 0 ? "Ok" : "Err"] = msg.Trim();
         return Redirect($"/WhatsApp/Template/{id}");
     }
 

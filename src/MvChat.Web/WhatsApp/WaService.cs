@@ -133,9 +133,28 @@ public sealed class WaService
         if (!r.Ok) { await _repo.SetNumberCheckAsync(n.Id, "errore", null, null, null, r.Error); return r.Error; }
         var warning = await EnsureSubscribedAsync(n, token!);
         await _repo.SetNumberCheckAsync(n.Id, "attivo",
-            r.Body?["quality_rating"]?.GetValue<string>(), r.Body?["messaging_limit_tier"]?.GetValue<string>(),
+            r.Body?["quality_rating"]?.GetValue<string>(), LimitOf(r.Body),
             r.Body?["verified_name"]?.GetValue<string>(), warning);
         return warning;
+    }
+
+    /// <summary>
+    /// Il limite di invio letto da Meta, scritto sempre come TIER_250 / TIER_2K / TIER_UNLIMITED.
+    /// Prima il limite dell'azienda (dal 7 ottobre 2025 è quello che vale), altrimenti il vecchio limite del numero.
+    /// </summary>
+    public static string? LimitOf(System.Text.Json.Nodes.JsonNode? body)
+    {
+        static string? Text(System.Text.Json.Nodes.JsonNode? n) => n switch
+        {
+            null => null,
+            System.Text.Json.Nodes.JsonValue v when v.TryGetValue<string>(out var s) => s,
+            _ => n.ToJsonString()
+        };
+        var raw = Text(body?["whatsapp_business_manager_messaging_limit"]) ?? Text(body?["messaging_limit_tier"]);
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (raw.ToUpperInvariant().Contains("UNLIMITED")) return "TIER_UNLIMITED";
+        var n = MvChat.Web.Campaigns.SendWindows.MetaDailyLimit(raw, false) ?? 0;
+        return n >= 1000 && n % 1000 == 0 ? $"TIER_{n / 1000}K" : $"TIER_{n}";
     }
 
     /// <summary>

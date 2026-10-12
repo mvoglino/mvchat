@@ -13,6 +13,10 @@
         <div class="stat"><b style="font-size:17px">@(n.QualityRating ?? "—")</b><span>qualità per Meta · limite @(n.MessagingLimit ?? "—")</span></div>
     </div>
     @if (!string.IsNullOrEmpty(n.LastError)) { <div class="note warn">Ultimo problema segnalato: @n.LastError</div> }
+    @if (Model.SameAccount.Count > 0)
+    {
+        <div class="note">Stesso account WhatsApp di: <b>@string.Join(", ", Model.SameAccount.Select(x => x.GymName))</b>. Il limite di invio di Meta è in comune tra questi numeri (mvchat li conta insieme) e i template approvati sull'account valgono per tutti.</div>
+    }
 }
 
 @if (Model.CanConfigure)
@@ -27,7 +31,8 @@
         <div class="field"><label asp-for="DisplayName">Nome visualizzato</label><input asp-for="DisplayName"><small>Su Meta va approvato: di solito il nome dell'attività.</small></div>
         <div class="field"><label asp-for="PhoneNumberId">Phone number ID (solo Meta)</label><input asp-for="PhoneNumberId" inputmode="numeric" autocomplete="off" placeholder="solo cifre, es. 1366392326559433"></div>
         <div class="field"><label asp-for="WabaId">WhatsApp Business Account ID (solo Meta)</label><input asp-for="WabaId" inputmode="numeric" autocomplete="off" placeholder="solo cifre, es. 1234567890123456"></div>
-        <div class="field full"><label asp-for="AccessToken">Chiave di accesso (solo Meta)</label><input asp-for="AccessToken" type="password" autocomplete="new-password" placeholder="@(n?.HasToken == true ? "già inserita · lascia vuoto per non cambiarla" : "")"><small>Viene salvata cifrata e non si rivede più.</small></div>
+        <div class="field full"><label asp-for="AccessToken">Chiave di accesso (solo Meta)</label><input asp-for="AccessToken" type="password" autocomplete="new-password" placeholder="@(n?.HasToken == true ? "già inserita · lascia vuoto per non cambiarla" : "")"><small>Viene salvata cifrata e non si rivede più.</small>
+            @if (Model.SameAccount.Count > 0) { <label class="check" style="margin-top:6px"><input type="checkbox" name="TokenForAll" value="true"> Usa la nuova chiave anche per gli altri @Model.SameAccount.Count numeri dello stesso account (@string.Join(", ", Model.SameAccount.Select(x => x.GymName)))</label> }</div>
     </div>
     <div class="actions"><button class="btn primary" type="submit">Salva</button></div>
 </form>

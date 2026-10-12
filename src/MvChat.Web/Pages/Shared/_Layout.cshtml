@@ -108,7 +108,7 @@ else
                 if (canWork)
                 {
                     var results = new List<(string Label, string Href, bool Active, bool Badge)> { ("Report", "/Report", On("/Report"), false) };
-                    if (scope.IsOrgAdmin || (scope.IsManager && !inGroup)) results.Add(("Rendiconti", "/Fatturazione", On("/Fatturazione"), false));
+                    if (scope.IsOrgAdmin || scope.IsManager || scope.IsAreaManager) results.Add(("Rendiconti", "/Fatturazione", On("/Fatturazione"), false));
                     results.Add(("Richieste privacy dei clienti", "/Privacy", On("/Privacy"), false));
                     groups.Add(("Risultati e privacy", null, results));
                 }

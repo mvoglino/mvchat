@@ -688,7 +688,7 @@ _,html,_ = sa.req(f"/Fatturazione?mese={prev_m}"); check("solo MVitalia chiude i
 _,html,_ = aurc.req(f"/Fatturazione?mese={cur_m}"); _,menu,_ = aurc.req("/")
 check("l'attività singola vede il suo rendiconto", "Centro Benessere Aurora" in html and "29,00 €" in html and "FitActive" not in html and ">Rendiconti<" in menu)
 _,html,_ = m.req(f"/Fatturazione?mese={cur_m}"); _,menu,_ = m.req("/")
-check("le attività di un gruppo non hanno rendiconti propri", "Niente da fatturare" in html and ">Rendiconti<" not in menu)
+check("le attività di un gruppo intestate al gruppo non hanno rendiconti propri", "Niente da fatturare" in html)
 s,csv,_ = sa.req(f"/Fatturazione?mese={cur_m}&handler=Csv")
 check("rendiconti scaricabili per la contabilità", s == 200 and "Intestatario;Ragione sociale;Partita IVA" in csv and "Consumo AI" in csv and "Abbonamento" in csv, csv[:150])
 
@@ -1068,8 +1068,10 @@ check("responsabile di area: una conversazione di un'altra attività non si apre
 _,html,_ = ar.req("/Campagne"); check("responsabile di area: solo le campagne delle sue attività", "Motivi rifiuto" in html and "Pilates Bra" not in html)
 _,html,_ = ar.req("/Report"); tb = html[html.find("Confronto tra le attività"):]
 check("responsabile di area: report con il totale delle sue attività", "Le mie attività" in html and "FitActive Alba" in tb and "FitActive Bra" not in tb, html[html.find("crumbs"):][:300])
-blocked = [ar.req(u)[0] for u in ("/Gyms", "/Gruppo", "/Impostazioni/AI", "/Fatturazione")]
-check("responsabile di area: niente attività, dati del gruppo, impostazioni e rendiconti", all(x in (302, 403, 404) for x in blocked), str(blocked))
+blocked = [ar.req(u)[0] for u in ("/Gyms", "/Gruppo", "/Impostazioni/AI", "/Fatturazione/Gestori")]
+_,fat_ar,_ = ar.req(f"/Fatturazione?mese={cur_m}")
+check("responsabile di area: niente attività, dati del gruppo, impostazioni; nessun rendiconto del gruppo", all(x in (302, 403, 404) for x in blocked)
+      and "Niente da fatturare" in fat_ar and "<b>FitActive</b>" not in fat_ar[fat_ar.find("<tbody>"):], str(blocked) + fat_ar[fat_ar.find("<tbody>"):][:400])
 s,_,loc = ar.post(f"/WhatsApp/Numero/{alba}?handler=Save", {"Mode":"simulato","DisplayPhone":"0173 999999"}, form_path=f"/WhatsApp/Numero/{alba}")
 check("responsabile di area: non collega numeri WhatsApp", s in (400, 403) or "/Error/403" in (loc or ""), f"{s} {loc}")
 s1,_,_ = ar.post("/Users/Edit", {"Input.FullName":"Op Area","Input.Email":"op.area@fitactive.test","Input.Role":"operator","Input.GymId":str(alba),"Input.IsActive":"true"})
@@ -1089,7 +1091,84 @@ check("il responsabile vede le sue attività nel suo profilo ma non le cambia", 
 
 pages_ok = {u: ar2.req(u)[0] for u in ("/", "/Lists", "/Sedi", "/Offerte", "/Modelli", "/OptOuts", "/RisposteRapide", "/Privacy", "/Attivita", "/Conversazioni/Archivio", f"/Report?attivita={alba}", f"/Campagne/{cR}")}
 _,menu,_ = ar2.req("/")
-check("responsabile di area: le sue pagine si aprono e il menù non mostra quelle del gruppo", all(v == 200 for v in pages_ok.values()) and "Dati e logo delle attività" in menu and ">Rendiconti<" not in menu and "Dati e logo del gruppo" not in menu, str(pages_ok))
+check("responsabile di area: le sue pagine si aprono e il menù non mostra quelle del gruppo", all(v == 200 for v in pages_ok.values()) and "Dati e logo delle attività" in menu and "Dati e logo del gruppo" not in menu, str(pages_ok))
+
+# 5z. Palestre con conti separati: rendiconto intestato a gruppo / attività / gestore; numeri dello stesso account Meta
+bra = gym["FitActive Bra"]
+s,_,_ = sa.post("/Fatturazione/Gestori", {"Input.Id":"0","Input.OrganizationId":str(org['FitActive']),"Input.Name":"Fit Langhe srl","Input.LegalName":"Fit Langhe S.r.l.",
+    "Input.VatNumber":"09876543210","Input.City":"Bra","Input.IsActive":"true"})
+_,gh,_ = sa.req("/Fatturazione/Gestori"); ent = re.search(r'href="\?id=(\d+)"', gh)
+check("MVitalia crea un gestore con i suoi dati fiscali", s == 302 and "Fit Langhe srl" in gh and ent is not None, str(s))
+s_bad,gh2,_ = sa.post("/Fatturazione/Gestori", {"Input.Id":"0","Input.OrganizationId":str(org['FitActive']),"Input.Name":"X srl","Input.VatNumber":"123","Input.IsActive":"true"})
+st_d,_,_ = d.req("/Fatturazione/Gestori")
+check("gestori: partita IVA controllata e pagina solo per MVitalia", s_bad == 200 and "11 cifre" in gh2 and st_d in (302, 403), f"{s_bad} {st_d}")
+eid = ent.group(1) if ent else "0"
+def set_bill(gid, name, fee, bill, entity=""):
+    return sa.post(f"/Gyms/Edit/{gid}", {"Input.Id":gid,"Input.Name":name,"Input.City":"X","Input.IsActive":"true","Fee":fee,"FeeFrom":"2026-01-01","BillTo":bill,"EntityId":entity},
+                   form_path=f"/Gyms/Edit/{gid}")
+s0,eh,_ = set_bill(bra, "FitActive Bra", "39,00", "gestore", "")
+check("intestare al gestore senza sceglierlo: errore", s0 == 200 and "Scegli il gestore" in eh, str(s0))
+r1 = set_bill(alba, "FitActive Alba", "", "attivita")[0]; r2 = set_bill(bra, "FitActive Bra", "39,00", "gestore", eid)[0]
+_,eh,_ = sa.req(f"/Gyms/Edit/{bra}")
+check("scheda attività: rendiconto intestato al gestore", r1 == r2 == 302 and re.search(r'value="gestore" checked', eh) is not None and f'value="{eid}" selected' in eh, f"{r1} {r2}")
+_,fh,_ = sa.req(f"/Fatturazione?mese={cur_m}")
+check("rendiconti separati: attività che paga da sé e gestore", re.search(r"<b>FitActive Alba</b><div class=\"muted\">attività del gruppo", fh) is not None
+      and re.search(r"<b>Fit Langhe srl</b><div class=\"muted\">gestore di più attività · Fit Langhe S\.r\.l\.", fh) is not None and "<b>FitActive</b>" not in fh, fh[fh.find("<tbody>"):][:900])
+_,dh,_ = sa.req(f"/Fatturazione/Dettaglio?mese={cur_m}&chi=g{eid}")
+check("dettaglio del gestore con i suoi dati fiscali e le sue attività", "Fit Langhe S.r.l." in dh and "P.IVA 09876543210" in dh and "FitActive Bra" in dh and "FitActive Alba" not in dh)
+_,fm,_ = m.req(f"/Fatturazione?mese={cur_m}"); sm,_,_ = m.req(f"/Fatturazione/Dettaglio?mese={cur_m}&chi=g{eid}")
+check("l'amministratore attività vede il rendiconto della sua attività, non quello del gestore", "<b>FitActive Alba</b>" in fm and "Fit Langhe" not in fm and sm == 404, str(sm))
+_,fa,_ = ar2.req(f"/Fatturazione?mese={cur_m}"); _,fd,_ = d.req(f"/Fatturazione?mese={cur_m}")
+check("il responsabile di area vede i rendiconti delle sue attività e del loro gestore; il gruppo li vede tutti",
+      "<b>FitActive Alba</b>" in fa and "<b>Fit Langhe srl</b>" in fa and "<b>FitActive Alba</b>" in fd and "<b>Fit Langhe srl</b>" in fd and "Chiudi il mese" not in fd)
+set_bill(alba, "FitActive Alba", "", "gruppo"); set_bill(bra, "FitActive Bra", "39,00", "gruppo")
+_,fh,_ = sa.req(f"/Fatturazione?mese={cur_m}")
+check("tornate al gruppo: un solo rendiconto del gruppo", "<b>FitActive</b>" in fh and "Fit Langhe srl" not in fh)
+
+# Due attività dello stesso gestore con lo stesso account WhatsApp (limite e template in comune)
+fake = fake_meta.start(5079)
+s,_,loc = d.post("/Gyms/Edit", {"Input.Name":"FitActive Cuneo","Input.City":"Cuneo","Input.IsActive":"true"})
+cuneo = int(re.search(r"/Attivita/(\d+)", loc or "").group(1)) if loc and "/Attivita/" in loc else 0
+cu_wa = f"/WhatsApp/Numero/{cuneo}"
+s,_,_ = d.post(cu_wa + "?handler=Save", {"Mode":"meta","DisplayPhone":"0171 000000","DisplayName":"FitActive Cuneo","PhoneNumberId":"333","WabaId":"222","AccessToken":"good-token"}, form_path=cu_wa)
+_,ch,_ = d.req(cu_wa)
+check("stesso account WhatsApp di un'altra attività: mvchat lo dice (limite e template in comune)", s == 302 and "Stesso account WhatsApp di: <b>FitActive Bra</b>" in ch, str(s))
+fake_meta.TOKEN = "good-token-2"  # Meta ha una chiave nuova: si aggiorna una volta per tutto l'account
+s,_,_ = d.post(cu_wa + "?handler=Save", {"Mode":"meta","DisplayPhone":"0171 000000","DisplayName":"FitActive Cuneo","PhoneNumberId":"333","WabaId":"222","AccessToken":"good-token-2","TokenForAll":"true"}, form_path=cu_wa)
+_,ch,_ = d.req(cu_wa)
+d.post(f"/WhatsApp/Numero/{bra}?handler=Check", {}, form_path=f"/WhatsApp/Numero/{bra}"); _,bh,_ = d.req(f"/WhatsApp/Numero/{bra}")
+check("nuova chiave applicata anche agli altri numeri dello stesso account", "Chiave aggiornata anche su altri 1 numeri dello stesso account" in ch
+      and "Collegamento controllato: tutto a posto" in bh, ch[ch.find("note"):][:300])
+fake_meta.PORTFOLIO_LIMIT = "TIER_2K"
+d.post(cu_wa + "?handler=Check", {}, form_path=cu_wa); _,ch,_ = d.req(cu_wa)
+check("limite di invio dell'azienda letto da Meta (nuovo campo)", "limite TIER_2K" in ch, ch[ch.find("qualità per Meta"):][:80])
+fake_meta.OLD_API = True
+d.post(cu_wa + "?handler=Check", {}, form_path=cu_wa); _,ch,_ = d.req(cu_wa)
+check("versione dell'API senza il nuovo campo: si usa il limite del numero, senza errori", "limite TIER_1K" in ch and "Collegamento controllato: tutto a posto" in ch, ch[ch.find("qualità per Meta"):][:80])
+fake_meta.OLD_API = False; fake_meta.PORTFOLIO_LIMIT = None
+tb = f"/WhatsApp/Template/{bra}"
+d.post(tb + "?handler=Refresh", {}, form_path=tb)
+_,th,_ = d.req(tb); tid_bra = re.search(r'<code>rinnovo_bra</code>.*?name="TemplateId" value="(\d+)"', th, re.S)
+check("template copiabile sulle altre attività del gruppo", tid_bra is not None and "Copia sulle altre attività" in th
+      and re.search(r"FitActive Cuneo <span class=\"muted\">· stesso account: subito pronto", th) is not None
+      and re.search(r"FitActive Alba <span class=\"muted\">· da approvare su Meta", th) is not None, th[th.find("Copia sulle"):][:600])
+before = len([r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/222/message_templates")])
+s,_,_ = d.post(tb + "?handler=Copy", {"TemplateId": tid_bra.group(1) if tid_bra else "0", "Targets":[str(cuneo), str(alba)]}, form_path=tb)
+_,th,_ = d.req(tb)
+after = len([r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/222/message_templates")])
+_,cth,_ = d.req(f"/WhatsApp/Template/{cuneo}"); _,ath,_ = d.req(f"/WhatsApp/Template/{alba}")
+check("copia sullo stesso account: già pronto senza nuovo invio a Meta; su un altro account: inviato per approvazione",
+      s == 302 and re.search(r"copiato su: (FitActive Alba, FitActive Cuneo|FitActive Cuneo, FitActive Alba)", th) is not None and after == before and "rinnovo_bra" in cth and "approvato" in cth[cth.find("rinnovo_bra"):][:600]
+      and "rinnovo_bra" in ath, f"{s} {before} {after}")
+d.post(tb + "?handler=Copy", {"TemplateId": tid_bra.group(1) if tid_bra else "0", "Targets":[str(cuneo)]}, form_path=tb)
+_,th,_ = d.req(tb); check("copia ripetuta: segnala che il template c'è già", "Già presente su: FitActive Cuneo" in th)
+body2 = "Ciao {{nome}}, in {{sede}} c'è una novità per te: vuoi saperne di più?"
+d.post(tb + "?handler=Create", {"Name":"novita_bra","Category":"MARKETING","Body":body2}, form_path=tb)
+s,ch,_ = d.post(f"/WhatsApp/Template/{cuneo}?handler=Create", {"Name":"novita_bra","Category":"MARKETING","Body":body2}, form_path=f"/WhatsApp/Template/{cuneo}")
+check("stesso nome già usato nell'account da un'altra attività: mvchat suggerisce di copiarlo", s == 200 and "è già usato da FitActive Bra" in ch, str(s))
+fake_meta.TOKEN = "good-token"
+d.post(cu_wa + "?handler=Save", {"Mode":"meta","DisplayPhone":"0171 000000","DisplayName":"FitActive Cuneo","PhoneNumberId":"333","WabaId":"222","AccessToken":"good-token","TokenForAll":"true"}, form_path=cu_wa)
+fake.shutdown(); fake.server_close()
 
 # 6. Blocco dopo 5 tentativi sbagliati
 x = Client()
