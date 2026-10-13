@@ -282,7 +282,10 @@ public sealed class WebhookHandler
                     // L'assistente legge solo testo: foto, vocali e documenti li guarda una persona.
                     await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: null);
                     await _wa.SendTextAsync(number, phone, Ai.Guardrails.Holding(conv.Language), null, conv.Id);
-                    await _convs.SetStateAsync(conv.Id, "operatore", Outcomes.Operatore, $"il cliente ha mandato {text}: serve una persona");
+                    var why = MediaStore.IsVoice(type) && !number.IsSimulated && _ai.AiConfig.Transcribe && !_ai.TranscribeEnabled
+                        ? "il cliente ha mandato un messaggio vocale, ma per trascriverlo manca la chiave OpenAI (Impostazioni AI): serve una persona"
+                        : $"il cliente ha mandato {text}: serve una persona";
+                    await _convs.SetStateAsync(conv.Id, "operatore", Outcomes.Operatore, why);
                 }
                 else if (string.IsNullOrWhiteSpace(text)) await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: null);
                 else

@@ -39,7 +39,9 @@ public sealed class AssistantService
             return "il cliente ha mandato un messaggio vocale (per questo tipo di attività i vocali non si trascrivono): serve una persona";
         foreach (var msgId in pending)
         {
-            if (!_ai.TranscribeEnabled) return "il cliente ha mandato un messaggio vocale: serve una persona";
+            if (!_ai.TranscribeEnabled) return _ai.AiConfig.Transcribe
+                ? "il cliente ha mandato un messaggio vocale, ma per trascriverlo manca la chiave OpenAI (Impostazioni AI): serve una persona"
+                : "il cliente ha mandato un messaggio vocale (trascrizione spenta): serve una persona";
             var (path, mime, error) = await _media.EnsureAsync(msgId);
             if (path is null) return "vocale non scaricato da Meta (" + error + "): serve una persona";
             var t = await _ai.TranscribeAsync(await File.ReadAllBytesAsync(path), Path.GetFileName(path), mime);

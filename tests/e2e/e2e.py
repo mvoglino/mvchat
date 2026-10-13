@@ -747,6 +747,7 @@ voice_form = {"Provider":"anthropic","Anthropic.Key":"","Anthropic.Model":"claud
     "Transcribe":"true","TranscribeModel":"gpt-4o-mini-transcribe","TranscribePrice":"0,003","TranscribeMaxSeconds":"180"}
 s,_,_ = sa.post("/Impostazioni/AI", voice_form)
 _,html,_ = sa.req("/Impostazioni/AI"); check("trascrizione dei vocali accesa da MVitalia", s == 302 and "Vocali dei clienti" in html and 'name="Transcribe" value="true" checked' in html, str(s))
+check("con la chiave OpenAI inserita nessun avviso di chiave mancante", "manca la chiave OpenAI" not in html and "manca la chiave OpenAI" not in sa.req("/")[1])
 def hook_bra(msgs):
     p = {"object":"whatsapp_business_account","entry":[{"id":"222","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"111"},"messages":msgs}}]}]}
     raw_ = _json.dumps(p).encode(); sig_ = "sha256=" + hmac.new(b"0123456789abcdef0123456789abcdef", raw_, hashlib.sha256).hexdigest()

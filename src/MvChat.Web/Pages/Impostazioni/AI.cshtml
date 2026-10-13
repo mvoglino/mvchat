@@ -26,6 +26,7 @@
     <div class="panel-b form">
         <div class="field full">
             <label class="check"><input type="checkbox" name="Transcribe" value="true" checked="@Model.Transcribe"> Trascrivi i vocali: l'assistente li legge come messaggi scritti e continua da solo</label>
+            @if (Model.Transcribe && !Model.OpenAiHasKey) {<div class="note warn" style="margin:6px 0">La trascrizione è accesa ma <b>manca la chiave OpenAI</b>: finché non la inserisci qui sopra (riquadro OpenAI) i vocali passano tutti alla reception.</div>}
             <small>Usa la chiave OpenAI qui sopra, anche se l'assistente è Anthropic (Anthropic non trascrive l'audio). Spento: i vocali passano alla reception, che li ascolta dalla conversazione. Il servizio di trascrizione va citato tra i fornitori nell'informativa privacy.</small>
         </div>
         <div class="field"><label for="TranscribeModel">Modello di trascrizione</label><input id="TranscribeModel" name="TranscribeModel" value="@Model.TranscribeModel"><small>Di base gpt-4o-mini-transcribe.</small></div>

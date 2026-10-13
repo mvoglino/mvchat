@@ -79,6 +79,7 @@ public sealed class AlertRepo
             if (c.Ai.Provider != "" && c.Ai.Current.InputPrice == 0 && c.Ai.Current.OutputPrice == 0)
                 list.Add(new("warn", "Prezzi del fornitore AI a zero: i consumi da rifatturare risultano gratuiti. Inseriscili dal listino del fornitore", "/Impostazioni/AI"));
             if (c.Ai.Provider == "") list.Add(new("warn", "Assistente AI spento: le risposte dei clienti passano tutte agli operatori", "/Impostazioni/AI"));
+            if (c.Ai.Transcribe && string.IsNullOrEmpty(c.Ai.OpenAi.KeyEnc)) list.Add(new("warn", "Trascrizione dei vocali accesa ma manca la chiave OpenAI: i vocali passano tutti alla reception", "/Impostazioni/AI"));
             if (string.IsNullOrEmpty(c.Meta.AppSecret)) list.Add(new("warn", "Impostazioni Meta incomplete: senza chiave segreta dell'app i messaggi dei clienti vengono rifiutati", "/Impostazioni/WhatsApp"));
             var aiErrors = await _db.ScalarAsync<int>("SELECT COUNT(*) FROM AiUsage WHERE Ok=0 AND CreatedAt > UTC_TIMESTAMP() - INTERVAL 24 HOUR");
             if (aiErrors > 0) list.Add(new("bad", $"Il fornitore AI non ha risposto {aiErrors} {(aiErrors == 1 ? "volta" : "volte")} nelle ultime 24 ore", "/Impostazioni/AI"));
