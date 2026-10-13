@@ -23,6 +23,7 @@ Già fatto: mvchat online su https://mvchat.mvitalia.com, operazione pianificata
 
 7. mvchat → MVitalia → **Impostazioni Meta**: inserisci ID app, Chiave segreta, versione API (lascia quella proposta) e salva. In alto compaiono **URL di callback** e **Token di verifica**.
 8. developers.facebook.com → la tua app → Dashboard → «Connettiti con i clienti tramite WhatsApp» → **Configurazione → Webhook** → Modifica: incolla URL di callback e Token di verifica → «Verifica e salva». Poi in «Campi webhook» attiva: **messages**, **message_template_status_update**, **phone_number_quality_update**, **account_update**.
+   **Vocali dei clienti:** in MVitalia → **Impostazioni AI** inserire anche la **chiave OpenAI** (platform.openai.com → API keys, account a consumo con un po' di credito) e accendere «Trascrivi i vocali». Serve anche se l'assistente è Anthropic: senza chiave i vocali passano tutti alla reception (il Pannello lo segnala).
 9. Nell'app metti la modalità **Live / Pubblicata** (interruttore in alto o «Pubblica»): senza, Meta non manda i messaggi dei clienti a mvchat.
 
 ## Parte C · mvchat: l'attività pilota
