@@ -103,7 +103,7 @@ public sealed class WaService
         if (string.IsNullOrEmpty(n.WabaId)) return (false, "Manca l'identificativo dell'account WhatsApp (WABA ID).");
         if (token is null) return (false, "Manca la chiave di accesso del numero.");
         var metaBody = TemplateText.ToMeta(t.Body, t.Variables);
-        var examples = t.Variables.Select(v => TemplateText.Placeholders.GetValueOrDefault(v, "esempio"));
+        var examples = t.Variables.Select(v => TemplateText.Example(v, n.GymName)); // esempio per Meta con il nome vero dell'attività
         var r = await _api.CreateTemplateAsync(n.WabaId!, token, t.Name, t.Language, t.Category, metaBody, examples);
         if (!r.Ok) { await _repo.SetTemplateStatusAsync(t.Id, "errore", null, r.Error); return (false, r.Error); }
         var status = MapTemplateStatus(r.Body?["status"]?.GetValue<string>() ?? "PENDING");

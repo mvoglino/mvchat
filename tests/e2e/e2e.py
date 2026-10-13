@@ -341,6 +341,7 @@ s,_,_ = d.post(tpl_b + "?handler=Create", {"Name":"rinnovo_bra","Category":"MARK
 sent = [r for r in fake_meta.REQUESTS if r["method"] == "POST" and r["path"].endswith("/222/message_templates")]
 comp = sent[-1]["body"]["components"][0] if sent else {}
 check("template inviato a Meta con {{1}} e esempi", bool(sent) and comp.get("text","").startswith("Ciao {{1}}, il tuo abbonamento {{2}} in {{3}} scade il {{4}}") and comp.get("example",{}).get("body_text",[[None]])[0][0] == "Giulia", str(comp)[:300])
+check("esempio per Meta con il nome vero dell'attività (non FitActive Alba)", bool(sent) and comp.get("example",{}).get("body_text",[[None]*3])[0][2] == "FitActive Bra", str(comp.get("example"))[:200])
 _,html,_ = d.req(tpl_b); check("template in revisione dopo l'invio", "in revisione" in html)
 s,_,_ = d.post(tpl_b + "?handler=Refresh", {}, form_path=tpl_b)
 _,html,_ = d.req(tpl_b); check("stato aggiornato da Meta: approvato", "approvato" in html)

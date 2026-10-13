@@ -25,6 +25,12 @@ public static class TemplateText
         ["contratto"] = "Annuale", ["iscrizione"] = "Corso base", ["data"] = "18/10/2026",
     };
 
+    /// <summary>Valore d'esempio di un segnaposto da mostrare a Meta per l'approvazione: per {{sede}}/{{palestra}}
+    /// il nome vero dell'attività che crea il template, per gli altri il valore fisso qui sopra.</summary>
+    public static string Example(string variable, string? gymName) =>
+        variable is "sede" or "palestra" && !string.IsNullOrWhiteSpace(gymName) ? gymName.Trim()
+            : Placeholders.GetValueOrDefault(variable, "esempio");
+
     /// <summary>Segnaposto principali (i sinonimi non si elencano, ma funzionano).</summary>
     public static readonly string[] Main = { "nome", "cognome", "abbonamento", "scadenza", "sede", "offerta", "servizio", "note" };
 
