@@ -980,6 +980,12 @@ cP,_,_ = camp_post(m, dict(base, Name="Con prova", ListId=lid_b), alba)
 _,html,_ = m.post(f"/Campagne/{cP}?handler=Test", {}, form_path=f"/Campagne/{cP}")
 html = cpage(m, cP); _,lst,_ = m.req("/Conversazioni?view=tutte")
 check("prova facoltativa: il primo messaggio arriva ai numeri di prova, la campagna resta in bozza", "Prova inviata a 1 numero" in html and "Bozza" in html and "Inviati (0)" in html and "+393470001111" in lst, html[html.find("flash"):][:200])
+# Una prova ancora aperta non blocca il numero: la campagna vera gli scrive comunque
+_, res = m.post_json("/Lists/New?handler=Import", {"GymId":alba,"Name":"Solo prova","FileName":"x.xlsx","Map":mp2,
+    "Rows":[["Maurizio","Prova","347 000 1111","","Annuale","2026-11-30","SI","","","",""]]}, "/Lists/New")
+cV,_,_ = camp_post(m, dict(base, Name="Vera dopo prova", ListId=res.get("listId")), alba)
+act(m, cV, "Start"); _time.sleep(0.3); html = cpage(m, cV)
+check("una conversazione di prova aperta non blocca il numero nella campagna vera", "Inviati (1)" in html and "già una conversazione aperta" not in html, html[html.find("Inviati"):][:200])
 # Istruzioni in più modificabili a campagna non ancora finita e visibili nell'anteprima
 m.post(f"/Campagne/{cP}?handler=Extra", {"ExtraInstructions":"Sabato open day con lezioni gratuite."}, form_path=f"/Campagne/{cP}")
 _,html,_ = m.req(f"/Modelli/Anteprima?campagna={cP}")

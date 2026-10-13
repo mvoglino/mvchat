@@ -259,6 +259,7 @@ public sealed class CampaignSender
                     Membership = r.Membership, ExpiresOn = r.ExpiresOn, GoalModelId = c.GoalModelId, OfferId = c.OfferId, CampaignId = c.Id,
                     Service = r.Service, Notes = r.Notes, Language = r.Language
                 };
+                await _convs.CloseOpenTestsAsync(number.Id, r.Phone); // le prove non restano «da gestire» accanto alla campagna vera
                 var convId = await _convs.CreateAsync(conv);
                 await _wa.SetMessageConversationAsync(res.MessageId, convId);
                 await _repo.MarkAsync(r.Id, "inviato", null, convId);

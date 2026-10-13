@@ -241,6 +241,11 @@ public sealed class ConversationRepo
     public Task SetRefusalReasonAsync(long id, string? reason) =>
         _db.ExecuteAsync("UPDATE Conversations SET RefusalReason=@reason WHERE Id=@id", new { id, reason });
 
+    /// <summary>Chiude le prove ancora aperte con un numero quando gli arriva una campagna vera: in reception resta solo quella vera.</summary>
+    public Task<int> CloseOpenTestsAsync(int waNumberId, string phone) => _db.ExecuteAsync(
+        @"UPDATE Conversations SET Status='chiusa', NeedsReply=0, OutcomeNote=COALESCE(OutcomeNote, 'prova chiusa: è arrivata una campagna vera')
+          WHERE WaNumberId=@waNumberId AND ContactPhone=@phone AND IsTest=1 AND Status<>'chiusa'", new { waNumberId, phone });
+
     public Task SetStateAsync(long id, string status, string outcome, string? note, int? assignedUserId = null) => _db.ExecuteAsync(
         @"UPDATE Conversations SET Status=@status, Outcome=@outcome, OutcomeNote=COALESCE(@note, OutcomeNote),
             HumanInvolved=CASE WHEN @status='operatore' OR @assignedUserId IS NOT NULL THEN 1 ELSE HumanInvolved END,

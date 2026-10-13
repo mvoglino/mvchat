@@ -374,8 +374,9 @@ public sealed class CampaignRepo
             AND k.OrganizationId=@orgId AND k.Id<>@exceptCampaignId AND t.Category<>'UTILITY'",
         new { orgId, phone, exceptCampaignId });
 
+    /// <summary>Conversazione vera aperta negli ultimi 7 giorni: le prove («Invia una prova») non bloccano mai un numero.</summary>
     public async Task<bool> HasOpenConversationAsync(int waNumberId, string phone) => await _db.ScalarAsync<int>(
-        @"SELECT COUNT(*) FROM Conversations WHERE WaNumberId=@waNumberId AND ContactPhone=@phone AND Status IN ('ai','operatore')
+        @"SELECT COUNT(*) FROM Conversations WHERE WaNumberId=@waNumberId AND ContactPhone=@phone AND Status IN ('ai','operatore') AND IsTest=0
           AND CreatedAt > UTC_TIMESTAMP() - INTERVAL 7 DAY", new { waNumberId, phone }) > 0;
 
     public Task<int> RemainingAsync(int campaignId) => _db.ScalarAsync<int>(
