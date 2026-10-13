@@ -1,0 +1,78 @@
+@page
+@model MvChat.Web.Pages.Impostazioni.ConsumiModel
+@using MvChat.Web.Pages.Impostazioni
+@{
+    ViewData["Title"] = "Consumi AI";
+    string D(decimal usd) => "$ " + usd.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("it-IT"));
+    string E(decimal eur) => eur.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("it-IT")) + " €";
+    var year = Model.Months.Aggregate(ConsumiModel.Cell.Zero, (s, m) => s + Model.ByMonth.GetValueOrDefault(m, ConsumiModel.Cell.Zero));
+    var month = Model.ByMonth.GetValueOrDefault(Model.Month, ConsumiModel.Cell.Zero);
+    var monthRows = Model.Rows.Where(r => r.Month == Model.Month).ToList();
+}
+@section Actions { <a class="btn primary" href="@Model.Url(handler: "Excel")">Scarica Excel</a> }
+<p class="muted" style="margin:0">Quanto è costata l'AI, mese per mese: <b>Anthropic</b> (assistente) e <b>OpenAI</b> (trascrizione dei vocali, o assistente se scelto). Il costo è calcolato da mvchat a ogni chiamata con i prezzi inseriti in <a href="/Impostazioni/AI">Impostazioni AI</a>: se i prezzi sono giusti coincide con quanto vi addebitano i fornitori (la fattura esatta resta nelle loro console). Euro al cambio di <a href="/Impostazioni/Fatturazione">Impostazioni fatturazione</a> (1 $ = @Model.UsdToEur.ToString("0.####") €); «da rifatturare» comprende il ricarico del @Model.MarkupPct.ToString("0.##")%.</p>
+
+<form method="get" class="form" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:12px 0">
+    <div class="field"><label for="anno">Anno</label><select id="anno" name="anno">@foreach (var y in Model.Years) {<option value="@y" selected="@(y == Model.Year)">@y</option>}</select></div>
+    <div class="field" style="min-width:260px"><label for="vista">Cosa vedere</label>
+        <select id="vista" name="vista">
+            <option value="">Tutto MVitalia</option>
+            <optgroup label="Gruppi">@foreach (var c in Model.Choices.Where(c => c.IsGroup)) {<option value="@c.Value" selected="@(c.Value == Model.Filter)">@c.Label</option>}</optgroup>
+            <optgroup label="Attività">@foreach (var c in Model.Choices.Where(c => !c.IsGroup)) {<option value="@c.Value" selected="@(c.Value == Model.Filter)">@c.Label</option>}</optgroup>
+        </select></div>
+    <input type="hidden" name="mese" value="@Model.Month">
+    <button class="btn" type="submit">Mostra</button>
+</form>
+
+<div class="stats">
+    <div class="stat"><b>@D(year.Total)</b><span>@Model.Year · @Model.FilterLabel</span></div>
+    <div class="stat"><b>@D(year.Anthropic)</b><span>Anthropic nell'anno</span></div>
+    <div class="stat"><b>@D(year.OpenAi)</b><span>OpenAI nell'anno</span></div>
+    <div class="stat"><b>@E(Model.Rebill(year.Total))</b><span>da rifatturare nell'anno</span></div>
+</div>
+
+<section class="panel">
+    <div class="panel-h"><h2>Mese per mese · @Model.Year</h2><span class="muted">@Model.FilterLabel · clicca un mese per il dettaglio per gruppo e attività</span></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Mese</th><th class="num">Anthropic</th><th class="num">OpenAI</th><th class="num">Totale $</th><th class="num">Totale €</th><th class="num">Da rifatturare</th></tr></thead>
+        <tbody>
+        @foreach (var m in Model.Months)
+        {
+            var c = Model.ByMonth.GetValueOrDefault(m, ConsumiModel.Cell.Zero);
+            <tr style="@(m == Model.Month ? "background:var(--soft, rgba(0,0,0,.04))" : "")"><td><a href="@Model.Url(mese: m)">@ConsumiModel.MonthName(m)</a></td><td class="num">@D(c.Anthropic)</td><td class="num">@D(c.OpenAi)</td><td class="num"><b>@D(c.Total)</b></td><td class="num">@E(Model.Eur(c.Total))</td><td class="num">@E(Model.Rebill(c.Total))</td></tr>
+        }
+        @if (Model.Months.Count == 0) { <tr><td colspan="6" class="muted">Nessun mese da mostrare.</td></tr> }
+        else { <tr><td><b>Totale</b></td><td class="num"><b>@D(year.Anthropic)</b></td><td class="num"><b>@D(year.OpenAi)</b></td><td class="num"><b>@D(year.Total)</b></td><td class="num"><b>@E(Model.Eur(year.Total))</b></td><td class="num"><b>@E(Model.Rebill(year.Total))</b></td></tr> }
+        </tbody>
+    </table></div>
+</section>
+
+<section class="panel">
+    <div class="panel-h"><h2>@ConsumiModel.MonthName(Model.Month) @Model.Year per gruppo e attività</h2><span class="muted">@D(month.Total) nel mese</span></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Gruppo / attività</th><th class="num">Anthropic</th><th class="num">OpenAI</th><th class="num">Totale $</th><th class="num">Totale €</th><th class="num">Da rifatturare</th></tr></thead>
+        <tbody>
+        @foreach (var org in monthRows.GroupBy(r => (r.OrgId, r.OrgName, r.IsGroup)).OrderBy(g => g.Key.OrgId is null).ThenByDescending(g => g.Sum(x => x.Cost.Total)))
+        {
+            var sum = org.Aggregate(ConsumiModel.Cell.Zero, (s, x) => s + x.Cost);
+            if (org.Key.IsGroup)
+            {
+                <tr><td><b>@org.Key.OrgName</b> <span class="muted">· gruppo</span></td><td class="num"><b>@D(sum.Anthropic)</b></td><td class="num"><b>@D(sum.OpenAi)</b></td><td class="num"><b>@D(sum.Total)</b></td><td class="num"><b>@E(Model.Eur(sum.Total))</b></td><td class="num"><b>@E(Model.Rebill(sum.Total))</b></td></tr>
+                foreach (var r in org.OrderByDescending(x => x.Cost.Total))
+                {
+                    <tr><td style="padding-left:28px">@r.GymName</td><td class="num">@D(r.Cost.Anthropic)</td><td class="num">@D(r.Cost.OpenAi)</td><td class="num">@D(r.Cost.Total)</td><td class="num">@E(Model.Eur(r.Cost.Total))</td><td class="num">@E(Model.Rebill(r.Cost.Total))</td></tr>
+                }
+            }
+            else
+            {
+                foreach (var r in org.OrderByDescending(x => x.Cost.Total))
+                {
+                    <tr><td><b>@r.GymName</b> <span class="muted">· @(r.OrgId is null ? "MVitalia" : "attività singola")</span></td><td class="num">@D(r.Cost.Anthropic)</td><td class="num">@D(r.Cost.OpenAi)</td><td class="num"><b>@D(r.Cost.Total)</b></td><td class="num">@E(Model.Eur(r.Cost.Total))</td><td class="num">@(r.OrgId is null ? "—" : E(Model.Rebill(r.Cost.Total)))</td></tr>
+                }
+            }
+        }
+        @if (monthRows.Count == 0) { <tr><td colspan="6" class="muted">Nessun consumo in questo mese.</td></tr> }
+        </tbody>
+    </table></div>
+    <div class="panel-b muted" style="font-size:12.5px">Comprende anche prove dell'assistente e banco di prova fatti dalle attività. Le «Prove di MVitalia» (prova del collegamento, banco senza attività) sono un costo vostro e non si rifatturano.</div>
+</section>

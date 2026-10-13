@@ -1289,6 +1289,18 @@ check("gruppo sospeso blocca l'accesso", "disattivato" in html)
 s,_,_ = Client().req("/jobs/tick?token=sbagliato"); check("tick rifiuta chiave sbagliata", s == 404)
 s,body,_ = Client().req("/jobs/tick?token=" + tick.group(1)); check("tick con chiave giusta", s == 200 and '"ok":true' in body)
 
+# Consumi AI per MVitalia: mese per mese, Anthropic e OpenAI, per gruppo e attività
+s,html,_ = sa.req("/Impostazioni/Consumi")
+check("consumi AI: mese per mese con Anthropic e OpenAI, per gruppo e attività", s == 200 and "Mese per mese" in html and "Anthropic" in html and "OpenAI" in html
+      and "per gruppo e attività" in html and "FitActive Alba" in html and "· gruppo" in html, html[html.find("Mese per mese"):][:300])
+fa = re.search(r'<option value="(o\d+)"[^>]*>FitActive</option>', html)
+_,html_g,_ = sa.req("/Impostazioni/Consumi?vista=" + (fa.group(1) if fa else "o0"))
+check("consumi AI: vista di un solo gruppo", fa is not None and "Gruppo FitActive" in html_g and "Centro Benessere Aurora" not in html_g.split("Cosa vedere")[-1].split("</select>")[-1])
+s2,_,_ = m.req("/Impostazioni/Consumi")
+check("consumi AI: solo MVitalia", s2 in (302, 403), str(s2))
+xc = xlsx(sa, "/Impostazioni/Consumi?handler=Excel")
+check("consumi AI in Excel: mese per mese e per attività", xc is not None and xc[0] == ["Mese per mese", "Per attività"] and "FitActive Alba" in xc[1]["Per attività"], str(xc[0] if xc else None))
+
 for n, ok, info in results:
     print(("OK  " if ok else "NO  ") + n + ("" if ok else "  -> " + info[:200]))
     if not ok and os.environ.get("GITHUB_ACTIONS"):  # prova fallita visibile nel riepilogo di GitHub
