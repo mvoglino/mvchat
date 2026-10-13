@@ -8,7 +8,7 @@
     <tbody>
     @foreach (var m in Model.Items)
     {
-        <tr><td><b>@m.Name</b></td><td class="muted">@m.Success</td>
+        <tr><td><b>@m.Name</b>@if (!string.IsNullOrWhiteSpace(m.Sectors)) {<div class="muted" style="font-size:12px">per: @string.Join(", ", m.Sectors.Split(',').Select(k => MvChat.Web.Infrastructure.Sectors.Get(k.Trim()).Label))</div>}</td><td class="muted">@m.Success</td>
             <td>@(m.NeedsOffer ? "Serve" : "Facoltativa")</td>
             <td>@(m.IsStandard ? "Standard MVitalia" : "Del gruppo" + (Model.Me.IsSuperAdmin ? " · " + m.OrganizationName : ""))</td>
             <td><span class="chip @(m.IsActive ? "good" : "")">@(m.IsActive ? "Attivo" : "Disattivato")</span></td>

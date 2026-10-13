@@ -137,6 +137,11 @@ public sealed class WaRepo
                            WHERE w.WabaId=@waba AND w.IsSimulated=0 AND w.Id<>@id AND t.Name=@name AND t.Language=@language LIMIT 1",
             new { waba = n.WabaId, id = n.Id, name, language }, r => r.GetString(0));
 
+    /// <summary>Lo stesso template (stesso nome) approvato in un'altra lingua sullo stesso numero, se esiste.</summary>
+    public Task<WaTemplate?> TemplateInLanguageAsync(int waNumberId, string name, string language) => _db.FirstAsync(
+        TemplateSelect + " WHERE WaNumberId=@waNumberId AND Name=@name AND Language=@language AND Status='approvato' LIMIT 1",
+        new { waNumberId, name, language }, MapTemplate);
+
     public Task<int> InsertTemplateAsync(WaTemplate t, int userId) => _db.ScalarAsync<int>(
         @"INSERT INTO WaTemplates (OrganizationId, GymId, WaNumberId, GoalModelId, Name, Language, Category, Body, Variables, Status, MetaTemplateId, RejectReason, CreatedBy)
           VALUES (@OrganizationId, @GymId, @WaNumberId, @GoalModelId, @Name, @Language, @Category, @Body, @Vars, @Status, @MetaTemplateId, @RejectReason, @userId);

@@ -25,6 +25,8 @@ public sealed class Campaign
     public DateTime? StartAt { get; set; }
     public int? DailyLimit { get; set; }
     /// <summary>Indicazioni in più per l'assistente, solo per questa campagna (si aggiungono al modello di obiettivo).</summary>
+    /// <summary>Quali clienti della lista sono stati scelti alla creazione (vuoto = tutti).</summary>
+    public string? FilterNote { get; set; }
     public string? ExtraInstructions { get; set; }
     /// <summary>A chi rifiuta senza dire perché, l'assistente chiede il motivo una volta (di base sì).</summary>
     public bool AskRefusalReason { get; set; } = true;
@@ -68,7 +70,31 @@ public sealed class Campaign
 }
 
 public sealed record CampaignRecipient(long Id, string Phone, string FirstName, string? LastName, string? Membership, DateTime? ExpiresOn,
-    string Status, string? Reason, long? ConversationId, DateTime? SentAt, string? Outcome, string? Service = null, string? Notes = null);
+    string Status, string? Reason, long? ConversationId, DateTime? SentAt, string? Outcome, string? Service = null, string? Notes = null, string? Language = null);
+
+/// <summary>
+/// Quali clienti della lista ricevono la campagna (tutti i campi facoltativi): data di riferimento (scadenza, ultimo soggiorno,
+/// appuntamento… secondo il tipo di attività) tra due date, un tipo, un servizio, una lingua.
+/// </summary>
+public sealed record RecipientFilter(DateTime? From, DateTime? To, string? Kind, string? Service, string? Language)
+{
+    public bool IsEmpty => From is null && To is null && Kind is null && Service is null && Language is null;
+
+    public string Describe(Infrastructure.Sector s)
+    {
+        var parts = new List<string>();
+        if (From is DateTime f && To is DateTime t) parts.Add($"{s.DateLabel.ToLowerInvariant()} dal {f:dd/MM/yyyy} al {t:dd/MM/yyyy}");
+        else if (From is DateTime f2) parts.Add($"{s.DateLabel.ToLowerInvariant()} dal {f2:dd/MM/yyyy}");
+        else if (To is DateTime t2) parts.Add($"{s.DateLabel.ToLowerInvariant()} fino al {t2:dd/MM/yyyy}");
+        if (Kind is not null) parts.Add($"{s.KindLabel.ToLowerInvariant()}: {Kind}");
+        if (Service is not null) parts.Add($"servizio: {Service}");
+        if (Language is not null) parts.Add($"lingua: {Infrastructure.Languages.Label(Language).ToLowerInvariant()}");
+        return string.Join(" · ", parts);
+    }
+
+    internal const string Where = @" AND (@fFrom IS NULL OR k.ExpiresOn >= @fFrom) AND (@fTo IS NULL OR k.ExpiresOn <= @fTo)
+        AND (@fKind IS NULL OR k.Membership=@fKind) AND (@fSvc IS NULL OR k.Service=@fSvc) AND (@fLang IS NULL OR COALESCE(k.Language,'it')=@fLang)";
+}
 
 /// <summary>Un numero di prova dell'attività (titolare, responsabile…): riceve il primo messaggio prima del via.</summary>
 public sealed record TestNumber(int Id, string Name, string Phone);
@@ -104,7 +130,7 @@ public sealed class CampaignRepo
         ListId = r.IntN("ListId"), ListName = r.Str("ListName")!, GoalModelId = r.Int("GoalModelId"), GoalName = r.Str("GoalName")!,
         OfferId = r.IntN("OfferId"), OfferTitle = r.Str("OfferTitle"), WaNumberId = r.Int("WaNumberId"), TemplateId = r.Int("TemplateId"),
         TemplateName = r.Str("TemplateName") ?? "(eliminato)", Status = r.Str("Status")!, PauseReason = r.Str("PauseReason"),
-        StartAt = r.Date("StartAt"), DailyLimit = r.IntN("DailyLimit"), ExtraInstructions = r.Str("ExtraInstructions"), AskRefusalReason = r.Bool("AskRefusalReason"),
+        StartAt = r.Date("StartAt"), DailyLimit = r.IntN("DailyLimit"), ExtraInstructions = r.Str("ExtraInstructions"), FilterNote = r.Str("FilterNote"), AskRefusalReason = r.Bool("AskRefusalReason"),
         FollowUpTemplateId = r.IntN("FollowUpTemplateId"), FollowUpTemplateName = r.Str("FollowUpTemplateName"), FollowUpDays = Convert.ToInt32(r.GetValue(r.GetOrdinal("FollowUpDays"))),
         FollowUpsSent = I(r, "FollowUpsSent"), FollowUpsReplied = I(r, "FollowUpsReplied"), CreatedAt = r.Date("CreatedAt")!.Value, StartedAt = r.Date("StartedAt"),
         CompletedAt = r.Date("CompletedAt"), LastRunAt = r.Date("LastRunAt"), LastRunNote = r.Str("LastRunNote"),
@@ -129,29 +155,53 @@ public sealed class CampaignRepo
     public Task<Campaign?> GetAsync(int id) => _db.FirstAsync(Select + " WHERE c.Id=@id", new { id }, Map);
 
     /// <summary>Crea la campagna e copia i destinatari dalla lista (solo chi non è nella lista STOP del gruppo).</summary>
-    public async Task<(int Id, int Recipients, int Excluded)> CreateAsync(Campaign c, int userId)
+    public async Task<(int Id, int Recipients, int Excluded)> CreateAsync(Campaign c, int userId, RecipientFilter? f = null)
     {
+        f ??= new RecipientFilter(null, null, null, null, null);
         await using var cn = await _db.OpenAsync();
         await using var tx = await cn.BeginTransactionAsync();
         int id;
         await using (var cmd = Db.Command(cn,
-            @"INSERT INTO Campaigns (OrganizationId, GymId, Name, ListId, ListName, GoalModelId, OfferId, WaNumberId, TemplateId, Status, StartAt, DailyLimit, ExtraInstructions, AskRefusalReason, FollowUpTemplateId, FollowUpDays, CreatedBy)
-              VALUES (@OrganizationId, @GymId, @Name, @ListId, @ListName, @GoalModelId, @OfferId, @WaNumberId, @TemplateId, 'bozza', @StartAt, @DailyLimit, @ExtraInstructions, @AskRefusalReason, @FollowUpTemplateId, @FollowUpDays, @userId);
+            @"INSERT INTO Campaigns (OrganizationId, GymId, Name, ListId, ListName, GoalModelId, OfferId, WaNumberId, TemplateId, Status, StartAt, DailyLimit, ExtraInstructions, AskRefusalReason, FollowUpTemplateId, FollowUpDays, FilterNote, CreatedBy)
+              VALUES (@OrganizationId, @GymId, @Name, @ListId, @ListName, @GoalModelId, @OfferId, @WaNumberId, @TemplateId, 'bozza', @StartAt, @DailyLimit, @ExtraInstructions, @AskRefusalReason, @FollowUpTemplateId, @FollowUpDays, @FilterNote, @userId);
               SELECT LAST_INSERT_ID();",
-            new { c.OrganizationId, c.GymId, c.Name, c.ListId, c.ListName, c.GoalModelId, c.OfferId, c.WaNumberId, c.TemplateId, c.StartAt, c.DailyLimit, c.ExtraInstructions, c.AskRefusalReason, c.FollowUpTemplateId, c.FollowUpDays, userId }, tx))
+            new { c.OrganizationId, c.GymId, c.Name, c.ListId, c.ListName, c.GoalModelId, c.OfferId, c.WaNumberId, c.TemplateId, c.StartAt, c.DailyLimit, c.ExtraInstructions, c.AskRefusalReason, c.FollowUpTemplateId, c.FollowUpDays, c.FilterNote, userId }, tx))
             id = Convert.ToInt32(await cmd.ExecuteScalarAsync());
         int added, total;
         await using (var cmd = Db.Command(cn,
-            @"INSERT INTO CampaignRecipients (CampaignId, ContactId, Phone, FirstName, LastName, Membership, ExpiresOn, Service, Notes)
-              SELECT @id, k.Id, k.Phone, k.FirstName, k.LastName, k.Membership, k.ExpiresOn, k.Service, k.Notes FROM Contacts k
-              WHERE k.ListId=@ListId AND k.GymId=@GymId
+            @"INSERT INTO CampaignRecipients (CampaignId, ContactId, Phone, FirstName, LastName, Membership, ExpiresOn, Service, Notes, Language)
+              SELECT @id, k.Id, k.Phone, k.FirstName, k.LastName, k.Membership, k.ExpiresOn, k.Service, k.Notes, k.Language FROM Contacts k
+              WHERE k.ListId=@ListId AND k.GymId=@GymId" + RecipientFilter.Where + @"
                 AND NOT EXISTS (SELECT 1 FROM OptOuts x WHERE x.OrganizationId=@OrganizationId AND x.Phone=k.Phone)",
-            new { id, c.ListId, c.GymId, c.OrganizationId }, tx))
+            new { id, c.ListId, c.GymId, c.OrganizationId, fFrom = f.From, fTo = f.To, fKind = f.Kind, fSvc = f.Service, fLang = f.Language }, tx))
             added = await cmd.ExecuteNonQueryAsync();
-        await using (var cmd = Db.Command(cn, "SELECT COUNT(*) FROM Contacts WHERE ListId=@ListId AND GymId=@GymId", new { c.ListId, c.GymId }, tx))
+        await using (var cmd = Db.Command(cn, "SELECT COUNT(*) FROM Contacts k WHERE k.ListId=@ListId AND k.GymId=@GymId" + RecipientFilter.Where,
+            new { c.ListId, c.GymId, fFrom = f.From, fTo = f.To, fKind = f.Kind, fSvc = f.Service, fLang = f.Language }, tx))
             total = Convert.ToInt32(await cmd.ExecuteScalarAsync());
         await tx.CommitAsync();
         return (id, added, total - added);
+    }
+
+    /// <summary>Elimina una bozza appena creata e senza destinatari (filtri troppo stretti).</summary>
+    public async Task DeleteDraftAsync(int id)
+    {
+        await _db.ExecuteAsync("DELETE FROM CampaignRecipients WHERE CampaignId=@id", new { id });
+        await _db.ExecuteAsync("DELETE FROM Campaigns WHERE Id=@id AND Status='bozza'", new { id });
+    }
+
+    /// <summary>Quanti clienti della lista corrispondono ai filtri (esclusi quelli in lista STOP): anteprima in Nuova campagna.</summary>
+    public Task<int> CountRecipientsAsync(int listId, int gymId, int orgId, RecipientFilter f) => _db.ScalarAsync<int>(
+        @"SELECT COUNT(*) FROM Contacts k WHERE k.ListId=@listId AND k.GymId=@gymId" + RecipientFilter.Where + @"
+            AND NOT EXISTS (SELECT 1 FROM OptOuts x WHERE x.OrganizationId=@orgId AND x.Phone=k.Phone)",
+        new { listId, gymId, orgId, fFrom = f.From, fTo = f.To, fKind = f.Kind, fSvc = f.Service, fLang = f.Language });
+
+    /// <summary>Valori presenti nella lista (per i menù dei filtri): tipi, servizi, lingue.</summary>
+    public async Task<object> ListValuesAsync(int listId)
+    {
+        async Task<List<string>> Vals(string col) => await _db.QueryAsync(
+            $"SELECT {col}, COUNT(*) AS N FROM Contacts WHERE ListId=@listId AND {col} IS NOT NULL AND {col}<>'' GROUP BY {col} ORDER BY N DESC, {col} LIMIT 60",
+            new { listId }, r => r.GetString(0));
+        return new { kinds = await Vals("Membership"), services = await Vals("Service"), languages = await Vals("COALESCE(Language,'it')") };
     }
 
     public Task<int> UpdateDraftAsync(Campaign c) => _db.ExecuteAsync(
@@ -185,7 +235,7 @@ public sealed class CampaignRepo
             AND c.LastInboundAt IS NULL AND c.Status='ai' AND c.IsTest=0
           ORDER BY r.SentAt LIMIT @limit", new { limit },
         r => (new CampaignRecipient(r.GetInt64(r.GetOrdinal("Id")), r.Str("Phone")!, r.Str("FirstName")!, r.Str("LastName"), r.Str("Membership"),
-                r.Date("ExpiresOn"), r.Str("Status")!, null, r.GetInt64(r.GetOrdinal("ConversationId")), r.Date("SentAt"), null, r.Str("Service"), r.Str("Notes")),
+                r.Date("ExpiresOn"), r.Str("Status")!, null, r.GetInt64(r.GetOrdinal("ConversationId")), r.Date("SentAt"), null, r.Str("Service"), r.Str("Notes"), r.Str("Language")),
               r.Int("CampaignId")));
 
     /// <summary>Prenota il promemoria: se due giri partono insieme, solo uno lo manda.</summary>
@@ -232,7 +282,7 @@ public sealed class CampaignRepo
         new { campaignId, status = status ?? "", limit },
         r => new CampaignRecipient(r.GetInt64(r.GetOrdinal("Id")), r.Str("Phone")!, r.Str("FirstName")!, r.Str("LastName"), r.Str("Membership"),
             r.Date("ExpiresOn"), r.Str("Status")!, r.Str("Reason"), r.IsDBNull(r.GetOrdinal("ConversationId")) ? null : r.GetInt64(r.GetOrdinal("ConversationId")),
-            r.Date("SentAt"), r.Str("Outcome"), r.Str("Service"), r.Str("Notes")));
+            r.Date("SentAt"), r.Str("Outcome"), r.Str("Service"), r.Str("Notes"), r.Str("Language")));
 
     // ---------- Orari di invio ----------
     public Task<List<SendWindow>> WindowsAsync(int gymId) => _db.QueryAsync(
@@ -271,7 +321,7 @@ public sealed class CampaignRepo
         return await _db.QueryAsync(
             "SELECT r.*, NULL AS Outcome FROM CampaignRecipients r WHERE ClaimToken=@token AND Status='in_invio' ORDER BY Id", new { token },
             r => new CampaignRecipient(r.GetInt64(r.GetOrdinal("Id")), r.Str("Phone")!, r.Str("FirstName")!, r.Str("LastName"), r.Str("Membership"),
-                r.Date("ExpiresOn"), r.Str("Status")!, null, null, null, null, r.Str("Service"), r.Str("Notes")));
+                r.Date("ExpiresOn"), r.Str("Status")!, null, null, null, null, r.Str("Service"), r.Str("Notes"), r.Str("Language")));
     }
 
     public Task MarkAsync(long id, string status, string? reason, long? conversationId) => _db.ExecuteAsync(
@@ -319,8 +369,9 @@ public sealed class CampaignRepo
     /// <summary>Quante altre campagne del gruppo (o dell'attività singola) hanno scritto a questo cliente negli ultimi 30 giorni.</summary>
     public Task<int> RecentCampaignsAsync(int orgId, string phone, int exceptCampaignId) => _db.ScalarAsync<int>(
         @"SELECT COUNT(DISTINCT r.CampaignId) FROM CampaignRecipients r JOIN Campaigns k ON k.Id=r.CampaignId
+          JOIN WaTemplates t ON t.Id=k.TemplateId
           WHERE r.Phone=@phone AND r.SentAt > UTC_TIMESTAMP() - INTERVAL 30 DAY AND r.Status='inviato'
-            AND k.OrganizationId=@orgId AND k.Id<>@exceptCampaignId",
+            AND k.OrganizationId=@orgId AND k.Id<>@exceptCampaignId AND t.Category<>'UTILITY'",
         new { orgId, phone, exceptCampaignId });
 
     public async Task<bool> HasOpenConversationAsync(int waNumberId, string phone) => await _db.ScalarAsync<int>(

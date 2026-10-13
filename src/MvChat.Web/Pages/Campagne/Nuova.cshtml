@@ -17,9 +17,27 @@ else
     <div class="panel-b form">
         <div class="field full"><label for="Name">Nome della campagna</label><input id="Name" name="Name" value="@Model.Name" maxlength="150" placeholder="es. Rinnovi ottobre" required></div>
         <div class="field"><label for="ListId">Lista contatti</label><select id="ListId" name="ListId">@foreach (var l in Model.Lists) { <option value="@l.Id" selected="@(l.Id == Model.ListId)">@l.Name · @l.ValidCount contatti</option> }</select></div>
+        <fieldset class="field full filters" style="border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+            <legend style="padding:0 6px"><b>Quali clienti della lista</b> <span class="muted">(facoltativo: vuoto = tutti)</span></legend>
+            <div class="inline-form" style="margin:0;gap:10px;align-items:flex-end">
+                <div class="field"><label for="FilterFrom">@Model.Sector.DateLabel dal</label><input id="FilterFrom" name="FilterFrom" type="date" value="@Model.FilterFrom?.ToString("yyyy-MM-dd")"></div>
+                <div class="field"><label for="FilterTo">al</label><input id="FilterTo" name="FilterTo" type="date" value="@Model.FilterTo?.ToString("yyyy-MM-dd")"></div>
+                <div class="field"><label>Scorciatoie</label><div style="display:flex;gap:4px;flex-wrap:wrap">
+                    <button type="button" class="btn sm" data-days="0,30">prossimi 30 giorni</button>
+                    <button type="button" class="btn sm" data-days="30,60">tra 30 e 60 giorni</button>
+                    <button type="button" class="btn sm" data-days="-365,-180">6–12 mesi fa</button>
+                    <button type="button" class="btn sm" data-days="">nessuna data</button></div></div>
+            </div>
+            <div class="inline-form" style="margin:8px 0 0;gap:10px;align-items:flex-end">
+                <div class="field"><label for="FilterKind">@Model.Sector.KindLabel</label><select id="FilterKind" name="FilterKind" data-sel="@Model.FilterKind"><option value="">tutti</option></select></div>
+                <div class="field"><label for="FilterService">Servizio / corso</label><select id="FilterService" name="FilterService" data-sel="@Model.FilterService"><option value="">tutti</option></select></div>
+                <div class="field"><label for="FilterLanguage">Lingua</label><select id="FilterLanguage" name="FilterLanguage" data-sel="@Model.FilterLanguage"><option value="">tutte</option></select></div>
+                <div class="field"><b id="filterCount" role="status" aria-live="polite"></b></div>
+            </div>
+        </fieldset>
         <div class="field"><label for="ModelId">Obiettivo</label><select id="ModelId" name="ModelId">@foreach (var m in Model.Models) { <option value="@m.Id" selected="@(m.Id == Model.ModelId)">@m.Name@(m.NeedsOffer ? " · serve un'offerta" : "")</option> }</select></div>
         <div class="field"><label for="OfferId">Offerta</label><select id="OfferId" name="OfferId"><option value="">Nessuna</option>@foreach (var o in Model.Offers) { <option value="@o.Id" selected="@(o.Id == Model.OfferId)">@o.Title @(o.Price is decimal p ? "· " + PromptBuilder.Money(p) : "")</option> }</select><small>L'assistente potrà citare solo il prezzo di questa offerta.</small></div>
-        <div class="field"><label for="TemplateId">Primo messaggio (template)</label><select id="TemplateId" name="TemplateId">@foreach (var t in Model.Templates) { <option value="@t.Id" selected="@(t.Id == Model.TemplateId)">@t.Name</option> }</select></div>
+        <div class="field"><label for="TemplateId">Primo messaggio (template)</label><select id="TemplateId" name="TemplateId">@foreach (var t in Model.Templates) { <option value="@t.Id" selected="@(t.Id == Model.TemplateId)">@t.Name@(t.Language != "it" ? " (" + t.Language + ")" : "")</option> }</select><small>Ai clienti di un'altra lingua parte lo stesso template in quella lingua, se è approvato con lo stesso nome; altrimenti questo.</small></div>
         <div class="field"><label for="FollowUpTemplateId">Promemoria a chi non risponde (facoltativo)</label>
             <div class="inline-form" style="gap:6px;margin:0"><select id="FollowUpTemplateId" name="FollowUpTemplateId"><option value="">Nessun promemoria</option>@foreach (var t in Model.Templates) { <option value="@t.Id" selected="@(t.Id == Model.FollowUpTemplateId)">@t.Name</option> }</select>
             <select name="FollowUpDays" aria-label="Dopo quanti giorni">@for (var d = 1; d <= 7; d++) { <option value="@d" selected="@(d == Model.FollowUpDays)">dopo @d @(d == 1 ? "giorno" : "giorni")</option> }</select></div>
@@ -30,7 +48,7 @@ else
             <input name="StartAt" type="datetime-local" value="@Model.StartAt?.ToString("yyyy-MM-ddTHH:mm")" aria-label="Data e ora di partenza"></div>
         <div class="field"><label for="DailyLimit">Massimo invii al giorno (facoltativo)</label><input id="DailyLimit" name="DailyLimit" type="number" min="1" value="@Model.DailyLimit" placeholder="nessun limite"><small>Utile per non intasare la reception di risposte.</small></div>
         <div class="field full"><label for="ExtraInstructions">Istruzioni in più per l'assistente, solo per questa campagna (facoltative)</label>
-            <textarea id="ExtraInstructions" name="ExtraInstructions" rows="3" maxlength="1500" placeholder="Es. Dal 20 al 27 dicembre la palestra è chiusa. Chi rinnova entro il 15 riceve anche la maglietta.">@Model.ExtraInstructions</textarea>
+            <textarea id="ExtraInstructions" name="ExtraInstructions" rows="3" maxlength="1500" placeholder="@Model.Sector.ExtraExample">@Model.ExtraInstructions</textarea>
             <small>Si aggiungono al modello di obiettivo. I prezzi restano quelli dell'offerta: un prezzo scritto qui non può essere proposto. Si possono cambiare anche a campagna avviata.</small></div>
         <div class="field full"><label class="check"><input type="checkbox" name="AskRefusalReason" value="true" checked="@Model.AskRefusalReason"><input type="hidden" name="AskRefusalReason" value="false"> A chi rifiuta senza dire perché, l'assistente chiede il motivo (una volta sola, con garbo)</label>
             <small>Serve al Report «Motivi dei rifiuti». Se il cliente non risponde, il rifiuto conta come «Non interessato».</small></div>
@@ -39,3 +57,48 @@ else
     <div class="actions"><span class="muted" style="flex:1">La campagna nasce come bozza: prima dell'invio vedi l'anteprima e quante persone riceveranno il messaggio.</span><button class="btn primary" type="submit" disabled="@(Model.Lists.Count == 0 || Model.Templates.Count == 0)">Crea la campagna</button></div>
 </form>
 }
+<script id="listValues" type="application/json">@Html.Raw(Model.ListValuesJson)</script>
+<script>
+(function () {
+    const values = JSON.parse(document.getElementById("listValues").textContent || "{}");
+    const langNames = { it: "Italiano", en: "Inglese", de: "Tedesco", fr: "Francese", es: "Spagnolo" };
+    const $ = (id) => document.getElementById(id);
+    if (!$("ListId")) return;
+    function fill(sel, items, label) {
+        const keep = sel.value || sel.dataset.sel || "";
+        sel.innerHTML = "";
+        sel.add(new Option(sel.id === "FilterLanguage" ? "tutte" : "tutti", ""));
+        (items || []).forEach((v) => sel.add(new Option(label ? label(v) : v, v)));
+        sel.value = (items || []).includes(keep) ? keep : "";
+        sel.dataset.sel = "";
+    }
+    function lists() {
+        const v = values[$("ListId").value] || {};
+        fill($("FilterKind"), v.kinds); fill($("FilterService"), v.services); fill($("FilterLanguage"), v.languages, (x) => langNames[x] || x);
+        count();
+    }
+    let t;
+    function count() {
+        clearTimeout(t);
+        t = setTimeout(async () => {
+            const p = new URLSearchParams({ handler: "Count", gym: "@Model.Gym", listId: $("ListId").value, da: $("FilterFrom").value, a: $("FilterTo").value,
+                tipo: $("FilterKind").value, servizio: $("FilterService").value, lingua: $("FilterLanguage").value });
+            try {
+                const r = await fetch("?" + p.toString(), { headers: { Accept: "application/json" } });
+                const d = await r.json();
+                $("filterCount").textContent = d.count === 1 ? "1 cliente riceverà il messaggio" : d.count + " clienti riceveranno il messaggio";
+            } catch { $("filterCount").textContent = ""; }
+        }, 250);
+    }
+    const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    document.querySelectorAll("[data-days]").forEach((b) => b.addEventListener("click", () => {
+        if (!b.dataset.days) { $("FilterFrom").value = ""; $("FilterTo").value = ""; }
+        else { const [a, z] = b.dataset.days.split(",").map(Number); const now = new Date();
+            $("FilterFrom").value = iso(new Date(now.getTime() + a * 864e5)); $("FilterTo").value = iso(new Date(now.getTime() + z * 864e5)); }
+        count();
+    }));
+    ["FilterFrom", "FilterTo", "FilterKind", "FilterService", "FilterLanguage"].forEach((id) => $(id).addEventListener("change", count));
+    $("ListId").addEventListener("change", lists);
+    lists();
+})();
+</script>

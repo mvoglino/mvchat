@@ -14,8 +14,11 @@
         <div class="field"><label asp-for="Input.MaxAiMessages">Messaggi massimi dell'assistente</label><input asp-for="Input.MaxAiMessages" type="number" min="2" max="15"><span asp-validation-for="Input.MaxAiMessages" class="field-error"></span></div>
         <div class="field full"><label asp-for="Input.Success">La conversazione è riuscita quando…</label><input asp-for="Input.Success" placeholder="es. il cliente prenota una lezione di prova"><span asp-validation-for="Input.Success" class="field-error"></span></div>
         <div class="field full"><label asp-for="Input.Instructions">Come deve muoversi l'assistente</label><textarea asp-for="Input.Instructions" rows="7"></textarea><small>Scrivi come lo spiegheresti a un nuovo collega della reception. Le regole di base (presentarsi, non inventare, STOP, passaggio a una persona) le aggiunge mvchat da solo.</small><span asp-validation-for="Input.Instructions" class="field-error"></span></div>
-        <div class="field full"><label asp-for="Input.TemplateSuggestion">Testo suggerito per il primo messaggio</label><textarea asp-for="Input.TemplateSuggestion" rows="3"></textarea><small>Segnaposto: {{nome}}, {{cognome}}, {{abbonamento}}, {{scadenza}}, {{sede}}, {{offerta}}, {{servizio}}, {{note}}. Il testo definitivo va approvato da Meta.</small></div>
+        <div class="field full"><label asp-for="Input.TemplateSuggestion">Testo suggerito per il primo messaggio</label><textarea asp-for="Input.TemplateSuggestion" rows="3"></textarea><small>Segnaposto: @MvChat.Web.WhatsApp.TemplateText.Help(). Il testo definitivo va approvato da Meta.</small></div>
         <div class="field"><label class="check"><input asp-for="Input.NeedsOffer"> Serve un'offerta collegata</label></div>
+        <div class="field full"><label>Adatto a quali tipi di attività</label>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 14px">@foreach (var sct in MvChat.Web.Infrastructure.Sectors.All) { <label class="check"><input type="checkbox" name="Input.Sectors" value="@sct.Key" checked="@Model.Input.Sectors.Contains(sct.Key)"> @sct.Label</label> }</div>
+            <small>Nessuna casella = tutti. Il modello compare solo alle attività dei tipi scelti.</small></div>
         <div class="field"><label class="check"><input asp-for="Input.IsActive"> Modello attivo</label></div>
     </div>
     <div class="actions"><a class="btn" href="/Modelli">Annulla</a><button class="btn primary" type="submit">Salva</button></div>

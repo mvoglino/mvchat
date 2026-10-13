@@ -135,6 +135,11 @@ public sealed class Repos
         r.Int("Id"), r.Str("Name")!, r.Str("Slug")!, r.Str("LogoUrl"), r.Str("PrimaryColor")!, r.Str("VatNumber"),
         r.Str("BillingEmail"), r.Bool("IsActive"), Convert.ToInt32(r["GymCount"]), Convert.ToInt32(r["UserCount"]), r.Str("Sector") ?? "palestra", r.Bool("IsGroup"));
 
+    /// <summary>Il tipo di attività che vale per un'attività (il suo, altrimenti quello del gruppo).</summary>
+    public async Task<Sector> SectorOfGymAsync(int gymId) => Sectors.Get(await _db.FirstAsync(
+        "SELECT COALESCE(NULLIF(g.Sector,''), o.Sector) FROM Gyms g JOIN Organizations o ON o.Id=g.OrganizationId WHERE g.Id=@gymId",
+        new { gymId }, r => r.IsDBNull(0) ? null : r.GetString(0)));
+
     // ---------- Attività ----------
     private const string GymSelect =
         @"SELECT g.Id, g.OrganizationId, g.Name, g.City, g.Address, g.Phone, g.IsActive, g.Sector AS OwnSector, o.Name AS OrgName, o.IsGroup,

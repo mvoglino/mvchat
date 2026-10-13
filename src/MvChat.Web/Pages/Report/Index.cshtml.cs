@@ -238,7 +238,7 @@ public class IndexModel : PageModel
         {
             var sh = wb.Sheet("Da ricontattare").Title("Clienti da ricontattare · " + Title).Note(period)
                 .Note("Esclusi i clienti nella lista STOP e chi in seguito ha raggiunto l'obiettivo. Usa le frecce dell'intestazione per scegliere il motivo.").Blank()
-                .Header("Motivo", "Cliente", "Cellulare", "Attività", "Campagna", "Tipo di campagna", "Tipo abbonamento", "Scadenza", "Servizio / corso",
+                .Header("Motivo", "Cliente", "Cellulare", "Attività", "Campagna", "Tipo di campagna", "Tipo (abbonamento, soggiorno…)", "Data (scadenza, soggiorno…)", "Servizio / corso",
                     "Esito", "Nota", "Ultimo messaggio del cliente", "Contattato il");
             foreach (var r in Recontact)
                 sh.Row(RecontactRow.Label(r.Category), r.Name, r.Phone, r.GymName, r.CampaignName ?? "", r.GoalName, r.Membership ?? "",

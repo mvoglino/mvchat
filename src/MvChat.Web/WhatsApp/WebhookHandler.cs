@@ -254,7 +254,7 @@ public sealed class WebhookHandler
 
             if (stop)
             {
-                await _wa.SendTextAsync(number, phone, WaService.StopConfirmation(number.GymName), null, conv?.Id);
+                await _wa.SendTextAsync(number, phone, WaService.StopConfirmation(number.GymName, conv?.Language), null, conv?.Id);
                 return;
             }
             if (type == "reaction") return; // una reazione (👍) non chiede una risposta
@@ -281,7 +281,7 @@ public sealed class WebhookHandler
                 {
                     // L'assistente legge solo testo: foto, vocali e documenti li guarda una persona.
                     await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: null);
-                    await _wa.SendTextAsync(number, phone, Ai.Guardrails.HoldingMessage, null, conv.Id);
+                    await _wa.SendTextAsync(number, phone, Ai.Guardrails.Holding(conv.Language), null, conv.Id);
                     await _convs.SetStateAsync(conv.Id, "operatore", Outcomes.Operatore, $"il cliente ha mandato {text}: serve una persona");
                 }
                 else if (string.IsNullOrWhiteSpace(text)) await _convs.InboundAsync(conv.Id, needsReply: false, reopenAs: null);

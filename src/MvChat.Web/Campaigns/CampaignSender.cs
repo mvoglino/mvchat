@@ -74,6 +74,19 @@ public sealed class CampaignSender
     }
 
     /// <summary>I dati del destinatario per i segnaposto del template (gli stessi per il primo messaggio e per il promemoria).</summary>
+    /// <summary>
+    /// Il template nella lingua del cliente: stesso nome, approvato sullo stesso numero. Se non c'è, quello della campagna.
+    /// Su Meta le traduzioni di un template hanno lo stesso nome e una lingua diversa.
+    /// </summary>
+    private async Task<WaTemplate> InLanguageAsync(WaTemplate t, string? language, Dictionary<string, WaTemplate> cache)
+    {
+        if (string.IsNullOrEmpty(language) || language == t.Language) return t;
+        if (cache.TryGetValue(language, out var hit)) return hit;
+        var found = await _wa.TemplateInLanguageAsync(t.WaNumberId, t.Name, language) ?? t;
+        cache[language] = found;
+        return found;
+    }
+
     private static Dictionary<string, string?> Values(Campaign c, CampaignRecipient r, Catalog.Offer? offer) => new()
     {
         ["nome"] = r.FirstName, ["cognome"] = r.LastName, ["abbonamento"] = r.Membership,
@@ -115,9 +128,10 @@ public sealed class CampaignSender
             if (!await _repo.ClaimFollowUpAsync(r.Id)) continue;
             if (await _contacts.IsOptedOutAsync(k.C.OrganizationId, r.Phone)) { await _repo.MarkFollowUpAsync(r.Id, "saltato", "nella lista STOP"); continue; }
             var values = Values(k.C, r, k.O);
-            var missing = k.T.Variables.FirstOrDefault(v => !TemplateText.TryValue(values, v, out var x) || string.IsNullOrWhiteSpace(x));
+            var fuT = await InLanguageAsync(k.T, r.Language, new Dictionary<string, WaTemplate>());
+            var missing = fuT.Variables.FirstOrDefault(v => !TemplateText.TryValue(values, v, out var x) || string.IsNullOrWhiteSpace(x));
             if (missing is not null) { await _repo.MarkFollowUpAsync(r.Id, "saltato", $"manca il dato «{missing}» richiesto dal promemoria"); continue; }
-            var res = await _send.SendTemplateAsync(k.N, k.T, r.Phone, values, null, conv.Id);
+            var res = await _send.SendTemplateAsync(k.N, fuT, r.Phone, values, null, conv.Id);
             if (!res.Ok) { await _repo.MarkFollowUpAsync(r.Id, "errore", res.Error); continue; }
             if (res.MessageId > 0) await _wa.SetMessageConversationAsync(res.MessageId, conv.Id);
             await _repo.MarkFollowUpAsync(r.Id, "inviato", null);
@@ -180,6 +194,7 @@ public sealed class CampaignSender
         if (room == 0) { await _repo.NoteRunAsync(id, limitNote); return (0, 0, 0, limitNote); }
 
         var batch = await _repo.ClaimAsync(id, room);
+        var langCache = new Dictionary<string, WaTemplate>();
         int sent = 0, skipped = 0, errors = 0, inARow = 0, done = 0;
         var pending = batch.Select(b => b.Id).ToHashSet();
         string? runNote = null;
@@ -194,16 +209,18 @@ public sealed class CampaignSender
                 if (await _contacts.IsOptedOutAsync(c.OrganizationId, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "nella lista STOP", null); skipped++; continue; }
                 if (await _repo.HasOpenConversationAsync(number.Id, r.Phone)) { await _repo.MarkAsync(r.Id, "saltato", "ha già una conversazione aperta con l'attività", null); skipped++; continue; }
                 // Limite di campagne per cliente: chi ne ha già ricevute abbastanza negli ultimi 30 giorni non viene disturbato.
-                if (_config.Current.Meta.MaxCampaignsPerCustomer is int maxC and > 0
+                // I messaggi di servizio (conferma appuntamento…) non sono promozioni: non contano e non sono limitati.
+                if (_config.Current.Meta.MaxCampaignsPerCustomer is int maxC and > 0 && template!.Category != "UTILITY"
                     && await _repo.RecentCampaignsAsync(c.OrganizationId, r.Phone, c.Id) >= maxC)
                 { await _repo.MarkAsync(r.Id, "saltato", $"ha già ricevuto {maxC} {(maxC == 1 ? "campagna" : "campagne")} negli ultimi 30 giorni", null); skipped++; continue; }
 
                 var values = Values(c, r, offer);
+                var tpl = await InLanguageAsync(template!, r.Language, langCache);
                 // Un dato mancante non si sostituisce con un trattino: il cliente riceverebbe un messaggio strano.
-                var missing = template!.Variables.FirstOrDefault(v => !TemplateText.TryValue(values, v, out var x) || string.IsNullOrWhiteSpace(x));
+                var missing = tpl.Variables.FirstOrDefault(v => !TemplateText.TryValue(values, v, out var x) || string.IsNullOrWhiteSpace(x));
                 if (missing is not null) { await _repo.MarkAsync(r.Id, "saltato", $"manca il dato «{missing}» richiesto dal primo messaggio", null); skipped++; continue; }
 
-                var res = await _send.SendTemplateAsync(number, template!, r.Phone, values, null);
+                var res = await _send.SendTemplateAsync(number, tpl, r.Phone, values, null);
                 if (!res.Ok)
                 {
                     var err = res.Error ?? "errore sconosciuto";
@@ -240,7 +257,7 @@ public sealed class CampaignSender
                 {
                     OrganizationId = c.OrganizationId, GymId = c.GymId, WaNumberId = number.Id, ContactPhone = r.Phone, ContactName = r.FirstName,
                     Membership = r.Membership, ExpiresOn = r.ExpiresOn, GoalModelId = c.GoalModelId, OfferId = c.OfferId, CampaignId = c.Id,
-                    Service = r.Service, Notes = r.Notes
+                    Service = r.Service, Notes = r.Notes, Language = r.Language
                 };
                 var convId = await _convs.CreateAsync(conv);
                 await _wa.SetMessageConversationAsync(res.MessageId, convId);

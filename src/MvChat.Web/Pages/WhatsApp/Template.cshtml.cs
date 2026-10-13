@@ -28,6 +28,8 @@ public class TemplateModel : PageModel
     [BindProperty] public string? Name { get; set; }
     [BindProperty] public string Category { get; set; } = "MARKETING";
     [BindProperty] public string? Body { get; set; }
+    /// <summary>Lingua del template: per i clienti stranieri si crea lo stesso template (stesso nome) in un'altra lingua.</summary>
+    [BindProperty] public string Language { get; set; } = "it";
 
     private async Task<bool> LoadAsync(int id)
     {
@@ -37,7 +39,7 @@ public class TemplateModel : PageModel
         Gym = g;
         Number = await _wa.NumberForGymAsync(id);
         Items = await _wa.TemplatesAsync(id);
-        Models = await _catalog.ModelsAsync(me, onlyActive: true);
+        Models = (await _catalog.ModelsAsync(me, onlyActive: true)).Where(m => m.Fits(g.Sector)).ToList();
         if (g.InGroup)
             foreach (var other in (await _repos.GymsAsync(me)).Where(x => x.Id != g.Id && x.OrganizationId == g.OrganizationId).OrderBy(x => x.Name))
                 if (await _wa.NumberForGymAsync(other.Id) is { } on) CopyTargets.Add((other, on));
@@ -64,15 +66,16 @@ public class TemplateModel : PageModel
         if (name.Length < 3) Problems.Add("Dai un nome al template (almeno 3 lettere).");
         Problems.AddRange(TemplateText.Problems(Body));
         if (Category is not ("MARKETING" or "UTILITY")) Category = "MARKETING";
-        if (Problems.Count == 0 && await _wa.TemplateNameTakenAsync(Number.Id, name, "it")) Problems.Add("Esiste già un template con questo nome per questo numero.");
-        if (Problems.Count == 0 && await _wa.TemplateNameInAccountAsync(Number, name, "it") is string owner)
+        Language = MvChat.Web.Infrastructure.Languages.Parse(Language) ?? "it";
+        if (Problems.Count == 0 && await _wa.TemplateNameTakenAsync(Number.Id, name, Language)) Problems.Add("Esiste già un template con questo nome e questa lingua per questo numero.");
+        if (Problems.Count == 0 && await _wa.TemplateNameInAccountAsync(Number, name, Language) is string owner)
             Problems.Add($"Questo nome è già usato da {owner}, che ha lo stesso account WhatsApp: apri i template di {owner} e usa «Copia sulle altre attività», oppure scegli un altro nome.");
         if (Problems.Count > 0) return Page();
 
         var t = new WaTemplate
         {
             OrganizationId = Gym.OrganizationId, GymId = Gym.Id, WaNumberId = Number.Id, GoalModelId = Models.Any(m => m.Id == Model) ? Model : null,
-            Name = name, Language = "it", Category = Category, Body = Body, Variables = TemplateText.Variables(Body), Status = "bozza"
+            Name = name, Language = Language, Category = Category, Body = Body, Variables = TemplateText.Variables(Body), Status = "bozza"
         };
         t.Id = await _wa.InsertTemplateAsync(t, User.Scope().UserId);
         var (ok, error) = await _service.SubmitTemplateAsync(Number, t);

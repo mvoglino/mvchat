@@ -33,7 +33,11 @@ public sealed class AssistantService
     /// </summary>
     private async Task<string?> TranscribeVoicesAsync(Conversation c, WaNumber number)
     {
-        foreach (var msgId in await _conv.PendingVoicesAsync(c.Id))
+        var pending = await _conv.PendingVoicesAsync(c.Id);
+        // Settori sanitari: un vocale può contenere dati sulla salute, non si manda a un servizio di trascrizione.
+        if (pending.Count > 0 && (await _catalog.ActivityInfoAsync(c.GymId))?.Sector.Sensitive == true)
+            return "il cliente ha mandato un messaggio vocale (per questo tipo di attività i vocali non si trascrivono): serve una persona";
+        foreach (var msgId in pending)
         {
             if (!_ai.TranscribeEnabled) return "il cliente ha mandato un messaggio vocale: serve una persona";
             var (path, mime, error) = await _media.EnsureAsync(msgId);
@@ -51,7 +55,7 @@ public sealed class AssistantService
             {
                 if (!c.IsTest) await _contacts.AddOptOutAsync(c.OrganizationId, c.GymId, c.ContactPhone, WaRepo.Clip($"Ha detto in un vocale: {t.Text}", 200), "whatsapp", null);
                 await _conv.SetStateAsync(c.Id, "chiusa", Outcomes.OptOut, WaRepo.Clip($"Ha detto in un vocale: {t.Text}", 480));
-                await _wa.SendTextAsync(number, c.ContactPhone, WaService.StopConfirmation(c.GymName), null, c.Id);
+                await _wa.SendTextAsync(number, c.ContactPhone, WaService.StopConfirmation(c.GymName, c.Language), null, c.Id);
                 return "";
             }
         }
@@ -66,7 +70,7 @@ public sealed class AssistantService
         if (model is null) return null;
         var offer = c.OfferId is int oid ? (await _catalog.OffersAsync(new MvChat.Web.Security.Scope { Role = MvChat.Web.Security.Roles.SuperAdmin }, offerId: oid)).FirstOrDefault() : null;
         var profile = await _catalog.ProfileAsync(c.GymId);
-        var who = new Recipient(c.ContactName, null, c.Membership, c.ExpiresOn, c.Service, c.Notes);
+        var who = new Recipient(c.ContactName, null, c.Membership, c.ExpiresOn, c.Service, c.Notes, c.Language);
         var org = await _catalog.ActivityInfoAsync(c.GymId);
         var (extra, askReason) = (c.CampaignId ?? c.TestOfCampaignId) is int campId ? await _conv.CampaignInstructionsAsync(campId) : (null, true);
         // Il motivo si chiede una volta sola per conversazione.
@@ -157,7 +161,7 @@ public sealed class AssistantService
         if (Guardrails.PercentProblem(reply.Text, offer) is { } pctIssue) { await HandOffAsync(c, number, pctIssue, sendHolding: true); return false; }
         if (Guardrails.LinkProblem(reply.Text, system) is { } linkIssue) { await HandOffAsync(c, number, linkIssue, sendHolding: true); return false; }
 
-        var text = Guardrails.EnsureDisclosure(reply.Text, c.AiReplies == 0, profile.AssistantName, c.GymName);
+        var text = Guardrails.EnsureDisclosure(reply.Text, c.AiReplies == 0, profile.AssistantName, c.GymName, c.Language);
         var sent = await _wa.SendTextAsync(number, c.ContactPhone, text, null, c.Id);
         if (!sent.Ok) { await _conv.SetStateAsync(c.Id, "operatore", Outcomes.Operatore, "invio WhatsApp non riuscito: " + sent.Error); return false; }
 
@@ -181,7 +185,7 @@ public sealed class AssistantService
     /// <summary>Passa la conversazione a una persona. Se il cliente aspetta una risposta, riceve un messaggio di cortesia.</summary>
     private async Task HandOffAsync(Conversation c, WaNumber number, string reason, bool sendHolding)
     {
-        if (sendHolding) await _wa.SendTextAsync(number, c.ContactPhone, Guardrails.HoldingMessage, null, c.Id);
+        if (sendHolding) await _wa.SendTextAsync(number, c.ContactPhone, Guardrails.Holding(c.Language), null, c.Id);
         await _conv.SetStateAsync(c.Id, "operatore", Outcomes.Operatore, reason);
     }
 }

@@ -19,11 +19,14 @@ public class DetailModel : PageModel
     [BindProperty(SupportsGet = true)] public string? Q { get; set; }
     [BindProperty(SupportsGet = true)] public bool Nuova { get; set; }
 
+    public MvChat.Web.Infrastructure.Sector Sector { get; private set; } = MvChat.Web.Infrastructure.Sectors.Get("altro");
+
     public async Task<IActionResult> OnGetAsync(int id)
     {
         var l = await _contacts.ListAsync(User.Scope(), id);
         if (l is null) return NotFound();
         List = l;
+        Sector = await HttpContext.RequestServices.GetRequiredService<MvChat.Web.Data.Repos>().SectorOfGymAsync(l.GymId);
         Contacts = await _contacts.ContactsAsync(id, l.OrganizationId, Q?.Trim(), PageSize);
         Rejects = await _contacts.RejectsAsync(id);
         return Page();

@@ -16,6 +16,7 @@ public class NewModel : PageModel
 
     public List<Gym> Gyms { get; private set; } = new();
     public string MappingsJson { get; private set; } = "{}";
+    public string SectorsJson { get; private set; } = "{}";
 
     public async Task OnGetAsync()
     {
@@ -23,6 +24,11 @@ public class NewModel : PageModel
         var maps = new Dictionary<int, ColumnMap>();
         foreach (var g in Gyms) if (await _contacts.MappingAsync(g.Id) is { } m) maps[g.Id] = m;
         MappingsJson = JsonSerializer.Serialize(maps);
+        SectorsJson = JsonSerializer.Serialize(Gyms.ToDictionary(g => g.Id.ToString(), g =>
+        {
+            var s = MvChat.Web.Infrastructure.Sectors.Get(g.Sector);
+            return new { kind = s.KindLabel, date = s.DateLabel, sensitive = s.Sensitive };
+        }));
     }
 
     public async Task<IActionResult> OnPostImportAsync([FromBody] ImportRequest req)

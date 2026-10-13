@@ -29,6 +29,8 @@ public sealed class ColumnMap
     /// <summary>Informazioni libere: un servizio o corso del cliente e una nota (usabili nei messaggi e lette dall'assistente).</summary>
     public int Service { get; set; } = -1;
     public int Notes { get; set; } = -1;
+    /// <summary>Lingua del cliente (it, en, de…): primo messaggio e risposte dell'assistente in quella lingua.</summary>
+    public int Language { get; set; } = -1;
     /// <summary>Intestazioni scelte, per riconoscere lo stesso file la volta dopo.</summary>
     public Dictionary<string, string> Headers { get; set; } = new();
 }
@@ -133,6 +135,7 @@ public sealed class ContactsRepo
                 (object?)ImportRules.Clean(Cell(row, m.ConsentSource), 100) ?? DBNull.Value,
                 (object?)ImportRules.Clean(Cell(row, m.Service), 150) ?? DBNull.Value,
                 (object?)ImportRules.Clean(Cell(row, m.Notes), 300) ?? DBNull.Value,
+                (object?)Languages.Parse(Cell(row, m.Language)) ?? DBNull.Value,
             });
         }
 
@@ -150,14 +153,14 @@ public sealed class ContactsRepo
         // Inserimento a blocchi: una sola richiesta al database ogni 500 contatti.
         foreach (var chunk in valid.Chunk(500))
         {
-            var sb = new StringBuilder("INSERT INTO Contacts (OrganizationId, GymId, ListId, FirstName, LastName, Phone, Email, Membership, ExpiresOn, ConsentDate, ConsentSource, Service, Notes) VALUES ");
+            var sb = new StringBuilder("INSERT INTO Contacts (OrganizationId, GymId, ListId, FirstName, LastName, Phone, Email, Membership, ExpiresOn, ConsentDate, ConsentSource, Service, Notes, Language) VALUES ");
             await using var cmd = cn.CreateCommand();
             cmd.Transaction = tx;
             for (var k = 0; k < chunk.Length; k++)
             {
-                sb.Append(k == 0 ? "" : ",").Append($"(@o,@g,@l,@a{k},@b{k},@c{k},@d{k},@e{k},@f{k},@h{k},@i{k},@j{k},@m{k})");
+                sb.Append(k == 0 ? "" : ",").Append($"(@o,@g,@l,@a{k},@b{k},@c{k},@d{k},@e{k},@f{k},@h{k},@i{k},@j{k},@m{k},@q{k})");
                 var v = chunk[k];
-                string[] names = { "a", "b", "c", "d", "e", "f", "h", "i", "j", "m" };
+                string[] names = { "a", "b", "c", "d", "e", "f", "h", "i", "j", "m", "q" };
                 for (var j = 0; j < names.Length; j++) AddParam(cmd, $"@{names[j]}{k}", v[j]);
             }
             AddParam(cmd, "@o", orgId); AddParam(cmd, "@g", req.GymId); AddParam(cmd, "@l", listId);

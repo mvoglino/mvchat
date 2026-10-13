@@ -42,12 +42,15 @@ public class DettaglioModel : PageModel
     public bool WindowOpen => Number?.IsSimulated == true || (Conv.LastInboundAt is DateTime t && t > DateTime.UtcNow.AddHours(-24));
     public long LastMessageId => Messages.Count == 0 ? 0 : Messages[^1].Id;
 
+    public MvChat.Web.Infrastructure.Sector Sector { get; private set; } = MvChat.Web.Infrastructure.Sectors.Get("altro");
+
     private async Task<bool> LoadAsync(long id)
     {
         Me = User.Scope();
         var c = await _convs.GetAsync(Me, id); // il perimetro (gruppo/attività) è nella query
         if (c is null) return false;
         Conv = c;
+        Sector = await HttpContext.RequestServices.GetRequiredService<MvChat.Web.Data.Repos>().SectorOfGymAsync(c.GymId);
         Number = await _wa.NumberAsync(c.WaNumberId);
         Messages = await _convs.MessagesAsync(id);
         QuickReplies = await _quick.ForGymAsync(c.OrganizationId, c.GymId);

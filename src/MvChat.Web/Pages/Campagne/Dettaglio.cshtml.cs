@@ -34,11 +34,14 @@ public class DettaglioModel : PageModel
     public int? MetaLimit { get; private set; }
     public string Filter { get; private set; } = "";
 
+    public MvChat.Web.Infrastructure.Sector Sector { get; private set; } = MvChat.Web.Infrastructure.Sectors.Get("altro");
+
     private async Task<bool> LoadAsync(int id, string? filter = null)
     {
         var c = await _repo.GetAsync(User.Scope(), id); // perimetro nella query
         if (c is null) return false;
         C = c;
+        Sector = await HttpContext.RequestServices.GetRequiredService<MvChat.Web.Data.Repos>().SectorOfGymAsync(c.GymId);
         Filter = filter is "in_attesa" or "inviato" or "saltato" or "errore" ? filter : "";
         Recipients = await _repo.RecipientsAsync(id, Filter == "" ? null : Filter, 500);
         var w = await _repo.WindowsAsync(c.GymId);

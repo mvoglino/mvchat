@@ -33,7 +33,7 @@
     </div>
     <div class="panel-b form">
         <div class="field full"><label>Anteprima del primo messaggio · template @c.TemplateName</label><div class="bubble" style="margin-left:0">@Model.Preview</div></div>
-        <div class="field"><label>Lista</label><span>@c.ListName</span></div>
+        <div class="field"><label>Lista</label><span>@c.ListName@if (c.FilterNote is not null) {<span class="muted"> · solo clienti con @c.FilterNote</span>}</span></div>
         <div class="field"><label>Partenza</label><span>@(c.StartAt is DateTime st ? st.ToRome().ToString("dd/MM/yyyy HH:mm") : "appena avviata")</span></div>
         <div class="field"><label>Orari di invio dell'attività</label><span>@Model.Windows · <a href="/Sedi/Orari/@c.GymId">modifica</a></span></div>
         <div class="field"><label>Limiti</label><span>@(c.DailyLimit is int d ? $"massimo {d} al giorno" : "nessun limite della campagna") · Meta: @(Model.MetaLimit is int ml ? ml.ToString("N0") + " persone nuove in 24 ore" : "nessun limite")</span></div>
@@ -71,7 +71,7 @@
     else
     {
         <form method="post" asp-page-handler="Extra" class="panel-b">
-            <div class="field full"><textarea name="ExtraInstructions" rows="3" maxlength="1500" aria-label="Istruzioni in più" placeholder="Es. Dal 20 al 27 dicembre la palestra è chiusa. Chi rinnova entro il 15 riceve anche la maglietta.">@c.ExtraInstructions</textarea>
+            <div class="field full"><textarea name="ExtraInstructions" rows="3" maxlength="1500" aria-label="Istruzioni in più" placeholder="@Model.Sector.ExtraExample">@c.ExtraInstructions</textarea>
                 <small>Si aggiungono al modello «@c.GoalName». I prezzi restano quelli dell'offerta. Le modifiche valgono dalle risposte successive.</small></div>
             <label class="check"><input type="checkbox" name="AskRefusalReason" value="true" checked="@c.AskRefusalReason"><input type="hidden" name="AskRefusalReason" value="false"> A chi rifiuta senza dire perché, l'assistente chiede il motivo (una volta sola, con garbo)</label>
             <button class="btn sm" type="submit">Salva istruzioni</button>
@@ -90,13 +90,13 @@
         </select></form>
     </div>
     <div class="tbl"><table>
-        <thead><tr><th>Cliente</th><th>Abbonamento</th><th>Invio</th><th>Esito</th><th></th></tr></thead>
+        <thead><tr><th>Cliente</th><th>@Model.Sector.KindLabel</th><th>Invio</th><th>Esito</th><th></th></tr></thead>
         <tbody>
         @foreach (var r in Model.Recipients)
         {
             <tr>
                 <td><b>@r.FirstName @r.LastName</b><div class="muted">@r.Phone</div></td>
-                <td class="muted">@r.Membership@(r.ExpiresOn is DateTime e ? " · scade " + e.ToString("dd/MM/yyyy") : "")</td>
+                <td class="muted">@r.Membership@(r.ExpiresOn is DateTime e ? " · " + Model.Sector.DateLabel.ToLowerInvariant() + " " + e.ToString("dd/MM/yyyy") : "")</td>
                 <td><span class="chip @RCss(r.Status)">@RStatus(r.Status)</span>@if (r.SentAt is DateTime sa) {<span class="muted"> @sa.ToRome().ToString("dd/MM HH:mm")</span>}@if (r.Reason is not null) {<div class="muted">@r.Reason</div>}</td>
                 <td>@if (r.Outcome is not null) {<span class="chip @Outcomes.Css(r.Outcome)">@Outcomes.Label(r.Outcome)</span>}</td>
                 <td>@if (r.ConversationId is long cv) {<a class="btn sm" href="/Conversazioni/@cv">Conversazione</a>}</td>

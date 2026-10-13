@@ -20,7 +20,31 @@ public static class TemplateText
         ["servizio"] = "Pilates",
         ["corso"] = "Pilates", // sinonimo di {{servizio}}
         ["note"] = "ti aspettiamo la sera",
+        // Sinonimi per gli altri settori: stesso dato, parola più adatta.
+        ["soggiorno"] = "Weekend benessere", ["trattamento"] = "Pacchetto viso", ["tessera"] = "Gold", ["percorso"] = "Igiene dentale",
+        ["contratto"] = "Annuale", ["iscrizione"] = "Corso base", ["data"] = "18/10/2026",
     };
+
+    /// <summary>Segnaposto principali (i sinonimi non si elencano, ma funzionano).</summary>
+    public static readonly string[] Main = { "nome", "cognome", "abbonamento", "scadenza", "sede", "offerta", "servizio", "note" };
+
+    /// <summary>Sinonimi → segnaposto principale.</summary>
+    public static readonly IReadOnlyDictionary<string, string> Canonical = new Dictionary<string, string>
+    {
+        ["palestra"] = "sede", ["corso"] = "servizio",
+        ["soggiorno"] = "abbonamento", ["trattamento"] = "abbonamento", ["tessera"] = "abbonamento", ["percorso"] = "abbonamento",
+        ["contratto"] = "abbonamento", ["iscrizione"] = "abbonamento", ["data"] = "scadenza",
+    };
+
+    public static string Canon(string key) => Canonical.TryGetValue(key, out var c) ? c : key;
+
+    /// <summary>Testo di aiuto con i segnaposto, con i sinonimi adatti al settore.</summary>
+    public static string Help(Infrastructure.Sector? sector = null)
+    {
+        var main = string.Join(" ", Main.Select(k => "{{" + k + "}}"));
+        var word = sector is null ? null : Canonical.Keys.FirstOrDefault(k => Canonical[k] == "abbonamento" && sector.Membership.StartsWith(k));
+        return main + (word is null ? "" : $" (per «{sector!.KindLabel}» puoi scrivere anche {{{{{word}}}}})") + " · per una data anche {{data}}";
+    }
 
     private static readonly Regex Var = new(@"\{\{\s*([a-zA-Zàèéìòù_]+|\d+)\s*\}\}");
 
@@ -36,7 +60,7 @@ public static class TemplateText
         if (t.Length == 0) { errors.Add("Il testo è vuoto."); return errors; }
         if (t.Length > 1024) errors.Add("Il testo supera i 1.024 caratteri ammessi da Meta.");
         foreach (var v in Variables(t))
-            if (!Placeholders.ContainsKey(v)) errors.Add($"Segnaposto sconosciuto: {{{{{v}}}}}. Usa: {string.Join(", ", Placeholders.Keys.Where(k => k is not ("palestra" or "corso")).Select(k => "{{" + k + "}}"))}.");
+            if (!Placeholders.ContainsKey(v)) errors.Add($"Segnaposto sconosciuto: {{{{{v}}}}}. Usa: {string.Join(", ", Main.Select(k => "{{" + k + "}}"))}.");
         if (Var.Match(t) is { Success: true } first && first.Index == 0) errors.Add("Il testo non può iniziare con un segnaposto (regola di Meta).");
         if (Var.Matches(t).LastOrDefault() is { } last && last.Index + last.Length == t.Length) errors.Add("Il testo non può finire con un segnaposto: aggiungi la punteggiatura o una frase (regola di Meta).");
         if (Regex.IsMatch(t, @"\n{3,}")) errors.Add("Troppe righe vuote di fila.");
@@ -47,13 +71,19 @@ public static class TemplateText
     public static string ToMeta(string body, IList<string> variables) =>
         Var.Replace(body.Trim(), m => "{{" + (variables.IndexOf(m.Groups[1].Value.ToLowerInvariant()) + 1) + "}}");
 
-    /// <summary>{{sede}} e {{palestra}} sono la stessa cosa: chi riempie i valori può usare l'uno o l'altro nome.</summary>
-    private static readonly Dictionary<string, string> Aliases = new() { ["sede"] = "palestra", ["palestra"] = "sede", ["corso"] = "servizio", ["servizio"] = "corso" };
-
+    /// <summary>
+    /// Sinonimi: {{sede}}/{{palestra}}, {{servizio}}/{{corso}}, {{abbonamento}}/{{soggiorno}}/{{trattamento}}…, {{scadenza}}/{{data}}.
+    /// Chi riempie i valori può usare un nome qualsiasi del gruppo.
+    /// </summary>
     public static bool TryValue(IDictionary<string, string?> values, string key, out string? value)
     {
         if (values.TryGetValue(key, out value)) return true;
-        return Aliases.TryGetValue(key, out var alias) && values.TryGetValue(alias, out value);
+        var canon = Canon(key);
+        if (canon != key && values.TryGetValue(canon, out value)) return true;
+        foreach (var (syn, c) in Canonical)
+            if (c == canon && syn != key && values.TryGetValue(syn, out value)) return true;
+        value = null;
+        return false;
     }
 
     public static string Fill(string body, IDictionary<string, string?> values) =>

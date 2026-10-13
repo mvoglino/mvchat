@@ -12,7 +12,7 @@ public sealed record OrgInfo(int Id, string Name, string SectorKey, string? Desc
 }
 
 /// <summary>Dati del destinatario usati nei messaggi. Nell'anteprima sono di esempio.</summary>
-public sealed record Recipient(string FirstName, string? LastName, string? Membership, DateTime? ExpiresOn, string? Service = null, string? Notes = null);
+public sealed record Recipient(string FirstName, string? LastName, string? Membership, DateTime? ExpiresOn, string? Service = null, string? Notes = null, string? Language = null);
 
 /// <summary>
 /// Compone le istruzioni che l'assistente AI riceve per una conversazione:
@@ -54,7 +54,9 @@ public static class PromptBuilder
         var membership = sector.Membership;
         var sb = new StringBuilder();
         sb.AppendLine($"Sei {Intro(p.AssistantName)} di {gymName} ({sector.Label.ToLowerInvariant()}) e scrivi su WhatsApp a un {sector.Customer}.");
-        sb.AppendLine($"Oggi è {Day(today)}. Scrivi in italiano, {(lei ? "dando del lei" : "dando del tu")}, con tono cordiale e diretto, come una persona dello staff.");
+        var lang = Languages.PromptName(r.Language);
+        sb.AppendLine($"Oggi è {Day(today)}. Scrivi in {lang}, {(lei ? "con il registro formale (in italiano dando del lei)" : "con il registro informale (in italiano dando del tu)")}, con tono cordiale e diretto, come una persona dello staff.");
+        sb.AppendLine($"Lingua: se il cliente ti scrive in un'altra lingua, rispondi nella sua lingua{(r.Language is null or "it" ? "" : $"; il cliente è registrato come di lingua {lang}")}. Le istruzioni qui sotto sono in italiano: traducile tu, senza cambiare prezzi, date e link.");
         sb.AppendLine();
 
         if (org is not null && (!string.IsNullOrWhiteSpace(org.Description) || !string.IsNullOrWhiteSpace(org.GroupDescription)
@@ -105,6 +107,8 @@ public static class PromptBuilder
         Line("Come arrivare e parcheggio", p.HowToReach);
         Line("Altre informazioni", p.ExtraInfo);
         if (!string.IsNullOrWhiteSpace(p.BookingUrl)) sb.AppendLine($"Link per prenotare una visita, una prova o un appuntamento: {p.BookingUrl.Trim()}");
+        // Il link delle recensioni serve solo quando l'obiettivo è chiederne una: negli altri dialoghi sarebbe fuori luogo.
+        if (!string.IsNullOrWhiteSpace(p.ReviewUrl) && model.Code == "recensione") sb.AppendLine($"Link per le recensioni: {p.ReviewUrl.Trim()}");
         sb.AppendLine();
 
         sb.AppendLine("## Cliente");
@@ -112,8 +116,11 @@ public static class PromptBuilder
         if (!string.IsNullOrWhiteSpace(r.Membership)) sb.AppendLine($"{char.ToUpper(membership[0]) + membership[1..]}: {r.Membership}");
         if (r.ExpiresOn is { } exp) sb.AppendLine($"Scadenza {membership}: {Day(exp)}");
         if (!string.IsNullOrWhiteSpace(r.Service)) sb.AppendLine($"Servizio o corso che preferisce: {r.Service}");
-        if (!string.IsNullOrWhiteSpace(r.Notes))
+        // Settori sanitari: le note possono contenere dati sulla salute e non vanno all'assistente.
+        if (!string.IsNullOrWhiteSpace(r.Notes) && !sector.Sensitive)
             sb.AppendLine($"Note dello staff su questo cliente (usale per personalizzare il dialogo con tatto, senza citarle parola per parola): {r.Notes}");
+        if (sector.Sensitive)
+            sb.AppendLine("Riservatezza: non chiedere, non commentare e non ripetere informazioni sulla salute del cliente (sintomi, diagnosi, terapie). Non dare consigli medici: se il cliente ne parla, digli con gentilezza che ne parlerà con il personale e dai esito operatore.");
         sb.AppendLine();
 
         if (!string.IsNullOrWhiteSpace(campaignExtra))

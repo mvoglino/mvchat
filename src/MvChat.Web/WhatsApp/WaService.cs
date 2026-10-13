@@ -28,8 +28,14 @@ public sealed class WaService
     }
 
     /// <summary>Risposta automatica a chi chiede di non essere più contattato.</summary>
-    public static string StopConfirmation(string gymName) =>
-        $"Fatto: non riceverai più messaggi promozionali da {gymName}. Per qualsiasi cosa puoi sempre contattare la reception.";
+    public static string StopConfirmation(string gymName, string? language = null) => (language ?? "it") switch
+    {
+        "en" => $"Done: you will no longer receive promotional messages from {gymName}. You can always contact us for anything else.",
+        "de" => $"Erledigt: Sie erhalten keine Werbenachrichten mehr von {gymName}. Für alles andere können Sie uns jederzeit kontaktieren.",
+        "fr" => $"C'est fait : vous ne recevrez plus de messages promotionnels de {gymName}. Pour toute autre demande, vous pouvez toujours nous contacter.",
+        "es" => $"Hecho: ya no recibirás mensajes promocionales de {gymName}. Para cualquier otra cosa puedes contactarnos cuando quieras.",
+        _ => $"Fatto: non riceverai più messaggi promozionali da {gymName}. Per qualsiasi cosa puoi sempre contattare la reception."
+    };
 
     /// <summary>Scarica da Meta un file mandato dal cliente (vocale, foto). I numeri simulati non hanno file veri.</summary>
     public async Task<(byte[]? Bytes, string? Mime, string? Error, bool Gone)> DownloadMediaAsync(WaNumber n, string mediaId, long maxBytes)
@@ -214,13 +220,17 @@ public sealed class WaService
     // ---------- Parole che significano "non scrivetemi più" ----------
     // Una sola parola (STOP, basta, cancellami…) oppure una frase chiara («non scrivetemi più», «toglietemi dalla lista»).
     private static readonly System.Text.RegularExpressions.Regex StopWord = new(
-        @"^(stop+|basta|cancellami|cancellatemi|disiscrivimi|disiscrivetemi|unsubscribe|rimuovimi|rimuovetemi|toglimi|toglietemi|annulla iscrizione|no grazie stop|stop grazie|basta messaggi|stop messaggi)( (per favore|grazie|subito))?$",
+        @"^(stop+|basta|cancellami|cancellatemi|disiscrivimi|disiscrivetemi|unsubscribe|rimuovimi|rimuovetemi|toglimi|toglietemi|annulla iscrizione|no grazie stop|stop grazie|basta messaggi|stop messaggi|stop please|please stop|stop messages|abmelden|abbestellen|désabonner|desabonner|désinscrire|baja|darme de baja|dar de baja)( (per favore|grazie|subito|please|bitte|merci|gracias))?$",
         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     private static readonly System.Text.RegularExpressions.Regex StopPhrase = new(
         @"\bnon (mi )?(scrivete|scrivetemi|scrivermi|scrivere|contattate|contattatemi|contattarmi|mandatemi|mandate|inviatemi|inviate)\b.*\b(più|piu)\b"
         + @"|\bnon (voglio|desidero) (più|piu) (ricevere )?(messaggi|notifiche|comunicazioni|promozioni)"
         + @"|\b(toglietemi|toglimi|rimuovetemi|rimuovimi|cancellatemi|cancellami) (dalla|dalle|dai) (lista|liste|contatti|messaggi)"
-        + @"|\b(smettete|smettetela) di (scrivermi|contattarmi|mandarmi)",
+        + @"|\b(smettete|smettetela) di (scrivermi|contattarmi|mandarmi)"
+        + @"|\b(don'?t|do not|stop) (text|message|contact|write to|send me)\w* ?(me)?\b.*\b(anymore|any more|again)\b|\bstop (texting|messaging|contacting) me\b|\bremove me from\b"
+        + @"|\bkeine (nachrichten|werbung) mehr\b|\bschreiben sie mir nicht mehr\b"
+        + @"|\bne m.(écrivez|ecrivez|envoyez) plus\b"
+        + @"|\bno me (escrib|mand|contact)\w* m(á|a)s\b",
         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     public static bool IsStop(string? text)

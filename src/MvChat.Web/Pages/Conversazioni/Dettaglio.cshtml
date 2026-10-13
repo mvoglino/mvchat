@@ -9,7 +9,7 @@
 <div class="stats">
     <div class="stat @(c.Status == "operatore" ? "ko" : "")"><b style="font-size:17px">@statusText</b><span>@c.GymName · @c.GoalName</span></div>
     <div class="stat"><b style="font-size:17px"><span class="chip @Outcomes.Css(c.Outcome)">@Outcomes.Label(c.Outcome)@if (c.Outcome == Outcomes.Rifiuto) {<text> · @RefusalReasons.Label(c.RefusalReason)</text>}</span></b><span>@(c.OutcomeNote ?? "esito")</span></div>
-    <div class="stat"><b style="font-size:17px">@c.ContactPhone</b><span>@(c.Membership ?? "abbonamento non indicato")@(c.ExpiresOn is DateTime e ? " · scade il " + e.ToString("dd/MM/yyyy") : "")@(c.IsTest ? " · prova" : "")</span></div>
+    <div class="stat"><b style="font-size:17px">@c.ContactPhone</b><span>@(c.Membership ?? Model.Sector.KindLabel.ToLowerInvariant() + " non indicato")@(c.ExpiresOn is DateTime e ? " · " + Model.Sector.DateLabel.ToLowerInvariant() + " " + e.ToString("dd/MM/yyyy") : "")@(c.Language is { } lg && lg != "it" ? " · lingua: " + MvChat.Web.Infrastructure.Languages.Label(lg).ToLowerInvariant() : "")@(c.IsTest ? " · prova" : "")</span></div>
 </div>
 @if (Model.Error is not null) { <div class="note warn" role="alert">@Model.Error</div> }
 <section class="panel">

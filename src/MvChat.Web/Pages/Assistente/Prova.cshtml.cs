@@ -35,6 +35,9 @@ public class ProvaModel : PageModel
     [BindProperty] public string? Service { get; set; }
     [BindProperty] public string? Notes { get; set; }
     [BindProperty] public DateTime? ExpiresOn { get; set; }
+    [BindProperty] public string? Language { get; set; }
+
+    public MvChat.Web.Infrastructure.Sector Sector { get; private set; } = MvChat.Web.Infrastructure.Sectors.Get("altro");
 
     private async Task LoadAsync()
     {
@@ -42,7 +45,8 @@ public class ProvaModel : PageModel
         Gyms = (await _repos.GymsAsync(me)).Where(g => g.IsActive).ToList();
         var gym = Gyms.FirstOrDefault(g => g.Id == Gym) ?? Gyms.FirstOrDefault();
         Gym = gym?.Id;
-        Models = await _catalog.ModelsAsync(me, onlyActive: true);
+        if (gym is not null) Sector = MvChat.Web.Infrastructure.Sectors.Get(gym.Sector);
+        Models = (await _catalog.ModelsAsync(me, onlyActive: true)).Where(m => m.Fits(gym?.Sector)).ToList();
         if (gym is null) return;
         Offers = (await _catalog.OffersAsync(me, gym.Id)).Where(o => o.Status == "Attiva").ToList();
         Number = await _wa.NumberForGymAsync(gym.Id);
@@ -72,9 +76,12 @@ public class ProvaModel : PageModel
         {
             OrganizationId = gym!.OrganizationId, GymId = gym.Id, WaNumberId = Number!.Id, ContactPhone = phone!, ContactName = name,
             Membership = Membership?.Trim(), ExpiresOn = ExpiresOn, GoalModelId = model!.Id, OfferId = offer?.Id, IsTest = true,
-            Service = Clip(Service, 150), Notes = Clip(Notes, 300)
+            Service = Clip(Service, 150), Notes = Clip(Notes, 300), Language = MvChat.Web.Infrastructure.Languages.Parse(Language) is { } lg && lg != "it" ? lg : null
         };
         conv.Id = await _convs.CreateAsync(conv);
+        // Il template nella lingua del cliente di prova, se esiste con lo stesso nome.
+        if (template is not null && conv.Language is not null)
+            template = await HttpContext.RequestServices.GetRequiredService<MvChat.Web.WhatsApp.WaRepo>().TemplateInLanguageAsync(template.WaNumberId, template.Name, conv.Language) ?? template;
         var values = new Dictionary<string, string?>
         {
             ["nome"] = name, ["cognome"] = "", ["abbonamento"] = Membership, ["scadenza"] = ExpiresOn?.ToString("dd/MM/yyyy"),

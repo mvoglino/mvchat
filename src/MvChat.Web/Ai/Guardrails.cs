@@ -40,7 +40,12 @@ Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che 
     private static readonly Regex HumanRequest = new(
         @"\b(parlare|parlarne|sentire|chiamare|contattare|passa(mi|temi)|mi\s+passi|mi\s+passate|mettermi\s+in\s+contatto)\b[^.?!\n]{0,40}\b(person[ae]|qualcuno|operator[ei]|operatrice|umano|reception|responsabile|direttor[ei]|direttrice|segreteria|staff|collega|titolare)\b"
         + @"|\b(voglio|vorrei|posso\s+avere|mi\s+serve|chiedo)\b[^.?!\n]{0,25}\b(un[ao']?\s*)?(operator[ei]|operatrice|persona\s+(vera|reale)|essere\s+umano|umano)\b"
-        + @"|\b(richiamatemi|chiamatemi|mi\s+(ri)?chiam(i|ate)|potete\s+(ri)?chiamarmi|puoi\s+(ri)?chiamarmi)\b",
+        + @"|\b(richiamatemi|chiamatemi|mi\s+(ri)?chiam(i|ate)|potete\s+(ri)?chiamarmi|puoi\s+(ri)?chiamarmi)\b"
+        // Inglese, tedesco, francese, spagnolo (clienti stranieri)
+        + @"|\b(speak|talk)\s+(to|with)\s+(a\s+)?(someone|somebody|person|human|real\s+person|operator|agent|reception|staff|manager)\b|\bcall\s+me\b"
+        + @"|\b(mit\s+(einem|einer)\s+(menschen|mitarbeiter(in)?|person))\b|\brufen\s+sie\s+mich\b"
+        + @"|\bparler\s+(à|a|avec)\s+(quelqu.un|une\s+personne|un\s+conseiller|la\s+r(é|e)ception)\b|\bappelez.moi\b"
+        + @"|\bhablar\s+con\s+(alguien|una\s+persona|un\s+operador|recepci(ó|o)n)\b|\bll(á|a)m(e|a)me\b|\bll(á|a)menme\b",
         RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -196,18 +201,38 @@ Con esito rifiuto, in ""motivo"" metti il codice che descrive meglio quello che 
         return null;
     }
 
-    private static readonly Regex Disclosed = new(@"assistente\s+(virtuale|digitale|automatico)|intelligenza\s+artificiale|\bchatbot\b|\bbot\b|sistema\s+automatico|risponditore\s+automatico", RegexOptions.IgnoreCase);
+    private static readonly Regex Disclosed = new(@"assistente\s+(virtuale|digitale|automatico)|intelligenza\s+artificiale|\bchatbot\b|\bbot\b|sistema\s+automatico|risponditore\s+automatico"
+        + @"|virtual\s+assistant|\bAI\s+assistant|artificial\s+intelligence|automated\s+assistant|virtuelle[rn]?\s+assistent|\bKI.Assistent|k(ü|u)nstliche[rn]?\s+intelligenz"
+        + @"|assistant(e)?\s+virtuel(le)?|intelligence\s+artificielle|asistente\s+virtual|inteligencia\s+artificial", RegexOptions.IgnoreCase);
 
     /// <summary>
     /// Prima risposta: il cliente deve sapere che scrive con un assistente virtuale (AI Act).
     /// Non basta il nome dell'assistente («Sara»): serve una frase che dica chiaramente che è automatico. Se manca, la aggiunge mvchat.
     /// </summary>
-    public static string EnsureDisclosure(string text, bool firstReply, string assistantName, string gymName)
+    public static string EnsureDisclosure(string text, bool firstReply, string assistantName, string gymName, string? language = null)
     {
         if (!firstReply || Disclosed.IsMatch(text)) return text;
-        var where = string.IsNullOrWhiteSpace(gymName) ? "" : " di " + gymName;
-        return $"Ciao, sono {Catalog.PromptBuilder.Intro(assistantName)}{where}. {text}";
+        var g = string.IsNullOrWhiteSpace(gymName) ? null : gymName;
+        var named = !string.IsNullOrWhiteSpace(assistantName) && !assistantName.Contains("assistente", StringComparison.OrdinalIgnoreCase) ? assistantName.Trim() : null;
+        return (language ?? "it") switch
+        {
+            "en" => $"Hi, I'm {(named is null ? "the virtual assistant" : named + ", the virtual assistant")}{(g is null ? "" : " of " + g)}. {text}",
+            "de" => $"Hallo, ich bin {(named is null ? "der virtuelle Assistent" : named + ", der virtuelle Assistent")}{(g is null ? "" : " von " + g)}. {text}",
+            "fr" => $"Bonjour, je suis {(named is null ? "l'assistant virtuel" : named + ", l'assistant virtuel")}{(g is null ? "" : " de " + g)}. {text}",
+            "es" => $"Hola, soy {(named is null ? "el asistente virtual" : named + ", el asistente virtual")}{(g is null ? "" : " de " + g)}. {text}",
+            _ => $"Ciao, sono {Catalog.PromptBuilder.Intro(assistantName)}{(g is null ? "" : " di " + g)}. {text}"
+        };
     }
 
     public const string HoldingMessage = "Grazie per il messaggio! Ti faccio ricontattare al più presto da un collega della reception.";
+
+    /// <summary>Il messaggio di cortesia nella lingua del cliente (italiano se non è indicata).</summary>
+    public static string Holding(string? language) => (language ?? "it") switch
+    {
+        "en" => "Thank you for your message! A colleague from our staff will get back to you as soon as possible.",
+        "de" => "Danke für Ihre Nachricht! Ein Kollege aus unserem Team meldet sich so bald wie möglich bei Ihnen.",
+        "fr" => "Merci pour votre message ! Un membre de notre équipe vous recontactera dès que possible.",
+        "es" => "¡Gracias por tu mensaje! Un compañero de nuestro equipo se pondrá en contacto contigo lo antes posible.",
+        _ => HoldingMessage
+    };
 }

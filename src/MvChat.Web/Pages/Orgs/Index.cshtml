@@ -2,7 +2,7 @@
 @model MvChat.Web.Pages.Orgs.IndexModel
 @{ ViewData["Title"] = "Gruppi"; }
 @section Actions { <a class="btn primary" href="/Orgs/Edit">Abilita un gruppo</a> }
-<p class="muted" style="margin:0">Un gruppo (marchio) riunisce più attività collegate, come FitActive con le sue palestre: ha un amministratore di gruppo, nome, logo e dati propri. Ogni attività ha poi i suoi amministratori e operatori. Gruppi e attività sono separati da tutti gli altri.</p>
+<p class="muted" style="margin:0">Un gruppo (marchio) riunisce più attività collegate, ad esempio un marchio con più palestre, hotel o centri: ha un amministratore di gruppo, nome, logo e dati propri. Ogni attività ha poi i suoi amministratori e operatori. Gruppi e attività sono separati da tutti gli altri.</p>
 <section class="panel"><div class="tbl"><table>
     <thead><tr><th>Gruppo</th><th>Settore</th><th>Colore</th><th>Attività</th><th>Utenti</th><th>Stato</th><th></th></tr></thead>
     <tbody>
@@ -15,6 +15,6 @@
             <td>@(o.IsActive ? Html.Raw("<span class=\"chip good\">Attiva</span>") : Html.Raw("<span class=\"chip bad\">Sospesa</span>"))</td>
             <td><a class="btn sm" href="/Orgs/Edit/@o.Id">Modifica</a> <a class="btn sm" href="/Gruppo/@o.Id">Dati e logo</a> <a class="btn sm" href="/Gyms/Edit?gruppo=@o.Id">+ Attività</a></td></tr>
     }
-    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessun gruppo. Crea il primo, ad esempio FitActive con le sue palestre. Le attività singole si creano direttamente da «Attività».</td></tr> }
+    @if (Model.Items.Count == 0) { <tr><td colspan="7" class="muted">Nessun gruppo. Crea il primo, ad esempio un marchio con più sedi. Le attività singole si creano direttamente da «Attività».</td></tr> }
     </tbody>
 </table></div></section>

@@ -7,16 +7,27 @@
     { key: "LastName", label: "Cognome", words: ["cognome", "last name", "lastname", "surname"] },
     { key: "Phone", label: "Cellulare / WhatsApp", required: true, words: ["cellulare", "whatsapp", "cell", "mobile", "telefono", "tel", "phone", "numero"] },
     { key: "Email", label: "Email", words: ["email", "e-mail", "mail"] },
-    { key: "Membership", label: "Abbonamento", words: ["abbonamento", "tipo abbonamento", "piano", "formula", "membership", "contratto"] },
-    { key: "ExpiresOn", label: "Scadenza abbonamento", words: ["scadenza", "data scadenza", "scadenza abbonamento", "fine abbonamento", "expiry", "valido fino"] },
+    { key: "Membership", label: "Abbonamento", words: ["abbonamento", "tipo abbonamento", "piano", "formula", "membership", "contratto", "tipo soggiorno", "soggiorno", "tessera", "pacchetto", "percorso", "prestazione", "tipo cliente", "iscrizione"] },
+    { key: "ExpiresOn", label: "Scadenza abbonamento", words: ["scadenza", "data scadenza", "scadenza abbonamento", "fine abbonamento", "expiry", "valido fino", "data ultimo soggiorno", "ultimo soggiorno", "check out", "data appuntamento", "appuntamento", "richiamo", "ultima visita", "data visita", "ultimo trattamento"] },
     { key: "Consent", label: "Consenso marketing", required: true, words: ["consenso marketing", "marketing", "consenso whatsapp", "consenso commerciale", "consenso comunicazioni", "newsletter", "consenso"] },
     { key: "ConsentDate", label: "Data consenso", words: ["data consenso", "consenso data", "data privacy"] },
     { key: "ConsentSource", label: "Fonte consenso", words: ["fonte consenso", "origine consenso", "fonte", "canale"] },
     { key: "Service", label: "Servizio / corso", words: ["servizio / corso", "servizio", "corso", "corsi", "attività preferita", "trattamento", "reparto", "interesse"] },
     { key: "Notes", label: "Note", words: ["note", "nota", "annotazioni", "commento", "info"] },
+    { key: "Language", label: "Lingua", words: ["lingua", "language", "idioma", "sprache", "langue", "nazionalita", "nationality"] },
   ];
   const $ = (s) => document.querySelector(s);
   const saved = JSON.parse($("#mappings").textContent || "{}");
+  // Nomi delle colonne Tipo e Data secondo il tipo di attività (palestra, hotel, studio…).
+  const sectors = JSON.parse(($("#sectors") || {}).textContent || "{}");
+  function applySector() {
+    const s = sectors[$("#gym").value];
+    if (!s) return;
+    FIELDS.find((f) => f.key === "Membership").label = s.kind;
+    FIELDS.find((f) => f.key === "ExpiresOn").label = s.date;
+    const w = $("#sensitiveWarn");
+    if (w) w.hidden = !s.sensitive;
+  }
   const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
   let header = [], rows = [], fileName = "";
 
@@ -66,6 +77,7 @@
   }
 
   function buildMapping() {
+    applySector();
     const taken = new Set();
     $("#mapFields").innerHTML = "";
     for (const f of FIELDS) {
@@ -138,8 +150,10 @@
   }
 
   function downloadTemplate() {
-    const cols = ["Nome", "Cognome", "Cellulare", "Email", "Tipo abbonamento", "Scadenza abbonamento", "Consenso marketing", "Data consenso", "Fonte consenso", "Servizio / corso", "Note"];
-    const ws = XLSX.utils.aoa_to_sheet([cols, ["Giulia", "Rossi", "333 123 4567", "giulia@esempio.it", "Annuale", "18/10/2026", "SI", "12/10/2025", "Modulo iscrizione", "Pilates", "Viene soprattutto la sera"]]);
+    applySector();
+    const label = (k) => FIELDS.find((f) => f.key === k).label;
+    const cols = ["Nome", "Cognome", "Cellulare", "Email", label("Membership"), label("ExpiresOn"), "Consenso marketing", "Data consenso", "Fonte consenso", "Servizio / corso", "Note", "Lingua"];
+    const ws = XLSX.utils.aoa_to_sheet([cols, ["Giulia", "Rossi", "333 123 4567", "giulia@esempio.it", "Annuale", "18/10/2026", "SI", "12/10/2025", "Modulo iscrizione", "Pilates", "Viene soprattutto la sera", "it"]]);
     ws["!cols"] = cols.map(() => ({ wch: 20 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Contatti");
@@ -151,7 +165,8 @@
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
   drop.addEventListener("dragleave", () => drop.classList.remove("over"));
   drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && readFile(e.dataTransfer.files[0]); });
-  $("#gym").addEventListener("change", () => header.length && buildMapping());
+  $("#gym").addEventListener("change", () => { applySector(); if (header.length) buildMapping(); });
+  applySector();
   $("#importBtn").addEventListener("click", doImport);
   $("#tplBtn").addEventListener("click", downloadTemplate);
 })();

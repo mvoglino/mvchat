@@ -16,6 +16,8 @@ public sealed class GymProfile
     public string Formality { get; set; } = "tu";
     /// <summary>Link per prenotare una visita, una prova o un appuntamento (vale anche senza offerta).</summary>
     public string? BookingUrl { get; set; }
+    /// <summary>Link per lasciare una recensione (es. Google): lo usa il modello «Richiesta di recensione».</summary>
+    public string? ReviewUrl { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
     /// <summary>Quanto è completa la scheda: serve a ricordare all'attività cosa manca.</summary>
@@ -63,6 +65,10 @@ public sealed class GoalModel
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; } = 100;
     public bool IsStandard => OrganizationId is null;
+    /// <summary>Tipi di attività per cui il modello ha senso (chiavi separate da virgola); vuoto = tutti.</summary>
+    public string? Sectors { get; set; }
+    public bool Fits(string? sector) => string.IsNullOrWhiteSpace(Sectors) || sector is null
+        || Sectors.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(sector);
 }
 
 /// <summary>Scheda attività, offerte e modelli di obiettivo, sempre filtrati in base a chi chiede.</summary>
@@ -91,15 +97,15 @@ public sealed class CatalogRepo
         {
             GymId = r.Int("GymId"), OpeningHours = r.Str("OpeningHours"), Services = r.Str("Services"), Classes = r.Str("Classes"),
             HowToReach = r.Str("HowToReach"), ExtraInfo = r.Str("ExtraInfo"), AssistantName = r.Str("AssistantName")!,
-            Formality = r.Str("Formality")!, BookingUrl = r.Str("BookingUrl"), UpdatedAt = r.Date("UpdatedAt")
+            Formality = r.Str("Formality")!, BookingUrl = r.Str("BookingUrl"), ReviewUrl = r.Str("ReviewUrl"), UpdatedAt = r.Date("UpdatedAt")
         }) ?? new GymProfile { GymId = gymId };
 
     public Task SaveProfileAsync(GymProfile p, int userId) => _db.ExecuteAsync(
-        @"INSERT INTO GymProfiles (GymId, OpeningHours, Services, Classes, HowToReach, ExtraInfo, AssistantName, Formality, BookingUrl, UpdatedBy)
-          VALUES (@GymId, @OpeningHours, @Services, @Classes, @HowToReach, @ExtraInfo, @AssistantName, @Formality, @BookingUrl, @userId)
+        @"INSERT INTO GymProfiles (GymId, OpeningHours, Services, Classes, HowToReach, ExtraInfo, AssistantName, Formality, BookingUrl, ReviewUrl, UpdatedBy)
+          VALUES (@GymId, @OpeningHours, @Services, @Classes, @HowToReach, @ExtraInfo, @AssistantName, @Formality, @BookingUrl, @ReviewUrl, @userId)
           ON DUPLICATE KEY UPDATE OpeningHours=@OpeningHours, Services=@Services, Classes=@Classes, HowToReach=@HowToReach,
-            ExtraInfo=@ExtraInfo, AssistantName=@AssistantName, Formality=@Formality, BookingUrl=@BookingUrl, UpdatedBy=@userId",
-        new { p.GymId, p.OpeningHours, p.Services, p.Classes, p.HowToReach, p.ExtraInfo, p.AssistantName, p.Formality, p.BookingUrl, userId });
+            ExtraInfo=@ExtraInfo, AssistantName=@AssistantName, Formality=@Formality, BookingUrl=@BookingUrl, ReviewUrl=@ReviewUrl, UpdatedBy=@userId",
+        new { p.GymId, p.OpeningHours, p.Services, p.Classes, p.HowToReach, p.ExtraInfo, p.AssistantName, p.Formality, p.BookingUrl, p.ReviewUrl, userId });
 
     public async Task<Dictionary<int, int>> CompletenessAsync(IEnumerable<int> gymIds)
     {
@@ -165,22 +171,22 @@ public sealed class CatalogRepo
             Id = r.Int("Id"), OrganizationId = r.IntN("OrganizationId"), OrganizationName = r.Str("OrgName"), Code = r.Str("Code")!,
             Name = r.Str("Name")!, Success = r.Str("Success")!, Instructions = r.Str("Instructions")!, TemplateSuggestion = r.Str("TemplateSuggestion"),
             NeedsOffer = r.Bool("NeedsOffer"), MaxAiMessages = Convert.ToInt32(r["MaxAiMessages"]), IsActive = r.Bool("IsActive"),
-            SortOrder = r.Int("SortOrder")
+            SortOrder = r.Int("SortOrder"), Sectors = r.Str("Sectors")
         });
 
     public async Task<GoalModel?> ModelAsync(Scope s, int id) => (await ModelsAsync(s, id)).FirstOrDefault();
 
     public async Task<int> SaveModelAsync(GoalModel m)
     {
-        var args = new { m.Id, m.OrganizationId, m.Code, m.Name, m.Success, m.Instructions, m.TemplateSuggestion, m.NeedsOffer, m.MaxAiMessages, m.IsActive, m.SortOrder };
+        var args = new { m.Id, m.OrganizationId, m.Code, m.Name, m.Success, m.Instructions, m.TemplateSuggestion, m.NeedsOffer, m.MaxAiMessages, m.IsActive, m.SortOrder, m.Sectors };
         if (m.Id == 0)
             return await _db.ScalarAsync<int>(
-                @"INSERT INTO GoalModels (OrganizationId, Code, Name, Success, Instructions, TemplateSuggestion, NeedsOffer, MaxAiMessages, IsActive, SortOrder)
-                  VALUES (@OrganizationId, @Code, @Name, @Success, @Instructions, @TemplateSuggestion, @NeedsOffer, @MaxAiMessages, @IsActive, @SortOrder);
+                @"INSERT INTO GoalModels (OrganizationId, Code, Name, Success, Instructions, TemplateSuggestion, NeedsOffer, MaxAiMessages, IsActive, SortOrder, Sectors)
+                  VALUES (@OrganizationId, @Code, @Name, @Success, @Instructions, @TemplateSuggestion, @NeedsOffer, @MaxAiMessages, @IsActive, @SortOrder, @Sectors);
                   SELECT LAST_INSERT_ID();", args);
         await _db.ExecuteAsync(
             @"UPDATE GoalModels SET Name=@Name, Success=@Success, Instructions=@Instructions, TemplateSuggestion=@TemplateSuggestion,
-              NeedsOffer=@NeedsOffer, MaxAiMessages=@MaxAiMessages, IsActive=@IsActive, SortOrder=@SortOrder WHERE Id=@Id", args);
+              NeedsOffer=@NeedsOffer, MaxAiMessages=@MaxAiMessages, IsActive=@IsActive, SortOrder=@SortOrder, Sectors=@Sectors WHERE Id=@Id", args);
         return m.Id;
     }
 

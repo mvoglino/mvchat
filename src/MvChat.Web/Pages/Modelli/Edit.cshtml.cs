@@ -28,7 +28,8 @@ public class EditModel : PageModel
         var m = await _catalog.ModelAsync(Me, id.Value);
         if (m is null || !CatalogRepo.CanEdit(Me, m)) return NotFound();
         Input = new ModelInput { Id = m.Id, OrganizationId = m.OrganizationId, Name = m.Name, Success = m.Success, Instructions = m.Instructions,
-            TemplateSuggestion = m.TemplateSuggestion, NeedsOffer = m.NeedsOffer, MaxAiMessages = m.MaxAiMessages, IsActive = m.IsActive, SortOrder = m.SortOrder };
+            TemplateSuggestion = m.TemplateSuggestion, NeedsOffer = m.NeedsOffer, MaxAiMessages = m.MaxAiMessages, IsActive = m.IsActive, SortOrder = m.SortOrder,
+            Sectors = (m.Sectors ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList() };
         return Page();
     }
 
@@ -53,7 +54,10 @@ public class EditModel : PageModel
         {
             Id = Input.Id, OrganizationId = Input.OrganizationId, Code = code.Length > 40 ? code[..40] : code, Name = Input.Name.Trim(),
             Success = Input.Success.Trim(), Instructions = Input.Instructions.Trim(), TemplateSuggestion = string.IsNullOrWhiteSpace(Input.TemplateSuggestion) ? null : Input.TemplateSuggestion.Trim(),
-            NeedsOffer = Input.NeedsOffer, MaxAiMessages = Input.MaxAiMessages, IsActive = Input.IsActive, SortOrder = Input.SortOrder
+            NeedsOffer = Input.NeedsOffer, MaxAiMessages = Input.MaxAiMessages, IsActive = Input.IsActive, SortOrder = Input.SortOrder,
+            // Tutti i tipi scelti (o nessuno) = adatto a tutti.
+            Sectors = Input.Sectors.Where(k => MvChat.Web.Infrastructure.Sectors.All.Any(x => x.Key == k)).Distinct().ToList() is { Count: > 0 } sel
+                && sel.Count < MvChat.Web.Infrastructure.Sectors.All.Length ? string.Join(",", sel) : null
         });
         await _repos.AuditAsync(Me, IsNew ? "model.created" : "model.updated", Input.Name, HttpContext.Connection.RemoteIpAddress?.ToString(), Input.OrganizationId);
         TempData["Ok"] = IsNew ? "Modello creato." : "Modello aggiornato.";
@@ -72,5 +76,7 @@ public class EditModel : PageModel
         [Range(2, 15, ErrorMessage = "Da 2 a 15 messaggi.")] public int MaxAiMessages { get; set; } = 8;
         public bool IsActive { get; set; } = true;
         public int SortOrder { get; set; } = 100;
+        /// <summary>Tipi di attività a cui si propone il modello (nessuno = tutti).</summary>
+        public List<string> Sectors { get; set; } = new();
     }
 }

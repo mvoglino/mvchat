@@ -28,6 +28,8 @@ else
     <div class="panel-b">
         <p class="muted" style="margin-top:0">mvchat ha provato a riconoscere le colonne del file. Correggi quelle sbagliate: la prossima volta se le ricorderà per quest'attività.</p>
         <div class="form" id="mapFields"></div>
+        <div class="note warn" id="sensitiveWarn" hidden style="margin-top:14px"><b>Dati sanitari:</b> per questo tipo di attività non scrivere diagnosi, terapie o altre informazioni sulla salute nelle colonne «Note» e «Servizio». Le note non vengono lette dall'assistente.</div>
+        <div class="note" style="margin-top:14px"><b>Lingua</b> (facoltativa): «it», «en», «de», «fr», «es» oppure il nome della lingua. Se manca vale l'italiano. Il primo messaggio parte nella lingua del cliente se esiste un template approvato con lo stesso nome in quella lingua.</div>
         <div class="note" style="margin-top:14px"><b>Consenso:</b> scegli la colonna che dice se la persona ha accettato di ricevere comunicazioni commerciali. Valgono come sì: «SI», «Sì», «X», «1», «Vero». Chi non ce l'ha non viene importato.</div>
     </div>
     <div class="panel-h" style="border-top:1px solid var(--line)"><h2>Anteprima delle prime righe</h2></div>
@@ -36,6 +38,7 @@ else
 </section>
 
 <script id="mappings" type="application/json">@Html.Raw(Model.MappingsJson)</script>
+<script id="sectors" type="application/json">@Html.Raw(Model.SectorsJson)</script>
 <script src="~/js/vendor/xlsx.full.min.js" asp-append-version="true"></script>
 <script src="~/js/import.js" asp-append-version="true"></script>
 }

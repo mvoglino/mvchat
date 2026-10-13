@@ -1170,6 +1170,99 @@ fake_meta.TOKEN = "good-token"
 d.post(cu_wa + "?handler=Save", {"Mode":"meta","DisplayPhone":"0171 000000","DisplayName":"FitActive Cuneo","PhoneNumberId":"333","WabaId":"222","AccessToken":"good-token","TokenForAll":"true"}, form_path=cu_wa)
 fake.shutdown(); fake.server_close()
 
+# 5zz. Attività di altri settori: parole del settore, modelli per settore, recensioni, filtri della lista, lingua del cliente, dati sensibili
+s,_,loc = sa.post("/Gyms/Edit", {"Input.OrganizationId":"","Input.Sector":"hotel","Input.Name":"Hotel Langhe","Input.City":"Alba","Input.IsActive":"true"})
+hotel = int(re.search(r"/Attivita/(\d+)", loc or "/Attivita/0").group(1))
+check("MVitalia crea un'attività di un altro settore (hotel)", s == 302 and hotel > 0, f"{s} {loc}")
+_,nh,_ = sa.req("/Lists/New")
+check("caricamento lista: colonne con le parole del settore", f'"{hotel}":{{"kind":"Tipo di soggiorno","date":"Data ultimo soggiorno","sensitive":false}}' in nh and "Lingua" in nh, nh[nh.find('id="sectors"'):][:300])
+rows_h = [["Anna","Bosio","333 444 5501","","Weekend","2026-03-10","SI","Spa","","it"],
+          ["John","Smith","+44 7700 900456","","Settimana","2026-07-01","yes","","","English"],
+          ["Hans","Müller","+49 1512 3456789","","Weekend","2025-12-01","SI","","","Deutsch"]]
+mp_h = {"FirstName":0,"LastName":1,"Phone":2,"Email":3,"Membership":4,"ExpiresOn":5,"Consent":6,"ConsentDate":-1,"ConsentSource":-1,"Service":7,"Notes":8,"Language":9,"Headers":{}}
+s, res = sa.post_json("/Lists/New?handler=Import", {"GymId":hotel,"Name":"Ospiti 2025-26","Map":mp_h,"Rows":rows_h}, "/Lists/New")
+lid_h = res.get("listId")
+_,ld,_ = sa.req(f"/Lists/Detail/{lid_h}")
+check("lista dell'hotel importata con la lingua; colonne «Tipo di soggiorno» e «Data ultimo soggiorno»", s == 200 and res.get("valid") == 3
+      and "<th>Tipo di soggiorno</th><th>Data ultimo soggiorno</th>" in ld, str(res))
+sa.post(f"/WhatsApp/Numero/{hotel}?handler=Save", {"Mode":"simulato","DisplayPhone":"0173 555000","DisplayName":"Hotel Langhe"}, form_path=f"/WhatsApp/Numero/{hotel}")
+th_url = f"/WhatsApp/Template/{hotel}"
+_,th,_ = sa.req(th_url)
+check("modelli per settore: l'hotel vede «Ritorno dell'ospite» e non «Pacchetto trattamenti»; segnaposto del settore",
+      "Ritorno dell'ospite" in th and "Pacchetto trattamenti" not in th and "{{soggiorno}}" in th, th[th.find("Parti da un modello"):][:400])
+s1,_,_ = sa.post(th_url + "?handler=Create", {"Name":"ritorno_hotel","Category":"MARKETING","Language":"it",
+    "Body":"Ciao {{nome}}, grazie per il tuo {{soggiorno}} del {{data}} in {{sede}}: vuoi scoprire l'offerta per tornare?"}, form_path=th_url)
+s2,_,_ = sa.post(th_url + "?handler=Create", {"Name":"ritorno_hotel","Category":"MARKETING","Language":"en",
+    "Body":"Hi {{nome}}, thanks for your {{soggiorno}} at {{sede}}: would you like to hear about our offer?"}, form_path=th_url)
+_,th,_ = sa.req(th_url)
+check("stesso template in due lingue (sinonimi {{soggiorno}} e {{data}} accettati)", s1 == s2 == 302 and th.count("<code>ritorno_hotel</code>") == 2 and "Inglese" in th, f"{s1} {s2}")
+sa.post("/Offerte/Edit", {"Input.GymId":hotel,"Input.Title":"Torna da noi","Input.Price":"180","Input.ValidTo":"2099-12-31","Input.IsActive":"true"})
+_,nc,_ = sa.req(f"/Campagne/Nuova?gym={hotel}")
+mod_h = re.search(r'<option value="(\d+)"[^>]*>Ritorno dell\'ospite', nc); off_h = re.search(r'<option value="(\d+)"[^>]*>Torna da noi', nc)
+tpl_h = re.search(r'<option value="(\d+)"[^>]*>ritorno_hotel</option>', nc)
+check("nuova campagna: filtri con le parole del settore e solo i modelli adatti", "Data ultimo soggiorno dal" in nc and "Quali clienti della lista" in nc
+      and mod_h is not None and "Pacchetto trattamenti" not in nc and tpl_h is not None and "ritorno_hotel (en)" in nc)
+def cnt(**q):
+    _,b,_ = sa.req(f"/Campagne/Nuova?handler=Count&gym={hotel}&listId={lid_h}&" + urllib.parse.urlencode(q))
+    try: return _json.loads(b).get("count")
+    except Exception: return b[:100]
+check("filtri: quanti clienti riceveranno il messaggio", cnt() == 3 and cnt(lingua="en") == 1 and cnt(da="2026-01-01", a="2026-12-31") == 2
+      and cnt(tipo="Weekend") == 2 and cnt(tipo="Weekend", da="2026-01-01") == 1, f"{cnt()} {cnt(lingua='en')} {cnt(da='2026-01-01', a='2026-12-31')} {cnt(tipo='Weekend')}")
+base_h = {"Name":"Ritorno ospiti","ListId":lid_h,"ModelId":mod_h.group(1) if mod_h else "","OfferId":off_h.group(1) if off_h else "","TemplateId":tpl_h.group(1) if tpl_h else "",
+          "When":"subito","DailyLimit":"","ExtraInstructions":"","FilterFrom":"2026-01-01","FilterTo":"2026-12-31"}
+cX, s, html = camp_post(sa, dict(base_h, FilterFrom="2030-01-01", FilterTo="2030-12-31"), hotel)
+check("filtri troppo stretti: nessuna campagna vuota", cX is None and "Nessun cliente della lista corrisponde" in html, str(s))
+cH, s, html = camp_post(sa, base_h, hotel)
+hc = cpage(sa, cH) if cH else ""
+check("campagna con i soli clienti scelti (data del soggiorno nel 2026)", cH is not None and "solo clienti con data ultimo soggiorno dal 01/01/2026 al 31/12/2026" in hc
+      and "Avvia l'invio a 2 persone" in hc, hc[hc.find("Lista"):][:300])
+act(sa, cH, "Start"); _time.sleep(0.3); act(sa, cH, "Run"); _time.sleep(0.5)
+cj = conv_of(sa, "+447700900456"); ca = conv_of(sa, "+393334445501")
+pj = page(sa, cj) if cj else ""; pa = page(sa, ca) if ca else ""
+check("primo messaggio nella lingua del cliente (stesso template in inglese), italiano agli altri",
+      "Hi John, thanks for your Settimana at Hotel Langhe" in pj and "lingua: inglese" in pj and "Ciao Anna, grazie per il tuo Weekend del 10/03/2026 in Hotel Langhe" in pa
+      and conv_of(sa, "+4915123456789") is None, pj[pj.find('id="chat"'):][:300])
+try: fai.server_close()
+except Exception: pass
+fai = fake_ai.start(5080)
+say(sa, cj, "Hello, what is included?")
+pj = page(sa, cj)
+_sysh = next((r["body"].get("system", [{}])[0].get("text", "") for r in reversed(fake_ai.REQUESTS) if r["path"] == "/v1/messages"), "")
+check("l'assistente scrive nella lingua del cliente e si presenta come assistente virtuale in inglese",
+      "Scrivi in inglese" in _sysh and "rispondi nella sua lingua" in _sysh and "Hi, I'm the virtual assistant of Hotel Langhe." in pj, pj[pj.find('id="chat"'):][-400:])
+say(sa, cj, "Can I talk to a real person?")
+pj = page(sa, cj)
+check("richiesta di una persona in inglese: reception e messaggio di cortesia in inglese", state(sa, cj).get("status") == "operatore"
+      and "A colleague from our staff will get back to you" in pj, str(state(sa, cj)))
+say(sa, cj, "Please don't text me anymore", wait=False); _time.sleep(0.8)
+pj = page(sa, cj); _,stop_sa,_ = sa.req("/OptOuts")
+check("STOP scritto in inglese: lista STOP e conferma in inglese", "Done: you will no longer receive promotional messages from Hotel Langhe" in pj and "+447700900456" in stop_sa)
+# Recensioni
+sa.post(f"/Sedi/Edit/{hotel}", {"Input.OpeningHours":"Reception 24 ore su 24","Input.Services":"Camere, spa, ristorante","Input.ReviewUrl":"https://g.page/r/hotel-langhe/review",
+    "Input.AssistantName":"assistente virtuale","Input.Formality":"tu"}, form_path=f"/Sedi/Edit/{hotel}")
+_,mods,_ = sa.req(f"/Assistente/Prova?gym={hotel}")
+rec = re.search(r'<option value="(\d+)"[^>]*>Richiesta di recensione', mods)
+_,anr,_ = sa.req(f"/Modelli/Anteprima?gym={hotel}&model={rec.group(1) if rec else 0}")
+_,ano,_ = sa.req(f"/Modelli/Anteprima?gym={hotel}&model={mod_h.group(1) if mod_h else 0}")
+check("richiesta di recensione: il link della scheda entra solo in quel modello, offerto a tutti senza premi",
+      rec is not None and "https://g.page/r/hotel-langhe/review" in anr and "senza offrire premi" in anr and "hotel-langhe/review" not in ano, anr[:0])
+# Dati sensibili (studio medico)
+s,_,loc = sa.post("/Gyms/Edit", {"Input.OrganizationId":"","Input.Sector":"salute","Input.Name":"Studio Sole","Input.City":"Bra","Input.IsActive":"true"})
+studio = int(re.search(r"/Attivita/(\d+)", loc or "/Attivita/0").group(1))
+sa.post(f"/WhatsApp/Numero/{studio}?handler=Save", {"Mode":"simulato","DisplayPhone":"0172 777000","DisplayName":"Studio Sole"}, form_path=f"/WhatsApp/Numero/{studio}")
+_,ps,_ = sa.req(f"/Assistente/Prova?gym={studio}")
+ric = re.search(r'<option value="(\d+)"[^>]*>Richiamo per un controllo', ps); app = re.search(r'<option value="(\d+)"[^>]*>Conferma appuntamento', ps)
+check("studio medico: modelli «Richiamo per un controllo» e «Conferma appuntamento», niente modelli da hotel",
+      ric is not None and app is not None and "Ritorno dell'ospite" not in ps and "Data appuntamento o richiamo" in ps)
+s,_,loc = sa.post("/Assistente/Prova", {"Gym":studio,"ModelId":ric.group(1) if ric else "","OfferId":"","TemplateId":"","Phone":"333 888 7701","Name":"Lucia",
+    "Membership":"Igiene","ExpiresOn":"2026-11-20","Service":"","Notes":"paziente diabetico, terapia insulinica","Language":"it"}, form_path=f"/Assistente/Prova?gym={studio}")
+cs = re.search(r"/Conversazioni/(\d+)$", loc or ""); cs = cs.group(1) if cs else None
+if cs: say(sa, cs, "Ciao")
+_syss = next((r["body"].get("system", [{}])[0].get("text", "") for r in reversed(fake_ai.REQUESTS) if r["path"] == "/v1/messages"), "")
+check("dati sensibili: le note sulla salute non arrivano all'assistente e c'è la regola di riservatezza",
+      cs is not None and "diabetico" not in _syss and "Riservatezza: non chiedere" in _syss and "paziente" in _syss, _syss[:200])
+fai.shutdown(); fai.server_close()
+
 # 6. Blocco dopo 5 tentativi sbagliati
 x = Client()
 for i in range(5): x.post("/Login", {"Email":"altra@altra.test","Password":"sbagliata123"})

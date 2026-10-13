@@ -41,6 +41,19 @@ public class NuovaModel : PageModel
     [BindProperty] public int? FollowUpTemplateId { get; set; }
     [BindProperty] public int FollowUpDays { get; set; } = 3;
     public const int ExtraMax = 1500;
+    // Quali clienti della lista (facoltativo): data di riferimento tra due date, tipo, servizio, lingua.
+    [BindProperty] public DateTime? FilterFrom { get; set; }
+    [BindProperty] public DateTime? FilterTo { get; set; }
+    [BindProperty] public string? FilterKind { get; set; }
+    [BindProperty] public string? FilterService { get; set; }
+    [BindProperty] public string? FilterLanguage { get; set; }
+    public string ListValuesJson { get; private set; } = "{}";
+
+    private RecipientFilter Filter() => new(FilterFrom?.Date, FilterTo?.Date,
+        string.IsNullOrWhiteSpace(FilterKind) ? null : FilterKind.Trim(), string.IsNullOrWhiteSpace(FilterService) ? null : FilterService.Trim(),
+        Infrastructure.Languages.Parse(FilterLanguage));
+
+    public MvChat.Web.Infrastructure.Sector Sector { get; private set; } = MvChat.Web.Infrastructure.Sectors.Get("altro");
 
     private async Task<Gym?> LoadAsync()
     {
@@ -48,17 +61,31 @@ public class NuovaModel : PageModel
         Gyms = (await _repos.GymsAsync(me)).Where(g => g.IsActive).ToList();
         var g = Gyms.FirstOrDefault(x => x.Id == Gym) ?? Gyms.FirstOrDefault();
         Gym = g?.Id;
-        Models = await _catalog.ModelsAsync(me, onlyActive: true);
+        if (g is not null) Sector = MvChat.Web.Infrastructure.Sectors.Get(g.Sector);
+        Models = (await _catalog.ModelsAsync(me, onlyActive: true)).Where(m => m.Fits(g?.Sector)).ToList();
         if (g is null) return null;
         Lists = (await _contacts.ListsAsync(me)).Where(l => l.GymId == g.Id && l.ValidCount > 0).ToList();
         Offers = (await _catalog.OffersAsync(me, g.Id)).Where(o => o.Status == "Attiva").ToList();
         Number = await _wa.NumberForGymAsync(g.Id);
         if (Number is not null) Templates = (await _wa.TemplatesAsync(g.Id)).Where(t => t.IsApproved).ToList();
         Windows = SendWindows.Describe(await _repo.WindowsAsync(g.Id));
+        var values = new Dictionary<string, object>();
+        foreach (var l in Lists) values[l.Id.ToString()] = await _repo.ListValuesAsync(l.Id);
+        ListValuesJson = System.Text.Json.JsonSerializer.Serialize(values);
         return g;
     }
 
     public async Task OnGetAsync() => await LoadAsync();
+
+    /// <summary>Quanti clienti riceverebbero la campagna con i filtri scelti (si aggiorna mentre si scelgono).</summary>
+    public async Task<IActionResult> OnGetCountAsync(int listId, DateTime? da, DateTime? a, string? tipo, string? servizio, string? lingua)
+    {
+        var g = await LoadAsync();
+        var list = Lists.FirstOrDefault(l => l.Id == listId);
+        if (g is null || list is null) return new JsonResult(new { count = 0 });
+        FilterFrom = da; FilterTo = a; FilterKind = tipo; FilterService = servizio; FilterLanguage = lingua;
+        return new JsonResult(new { count = await _repo.CountRecipientsAsync(list.Id, g.Id, g.OrganizationId, Filter()) });
+    }
 
     public async Task<IActionResult> OnPostAsync()
     {
@@ -87,6 +114,7 @@ public class NuovaModel : PageModel
             : followUp is not null && followUp.Id == template.Id ? "Per il promemoria scegli un template diverso dal primo messaggio."
             : followUp is not null && followUp.Variables.Contains("offerta") && offer is null ? "Il promemoria cita l'offerta: collega un'offerta alla campagna."
             : FollowUpDays is < 1 or > 7 ? "Il promemoria parte dopo 1–7 giorni."
+            : FilterFrom is DateTime ff && FilterTo is DateTime ft && ft < ff ? "Nelle date dei clienti da scegliere, la seconda è prima della prima."
             : null;
         if (Error is not null) return Page();
 
@@ -98,8 +126,17 @@ public class NuovaModel : PageModel
             ExtraInstructions = string.IsNullOrWhiteSpace(ExtraInstructions) ? null : ExtraInstructions.Trim()[..Math.Min(ExtraInstructions.Trim().Length, ExtraMax)],
             AskRefusalReason = AskRefusalReason, FollowUpTemplateId = followUp?.Id, FollowUpDays = FollowUpDays
         };
-        var (id, recipients, excluded) = await _repo.CreateAsync(c, me.UserId);
-        await _repos.AuditAsync(me, "campaign.created", $"#{id} {c.Name} · {recipients} destinatari", HttpContext.Connection.RemoteIpAddress?.ToString(), g.OrganizationId, g.Id);
+        var filter = Filter();
+        c.FilterNote = filter.IsEmpty ? null : filter.Describe(Sector);
+        if (c.FilterNote is { Length: > 500 }) c.FilterNote = c.FilterNote[..500];
+        var (id, recipients, excluded) = await _repo.CreateAsync(c, me.UserId, filter);
+        if (recipients == 0 && !filter.IsEmpty)
+        {
+            await _repo.DeleteDraftAsync(id);
+            Error = "Nessun cliente della lista corrisponde ai filtri scelti: allarga le date o togli un filtro.";
+            return Page();
+        }
+        await _repos.AuditAsync(me, "campaign.created", $"#{id} {c.Name} · {recipients} destinatari" + (c.FilterNote is null ? "" : " · " + c.FilterNote), HttpContext.Connection.RemoteIpAddress?.ToString(), g.OrganizationId, g.Id);
         TempData["Ok"] = $"Campagna creata con {recipients} destinatari" + (excluded > 0 ? $" ({excluded} esclusi perché nella lista STOP)" : "") + ". Controlla l'anteprima e avviala.";
         return Redirect($"/Campagne/{id}");
     }

@@ -16,6 +16,8 @@ public sealed class Conversation
     public string? Membership { get; set; }
     /// <summary>Servizio o corso del cliente e nota libera, dalla lista contatti: l'assistente li usa per personalizzare.</summary>
     public string? Service { get; set; }
+    /// <summary>Lingua del cliente (dalla lista): primo messaggio, assistente e messaggi fissi in quella lingua.</summary>
+    public string? Language { get; set; }
     public string? Notes { get; set; }
     /// <summary>Solo per le prove inviate da una campagna: di quale campagna usare le istruzioni in più.</summary>
     public int? TestOfCampaignId { get; set; }
@@ -77,7 +79,7 @@ public sealed class ConversationRepo
     private static Conversation Map(DbDataReader r) => new()
     {
         Id = r.GetInt64(r.GetOrdinal("Id")), OrganizationId = r.Int("OrganizationId"), GymId = r.Int("GymId"), GymName = r.Str("GymName")!,
-        WaNumberId = r.Int("WaNumberId"), ContactPhone = r.Str("ContactPhone")!, ContactName = r.Str("ContactName")!, Membership = r.Str("Membership"), Service = r.Str("Service"), Notes = r.Str("Notes"), TestOfCampaignId = r.IntN("TestOfCampaignId"),
+        WaNumberId = r.Int("WaNumberId"), ContactPhone = r.Str("ContactPhone")!, ContactName = r.Str("ContactName")!, Membership = r.Str("Membership"), Service = r.Str("Service"), Notes = r.Str("Notes"), Language = r.Str("Language"), TestOfCampaignId = r.IntN("TestOfCampaignId"),
         ExpiresOn = r.Date("ExpiresOn"), GoalModelId = r.IntN("GoalModelId"), GoalName = r.Str("GoalName")!, OfferId = r.IntN("OfferId"),
         CampaignId = r.IntN("CampaignId"), IsTest = r.Bool("IsTest"), Status = r.Str("Status")!, Outcome = r.Str("Outcome")!,
         OutcomeNote = r.Str("OutcomeNote"), RefusalReason = r.Str("RefusalReason"), ReasonAsk = Convert.ToInt32(r.GetValue(r.GetOrdinal("ReasonAsk"))), AiReplies = r.Int("AiReplies"), NeedsReply = r.Bool("NeedsReply"),
@@ -87,10 +89,10 @@ public sealed class ConversationRepo
     };
 
     public Task<long> CreateAsync(Conversation c) => _db.ScalarAsync<long>(
-        @"INSERT INTO Conversations (OrganizationId, GymId, WaNumberId, ContactPhone, ContactName, Membership, ExpiresOn, Service, Notes, GoalModelId, OfferId, CampaignId, TestOfCampaignId, IsTest, Status, Outcome, LastMessageAt)
-          VALUES (@OrganizationId, @GymId, @WaNumberId, @ContactPhone, @ContactName, @Membership, @ExpiresOn, @Service, @Notes, @GoalModelId, @OfferId, @CampaignId, @TestOfCampaignId, @IsTest, 'ai', 'in_corso', UTC_TIMESTAMP());
+        @"INSERT INTO Conversations (OrganizationId, GymId, WaNumberId, ContactPhone, ContactName, Membership, ExpiresOn, Service, Notes, Language, GoalModelId, OfferId, CampaignId, TestOfCampaignId, IsTest, Status, Outcome, LastMessageAt)
+          VALUES (@OrganizationId, @GymId, @WaNumberId, @ContactPhone, @ContactName, @Membership, @ExpiresOn, @Service, @Notes, @Language, @GoalModelId, @OfferId, @CampaignId, @TestOfCampaignId, @IsTest, 'ai', 'in_corso', UTC_TIMESTAMP());
           SELECT LAST_INSERT_ID();",
-        new { c.OrganizationId, c.GymId, c.WaNumberId, c.ContactPhone, c.ContactName, c.Membership, c.ExpiresOn, c.Service, c.Notes, c.GoalModelId, c.OfferId, c.CampaignId, c.TestOfCampaignId, c.IsTest });
+        new { c.OrganizationId, c.GymId, c.WaNumberId, c.ContactPhone, c.ContactName, c.Membership, c.ExpiresOn, c.Service, c.Notes, c.Language, c.GoalModelId, c.OfferId, c.CampaignId, c.TestOfCampaignId, c.IsTest });
 
     /// <summary>Le istruzioni in più della campagna da cui nasce la conversazione (lette a ogni risposta: se cambiano, valgono subito).</summary>
     public async Task<(string? Extra, bool AskReason)> CampaignInstructionsAsync(int campaignId) =>

@@ -25,7 +25,7 @@ public class EditModel : PageModel
         Sector = MvChat.Web.Infrastructure.Sectors.Get(g.Sector);
         var p = await _catalog.ProfileAsync(id);
         Input = new ProfileInput { OpeningHours = p.OpeningHours, Services = p.Services, Classes = p.Classes, HowToReach = p.HowToReach,
-            ExtraInfo = p.ExtraInfo, AssistantName = p.AssistantName, Formality = p.Formality, BookingUrl = p.BookingUrl };
+            ExtraInfo = p.ExtraInfo, AssistantName = p.AssistantName, Formality = p.Formality, BookingUrl = p.BookingUrl, ReviewUrl = p.ReviewUrl };
         return Page();
     }
 
@@ -39,13 +39,15 @@ public class EditModel : PageModel
         if (Input.Formality is not ("tu" or "lei")) Input.Formality = "tu";
         if (!string.IsNullOrWhiteSpace(Input.BookingUrl) && (!Uri.TryCreate(Input.BookingUrl.Trim(), UriKind.Absolute, out var b) || b.Scheme is not ("https" or "http")))
             ModelState.AddModelError("Input.BookingUrl", "Indirizzo non valido: deve iniziare con https://");
+        if (!string.IsNullOrWhiteSpace(Input.ReviewUrl) && (!Uri.TryCreate(Input.ReviewUrl.Trim(), UriKind.Absolute, out var rv) || rv.Scheme is not ("https" or "http")))
+            ModelState.AddModelError("Input.ReviewUrl", "Indirizzo non valido: deve iniziare con https://");
         if (!ModelState.IsValid) return Page();
         await _catalog.SaveProfileAsync(new GymProfile
         {
             GymId = id, OpeningHours = T(Input.OpeningHours), Services = T(Input.Services), Classes = T(Input.Classes),
             HowToReach = T(Input.HowToReach), ExtraInfo = T(Input.ExtraInfo),
             AssistantName = string.IsNullOrWhiteSpace(Input.AssistantName) ? "assistente virtuale" : Input.AssistantName.Trim(),
-            Formality = Input.Formality, BookingUrl = T(Input.BookingUrl)
+            Formality = Input.Formality, BookingUrl = T(Input.BookingUrl), ReviewUrl = T(Input.ReviewUrl)
         }, me.UserId);
         await _repos.AuditAsync(me, "profile.updated", g.Name, HttpContext.Connection.RemoteIpAddress?.ToString(), g.OrganizationId, g.Id);
         TempData["Ok"] = "Scheda salvata.";
@@ -64,5 +66,6 @@ public class EditModel : PageModel
         [StringLength(60)] public string? AssistantName { get; set; }
         public string Formality { get; set; } = "tu";
         [StringLength(400)] public string? BookingUrl { get; set; }
+        [StringLength(400)] public string? ReviewUrl { get; set; }
     }
 }
