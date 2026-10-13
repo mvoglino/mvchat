@@ -6,9 +6,11 @@ Già fatto: mvchat online su https://mvchat.mvitalia.com, operazione pianificata
 
 ## Parte A · Meta (una volta sola, da MVitalia)
 
+> **Dove si trova WhatsApp nell'app Meta (schermata verificata a ottobre 2026).** Nella nuova pagina dell'app (developers.facebook.com → Le mie app → MVchat) WhatsApp **non è nella colonna di sinistra**: si apre dalla Dashboard, riquadro «Casi d'uso su questa app» → **«Connettiti con i clienti tramite WhatsApp»** (oppure colonna di sinistra → **Casi d'uso** → riga WhatsApp → **Personalizza**). Lì dentro ci sono «Configurazione API» e «Configurazione» (webhook). Elenco dei template, indirizzo diretto: **business.facebook.com/wa/manage/message-templates/**. Meta cambia spesso i menù: se una voce non c'è, fare uno screenshot e aggiornare questa nota.
+
 1. **Business Manager**: su business.facebook.com crea (o usa) il portfolio aziendale di MVitalia. La verifica dell'azienda (visura, documenti) si può avviare subito: serve per superare i limiti iniziali di invio, non per la prova.
 2. **App**: su developers.facebook.com → Le mie app → Crea app → tipo «Business» (o «Altro» → «Business»), collegata al portfolio MVitalia.
-3. Nell'app aggiungi il prodotto **WhatsApp** → «Configurazione API». Meta crea da solo:
+3. Nell'app aggiungi il caso d'uso **WhatsApp** (vedi la nota sopra) → «Configurazione API». Meta crea da solo:
    - un **numero di prova** gratuito,
    - un **WhatsApp Business Account** di prova.
    Annota dalla pagina: **ID numero di telefono** e **ID account WhatsApp Business**.
@@ -20,7 +22,7 @@ Già fatto: mvchat online su https://mvchat.mvitalia.com, operazione pianificata
 ## Parte B · mvchat: collegare Meta (MVitalia)
 
 7. mvchat → MVitalia → **Impostazioni Meta**: inserisci ID app, Chiave segreta, versione API (lascia quella proposta) e salva. In alto compaiono **URL di callback** e **Token di verifica**.
-8. developers.facebook.com → la tua app → WhatsApp → **Configurazione → Webhook** → Modifica: incolla URL di callback e Token di verifica → «Verifica e salva». Poi in «Campi webhook» attiva: **messages**, **message_template_status_update**, **phone_number_quality_update**, **account_update**.
+8. developers.facebook.com → la tua app → Dashboard → «Connettiti con i clienti tramite WhatsApp» → **Configurazione → Webhook** → Modifica: incolla URL di callback e Token di verifica → «Verifica e salva». Poi in «Campi webhook» attiva: **messages**, **message_template_status_update**, **phone_number_quality_update**, **account_update**.
 9. Nell'app metti la modalità **Live / Pubblicata** (interruttore in alto o «Pubblica»): senza, Meta non manda i messaggi dei clienti a mvchat.
 
 ## Parte C · mvchat: l'attività pilota
@@ -29,7 +31,7 @@ Già fatto: mvchat online su https://mvchat.mvitalia.com, operazione pianificata
 11. **Organizzazione → WhatsApp: numero e template** → numero dell'attività → modalità **Meta**: numero (quello di prova di Meta), nome, ID numero di telefono, ID account WhatsApp Business, chiave di accesso del punto 5 → Salva. mvchat lo controlla con Meta: deve comparire la qualità (GREEN) e il limite di invio.
 12. **Template** (stessa pagina): crea il primo messaggio, categoria **MARKETING**, per esempio:
     «Ciao {{nome}}, il tuo abbonamento {{abbonamento}} in {{sede}} scade il {{scadenza}}. Ti scrivo per un'offerta dedicata: vuoi saperne di più?»
-    Meta lo approva di solito in pochi minuti (a volte fino a 24 ore): premi «Aggiorna stato» finché è **approvato**. Se vuoi provare anche il promemoria, crea un secondo template breve.
+    Meta lo approva di solito in pochi minuti (a volte fino a 24 ore): premi «Aggiorna stati da Meta» finché è **approvato** (lo stato si aggiorna anche da solo). Controllo diretto su Meta: business.facebook.com/wa/manage/message-templates/ (WhatsApp Manager → Modelli di messaggio). Se vuoi provare anche il promemoria, crea un secondo template breve.
 13. **Assistente AI → 1 Scheda**: orari, servizi, corsi, come arrivare, domande frequenti, link di prenotazione (facoltativo). Niente prezzi.
 14. **Assistente AI → 2 Offerte**: l'offerta con prezzo, prezzo pieno, sconto extra massimo, validità, link di pagamento (facoltativo).
 15. **Assistente AI → 3 Modelli**: scegli il modello di obiettivo (es. Rinnovo), controlla «messaggi massimi».
@@ -63,7 +65,7 @@ Già fatto: mvchat online su https://mvchat.mvitalia.com, operazione pianificata
 | Cosa vedi | Cosa controllare |
 |---|---|
 | Il numero non si salva in mvchat | ID numero di telefono e chiave di accesso (punto 5, permessi giusti) |
-| Il template resta «in revisione» | Aspetta e premi «Aggiorna stato»; se rifiutato, il motivo è nella pagina |
+| Il template resta «in revisione» | Aspetta e premi «Aggiorna stati da Meta»; se rifiutato, il motivo è nella pagina |
 | Il messaggio parte ma la risposta del cliente non arriva in mvchat | Webhook (punto 8): campo «messages» attivo, app Live (punto 9), chiave segreta giusta (punto 6) |
 | Errore «numero non autorizzato» con il numero di prova | Il destinatario non è tra i numeri verificati del punto 4 |
 | L'assistente non risponde | Impostazioni AI → Prova il collegamento; Registro tecnico |
