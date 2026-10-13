@@ -1287,5 +1287,7 @@ s,body,_ = Client().req("/jobs/tick?token=" + tick.group(1)); check("tick con ch
 
 for n, ok, info in results:
     print(("OK  " if ok else "NO  ") + n + ("" if ok else "  -> " + info[:200]))
+    if not ok and os.environ.get("GITHUB_ACTIONS"):  # prova fallita visibile nel riepilogo di GitHub
+        print("::error title=Prova fallita::" + (n + " -> " + info[:300]).replace("%", "%25").replace("\r", " ").replace("\n", " "))
 print(f"{sum(r[1] for r in results)}/{len(results)} superati")
 sys.exit(0 if all(r[1] for r in results) else 1)
