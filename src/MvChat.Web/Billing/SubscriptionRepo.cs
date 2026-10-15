@@ -116,7 +116,7 @@ public sealed class SubscriptionRepo
         foreach (var r in rows)
         {
             var g = gyms.First(x => x.Id == r.GymId);
-            if (r.Fee == 0 && r.Messages == 0 && r.AiReplies == 0 && r.AiUsd == 0) continue; // niente da ricordare
+            // Anche le righe a zero: così tutto il mese risulta «chiuso» per ogni attività.
             n += await _db.ExecuteAsync(
                 @"INSERT IGNORE INTO CostHistory (Month, GymId, OrganizationId, FeeEur, MarketingMsgs, UtilityMsgs, MarketingPriceEur, UtilityPriceEur, MetaEur, AiReplies, AiUsd, ClosedBy)
                   VALUES (@month, @GymId, @OrgId, @Fee, @Marketing, @Utility, @mp, @up, @MetaEur, @AiReplies, @AiUsd, @userId)",

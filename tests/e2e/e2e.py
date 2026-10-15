@@ -695,7 +695,7 @@ check("rendiconti scaricabili per la contabilità", s == 200 and "Intestatario;R
 
 # Abbonamento e costi: canone + spesa Meta stimata, mai il costo AI (compreso nell'abbonamento)
 _,html,_ = d.req("/Abbonamento")
-check("abbonamento e costi del gruppo: canone e spesa Meta per attività", "Abbonamento e costi" in html and "Mese per mese" in html and "per attività" in html
+check("abbonamento e costi del gruppo: canone e spesa Meta per attività", "Abbonamento e costi" in html and "Storico mese per mese" in html and "per attività" in html
       and "FitActive Alba" in html and "FitActive Bra" in html and "Centro Benessere Aurora" not in html and "Spesa Meta stimata" in html, html[html.find('class="stats"'):][:300])
 check("abbonamento e costi: niente costo AI per i clienti", "Anthropic" not in html and "OpenAI" not in html and "Consumo AI" not in html and "Costo AI" not in html and "$ " not in html)
 check("abbonamento e costi: contatore Meta dall'ultima chiusura e storico", "contatore azzerato all'ultima chiusura" in html and "Storico mese per mese" in html and "Risposte assistente" in html)
