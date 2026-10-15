@@ -29,6 +29,10 @@ public class IndexModel : PageModel
     public List<SubGym> Gyms { get; private set; } = new();
     public List<SubMonth> Rows { get; private set; } = new();
     public List<Choice> Choices { get; private set; } = new();
+    public (decimal Fee, decimal Meta, int Messages, DateTime Since) SinceClose { get; private set; }
+    /// <summary>Solo MVitalia vede il costo AI, separato per attività: per i clienti è compreso nell'abbonamento.</summary>
+    public bool ShowAi => Me.IsSuperAdmin;
+    public decimal AiEur(decimal usd) => Math.Round(usd * _config.Current.Billing.UsdToEur, 2, MidpointRounding.AwayFromZero);
     public decimal MarketingPrice => _config.Current.Meta.MarketingPriceEur;
     public decimal UtilityPrice => _config.Current.Meta.UtilityPriceEur;
 
@@ -40,19 +44,23 @@ public class IndexModel : PageModel
         var wb = new Xlsx();
         var note = $"{Title} · abbonamento mvchat (assistente AI compreso) + messaggi WhatsApp stimati dal listino Meta ({MarketingPrice:0.####} € marketing, {UtilityPrice:0.####} € servizio): Meta li fattura direttamente all'attività";
         var m = wb.Sheet("Mese per mese").Title($"Abbonamento e costi {Year}").Note(note).Blank()
-            .Header("Mese", "Abbonamento mvchat", "Messaggi Meta", "Spesa Meta stimata", "Totale");
+            .Header(new[] { "Mese", "Stato", "Abbonamento mvchat", "Messaggi Meta", "Spesa Meta stimata", "Totale", "Risposte dell'assistente" }.Concat(ShowAi ? new[] { "Costo AI MVitalia (€)" } : Array.Empty<string>()).ToArray());
+        object?[] Line(string label, string state, List<SubMonth> r) => new object?[] { label, state, new XEur(r.Sum(x => x.Fee)), r.Sum(x => x.Messages), new XEur(r.Sum(x => x.MetaEur)),
+            new XEur(r.Sum(x => x.Total)), r.Sum(x => x.AiReplies) }.Concat(ShowAi ? new object?[] { new XEur(AiEur(r.Sum(x => x.AiUsd))) } : Array.Empty<object?>()).ToArray();
         foreach (var mm in Months)
         {
             var r = Rows.Where(x => x.Month == mm).ToList();
-            m.Row(MonthName(mm), new XEur(r.Sum(x => x.Fee)), r.Sum(x => x.Marketing + x.Utility), new XEur(r.Sum(x => x.MetaEur)), new XEur(r.Sum(x => x.Total)));
+            m.Row(Line(MonthName(mm), r.Count > 0 && r.All(x => x.Closed) ? "chiuso" : "aperto", r));
         }
-        m.Total("Totale", new XEur(Rows.Sum(x => x.Fee)), Rows.Sum(x => x.Marketing + x.Utility), new XEur(Rows.Sum(x => x.MetaEur)), new XEur(Rows.Sum(x => x.Total)));
+        m.Total(Line("Totale", "", Rows));
         var a = wb.Sheet("Per attività").Title($"Abbonamento e costi {Year} per attività").Note(note).Blank()
-            .Header("Mese", "Gruppo", "Attività", "Abbonamento mvchat", "Messaggi marketing", "Messaggi di servizio", "Spesa Meta stimata", "Totale");
-        foreach (var r in Rows.Where(x => x.Total > 0 || x.Marketing + x.Utility > 0))
+            .Header(new[] { "Mese", "Stato", "Gruppo", "Attività", "Abbonamento mvchat", "Messaggi marketing", "Messaggi di servizio", "Spesa Meta stimata", "Totale", "Risposte dell'assistente" }
+                .Concat(ShowAi ? new[] { "Costo AI MVitalia (€)" } : Array.Empty<string>()).ToArray());
+        foreach (var r in Rows.Where(x => x.Total > 0 || x.Messages > 0 || x.AiReplies > 0 || ShowAi && x.AiUsd > 0))
         {
             var g = Gyms.First(x => x.Id == r.GymId);
-            a.Row(MonthName(r.Month), g.InGroup ? g.OrgName : "", g.Name, new XEur(r.Fee), r.Marketing, r.Utility, new XEur(r.MetaEur), new XEur(r.Total));
+            a.Row(new object?[] { MonthName(r.Month), r.Closed ? "chiuso" : "aperto", g.InGroup ? g.OrgName : "", g.Name, new XEur(r.Fee), r.Marketing, r.Utility, new XEur(r.MetaEur), new XEur(r.Total), r.AiReplies }
+                .Concat(ShowAi ? new object?[] { new XEur(AiEur(r.AiUsd)) } : Array.Empty<object?>()).ToArray());
         }
         await _repos.AuditAsync(Me, "report.export", $"abbonamento e costi {Year} {Title}", HttpContext.Connection.RemoteIpAddress?.ToString());
         return File(wb.ToBytes(), Xlsx.ContentType, $"abbonamento-costi-{Year}.xlsx");
@@ -82,6 +90,7 @@ public class IndexModel : PageModel
             : Me.IsOrgAdmin ? "Gruppo " + (all.FirstOrDefault()?.OrgName ?? "")
             : all.Count == 1 ? all[0].Name : "Le mie attività";
         Rows = await _subs.MonthsAsync(Gyms, Year, Months);
+        SinceClose = await _subs.SinceLastCloseAsync(Gyms);
     }
 
     public static string MonthName(int m) => System.Globalization.CultureInfo.GetCultureInfo("it-IT").DateTimeFormat.GetMonthName(m) is var s && s.Length > 0 ? char.ToUpper(s[0]) + s[1..] : m.ToString();

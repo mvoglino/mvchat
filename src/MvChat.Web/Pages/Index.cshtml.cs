@@ -17,7 +17,7 @@ public class IndexModel : PageModel
     public Pulse Pulse { get; private set; } = new(0, 0, 0, 0, 0, 0);
     public List<Alert> Alerts { get; private set; } = new();
     /// <summary>Abbonamento mvchat e spesa Meta stimata del mese in corso (non per MVitalia e operatori).</summary>
-    public (decimal Fee, decimal Meta, int Activities)? Costs { get; private set; }
+    public (decimal Fee, decimal Meta, DateTime Since)? Costs { get; private set; }
 
     public async Task OnGetAsync()
     {

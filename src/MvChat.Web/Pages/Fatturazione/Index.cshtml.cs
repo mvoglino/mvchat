@@ -15,8 +15,8 @@ namespace MvChat.Web.Pages.Fatturazione;
 /// </summary>
 public class IndexModel : PageModel
 {
-    private readonly BillingService _billing; private readonly Repos _repos;
-    public IndexModel(BillingService billing, Repos repos) { _billing = billing; _repos = repos; }
+    private readonly BillingService _billing; private readonly Repos _repos; private readonly SubscriptionRepo _subs;
+    public IndexModel(BillingService billing, Repos repos, SubscriptionRepo subs) { _billing = billing; _repos = repos; _subs = subs; }
 
     public Scope Me { get; private set; } = new();
     public string Month { get; private set; } = "";
@@ -53,8 +53,10 @@ public class IndexModel : PageModel
             return Redirect($"/Fatturazione?mese={Month}");
         }
         var n = await _billing.CloseAsync(Me, Month, Me.UserId);
-        await _repos.AuditAsync(Me, "billing.closed", $"{Month}: {n} rendiconti", HttpContext.Connection.RemoteIpAddress?.ToString());
-        TempData["Ok"] = n == 0 ? "Nessun rendiconto da chiudere." : $"Mese chiuso: {n} rendiconti salvati. Da adesso non cambiano più.";
+        // Storico dei costi e consumi di ogni attività: la spesa Meta del mese si fissa e il contatore dei clienti riparte da zero.
+        var h = await _subs.SnapshotAsync(Me, Month, Me.UserId);
+        await _repos.AuditAsync(Me, "billing.closed", $"{Month}: {n} rendiconti, storico costi di {h} attività", HttpContext.Connection.RemoteIpAddress?.ToString());
+        TempData["Ok"] = n == 0 && h == 0 ? "Nessun rendiconto da chiudere." : $"Mese chiuso: {n} rendiconti salvati, costi e consumi di {h} attività nello storico (spesa Meta azzerata per i clienti). Da adesso non cambiano più.";
         return Redirect($"/Fatturazione?mese={Month}");
     }
 

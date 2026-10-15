@@ -1,17 +1,20 @@
 @page
 @model MvChat.Web.Pages.Abbonamento.IndexModel
 @using MvChat.Web.Pages.Abbonamento
+@using MvChat.Web.Billing
 @{
     ViewData["Title"] = "Abbonamento e costi";
     var it = System.Globalization.CultureInfo.GetCultureInfo("it-IT");
     string E(decimal v) => v.ToString("#,0.00", it) + " €";
     var year = Model.Rows;
     var cur = Model.Rows.Where(r => r.Month == Model.Month).ToList();
-    var feeNow = cur.Sum(r => r.Fee); var metaNow = cur.Sum(r => r.MetaEur);
     var many = Model.Gyms.Count > 1;
+    var ai = Model.ShowAi;
+    bool Closed(List<SubMonth> r) => r.Count > 0 && r.All(x => x.Closed);
+    var sc = Model.SinceClose;
 }
 @section Actions { <a class="btn primary" href="@Model.Url(handler: "Excel")">Scarica Excel</a> }
-<p class="muted" style="margin:0">Quanto costa mvchat, mese per mese: l'<b>abbonamento</b> mensile a MVitalia (l'assistente AI è compreso) e la <b>spesa Meta</b> per i messaggi WhatsApp, che Meta fattura direttamente all'attività. La spesa Meta è una stima: primi messaggi e promemoria × listino Meta (@E(Model.MarketingPrice) marketing, @E(Model.UtilityPrice) servizio); le risposte entro 24 ore sono gratuite. L'importo esatto è nella fattura di Meta.</p>
+<p class="muted" style="margin:0">Quanto costa mvchat e quanto lavora, mese per mese: l'<b>abbonamento</b> mensile a MVitalia (l'assistente AI è compreso) e la <b>spesa Meta</b> per i messaggi WhatsApp, che Meta fattura direttamente all'attività. La spesa Meta è una stima: primi messaggi e promemoria × listino Meta (@E(Model.MarketingPrice) marketing, @E(Model.UtilityPrice) servizio); le risposte entro 24 ore sono gratuite. Quando MVitalia chiude un mese, i valori restano fissati nello storico e il contatore riparte da zero.</p>
 
 <form method="get" class="form" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:12px 0">
     <div class="field"><label for="anno">Anno</label><select id="anno" name="anno">@foreach (var y in Model.Years) {<option value="@y" selected="@(y == Model.Year)">@y</option>}</select></div>
@@ -26,51 +29,60 @@
 </form>
 
 <div class="stats">
-    <div class="stat"><b>@E(feeNow)</b><span>abbonamento mvchat · @IndexModel.MonthName(Model.Month) @Model.Year@(many ? $" · {cur.Count(r => r.Fee > 0)} attività" : "")</span></div>
-    <div class="stat"><b>@E(metaNow)</b><span>spesa Meta stimata · @cur.Sum(r => r.Marketing + r.Utility) messaggi</span></div>
-    <div class="stat"><b>@E(feeNow + metaNow)</b><span>totale del mese</span></div>
-    <div class="stat"><b>@E(year.Sum(r => r.Total))</b><span>totale @Model.Year · @Model.Title</span></div>
+    <div class="stat"><b>@E(sc.Meta)</b><span>spesa Meta dal @sc.Since.ToString("d MMMM yyyy", it) · @sc.Messages messaggi · contatore azzerato all'ultima chiusura</span></div>
+    <div class="stat"><b>@E(cur.Sum(r => r.Fee))</b><span>abbonamento mvchat · @IndexModel.MonthName(Model.Month) @Model.Year@(many ? $" · {cur.Count(r => r.Fee > 0)} attività" : "")</span></div>
+    <div class="stat"><b>@cur.Sum(r => r.AiReplies)</b><span>risposte dell'assistente · @IndexModel.MonthName(Model.Month)</span></div>
+    @if (ai) { <div class="stat"><b>@E(Model.AiEur(cur.Sum(r => r.AiUsd)))</b><span>costo AI di MVitalia · @IndexModel.MonthName(Model.Month) (non visibile ai clienti)</span></div> }
+    else { <div class="stat"><b>@E(year.Sum(r => r.Total))</b><span>totale @Model.Year · @Model.Title</span></div> }
 </div>
 
 <section class="panel">
-    <div class="panel-h"><h2>Mese per mese · @Model.Year</h2><span class="muted">@Model.Title@(many ? " · clicca un mese per il dettaglio per attività" : "")</span></div>
+    <div class="panel-h"><h2>Storico mese per mese · @Model.Year</h2><span class="muted">@Model.Title@(many ? " · clicca un mese per il dettaglio per attività" : "")</span></div>
     <div class="tbl"><table>
-        <thead><tr><th>Mese</th><th class="num">Abbonamento mvchat</th><th class="num">Messaggi Meta</th><th class="num">Spesa Meta stimata</th><th class="num">Totale</th></tr></thead>
+        <thead><tr><th>Mese</th><th>Stato</th><th class="num">Abbonamento mvchat</th><th class="num">Messaggi Meta</th><th class="num">Spesa Meta stimata</th><th class="num">Totale</th><th class="num">Risposte assistente</th>@if (ai) {<th class="num">Costo AI MVitalia</th>}</tr></thead>
         <tbody>
         @foreach (var m in Model.Months)
         {
             var r = Model.Rows.Where(x => x.Month == m).ToList();
-            <tr style="@(m == Model.Month ? "background:var(--soft, rgba(0,0,0,.04))" : "")"><td><a href="@Model.Url(mese: m)">@IndexModel.MonthName(m)</a></td><td class="num">@E(r.Sum(x => x.Fee))</td><td class="num">@r.Sum(x => x.Marketing + x.Utility)</td><td class="num">@E(r.Sum(x => x.MetaEur))</td><td class="num"><b>@E(r.Sum(x => x.Total))</b></td></tr>
+            <tr style="@(m == Model.Month ? "background:var(--soft, rgba(0,0,0,.04))" : "")"><td><a href="@Model.Url(mese: m)">@IndexModel.MonthName(m)</a></td>
+                <td>@if (Closed(r)) {<span class="chip good">chiuso</span>} else {<span class="chip">aperto</span>}</td>
+                <td class="num">@E(r.Sum(x => x.Fee))</td><td class="num">@r.Sum(x => x.Messages)</td><td class="num">@E(r.Sum(x => x.MetaEur))</td><td class="num"><b>@E(r.Sum(x => x.Total))</b></td><td class="num">@r.Sum(x => x.AiReplies)</td>
+                @if (ai) {<td class="num">@E(Model.AiEur(r.Sum(x => x.AiUsd)))</td>}</tr>
         }
-        <tr><td><b>Totale</b></td><td class="num"><b>@E(year.Sum(x => x.Fee))</b></td><td class="num"><b>@year.Sum(x => x.Marketing + x.Utility)</b></td><td class="num"><b>@E(year.Sum(x => x.MetaEur))</b></td><td class="num"><b>@E(year.Sum(x => x.Total))</b></td></tr>
+        <tr><td colspan="2"><b>Totale</b></td><td class="num"><b>@E(year.Sum(x => x.Fee))</b></td><td class="num"><b>@year.Sum(x => x.Messages)</b></td><td class="num"><b>@E(year.Sum(x => x.MetaEur))</b></td><td class="num"><b>@E(year.Sum(x => x.Total))</b></td><td class="num"><b>@year.Sum(x => x.AiReplies)</b></td>
+            @if (ai) {<td class="num"><b>@E(Model.AiEur(year.Sum(x => x.AiUsd)))</b></td>}</tr>
         </tbody>
     </table></div>
+    <div class="panel-b muted" style="font-size:12.5px">«Chiuso»: valori fissati quando MVitalia ha chiuso il mese (non cambiano più). «Aperto»: calcolati adesso, crescono man mano.</div>
 </section>
 
 @if (many)
 {
 <section class="panel">
-    <div class="panel-h"><h2>@IndexModel.MonthName(Model.Month) @Model.Year per attività</h2></div>
+    <div class="panel-h"><h2>@IndexModel.MonthName(Model.Month) @Model.Year per attività</h2>@if (Closed(cur)) {<span class="chip good">chiuso</span>}</div>
     <div class="tbl"><table>
-        <thead><tr><th>Attività</th><th class="num">Abbonamento mvchat</th><th class="num">Messaggi Meta</th><th class="num">Spesa Meta stimata</th><th class="num">Totale</th></tr></thead>
+        <thead><tr><th>Attività</th><th class="num">Abbonamento mvchat</th><th class="num">Messaggi Meta</th><th class="num">Spesa Meta stimata</th><th class="num">Totale</th><th class="num">Risposte assistente</th>@if (ai) {<th class="num">Costo AI MVitalia</th>}</tr></thead>
         <tbody>
         @foreach (var grp in cur.GroupBy(r => Model.Gyms.First(g => g.Id == r.GymId)).GroupBy(x => (x.Key.OrgId, x.Key.OrgName, x.Key.InGroup)).OrderBy(o => o.Key.OrgName))
         {
             if (Model.Me.IsSuperAdmin && grp.Key.InGroup)
             {
                 var all = grp.SelectMany(x => x).ToList();
-                <tr><td><b>@grp.Key.OrgName</b> <span class="muted">· gruppo</span></td><td class="num"><b>@E(all.Sum(x => x.Fee))</b></td><td class="num"><b>@all.Sum(x => x.Marketing + x.Utility)</b></td><td class="num"><b>@E(all.Sum(x => x.MetaEur))</b></td><td class="num"><b>@E(all.Sum(x => x.Total))</b></td></tr>
+                <tr><td><b>@grp.Key.OrgName</b> <span class="muted">· gruppo</span></td><td class="num"><b>@E(all.Sum(x => x.Fee))</b></td><td class="num"><b>@all.Sum(x => x.Messages)</b></td><td class="num"><b>@E(all.Sum(x => x.MetaEur))</b></td><td class="num"><b>@E(all.Sum(x => x.Total))</b></td><td class="num"><b>@all.Sum(x => x.AiReplies)</b></td>
+                    @if (ai) {<td class="num"><b>@E(Model.AiEur(all.Sum(x => x.AiUsd)))</b></td>}</tr>
             }
             foreach (var g in grp.OrderBy(x => x.Key.Name))
             {
                 var r = g.First();
                 <tr><td style="@(Model.Me.IsSuperAdmin && grp.Key.InGroup ? "padding-left:28px" : "")">@g.Key.Name@if (!g.Key.Active) {<span class="chip" style="margin-left:6px">disattivata</span>} else if (r.Fee == 0) {<span class="chip" style="margin-left:6px">abbonamento non attivo</span>}</td>
-                    <td class="num">@E(r.Fee)</td><td class="num">@(r.Marketing + r.Utility)</td><td class="num">@E(r.MetaEur)</td><td class="num"><b>@E(r.Total)</b></td></tr>
+                    <td class="num">@E(r.Fee)</td><td class="num">@r.Messages</td><td class="num">@E(r.MetaEur)</td><td class="num"><b>@E(r.Total)</b></td><td class="num">@r.AiReplies</td>
+                    @if (ai) {<td class="num">@E(Model.AiEur(r.AiUsd))</td>}</tr>
             }
         }
         </tbody>
-        <tfoot><tr><td><b>Totale</b></td><td class="num"><b>@E(feeNow)</b></td><td class="num"><b>@cur.Sum(r => r.Marketing + r.Utility)</b></td><td class="num"><b>@E(metaNow)</b></td><td class="num"><b>@E(feeNow + metaNow)</b></td></tr></tfoot>
+        <tfoot><tr><td><b>Totale</b></td><td class="num"><b>@E(cur.Sum(r => r.Fee))</b></td><td class="num"><b>@cur.Sum(r => r.Messages)</b></td><td class="num"><b>@E(cur.Sum(r => r.MetaEur))</b></td><td class="num"><b>@E(cur.Sum(r => r.Total))</b></td><td class="num"><b>@cur.Sum(r => r.AiReplies)</b></td>
+            @if (ai) {<td class="num"><b>@E(Model.AiEur(cur.Sum(r => r.AiUsd)))</b></td>}</tr></tfoot>
     </table></div>
 </section>
 }
-<p class="muted" style="font-size:12.5px">L'abbonamento lo fattura MVitalia (vedi @(Model.Me.IsSuperAdmin ? "Fatturazione" : "Rendiconti")); comprende l'assistente AI e la trascrizione dei vocali. I messaggi WhatsApp li paga l'attività direttamente a Meta con il proprio metodo di pagamento.</p>
+<p class="muted" style="font-size:12.5px">L'abbonamento lo fattura MVitalia (vedi @(Model.Me.IsSuperAdmin ? "Fatturazione" : "Rendiconti")); comprende l'assistente AI e la trascrizione dei vocali. I messaggi WhatsApp li paga l'attività direttamente a Meta con il proprio metodo di pagamento.@if (ai) {<text> Il costo AI è in euro al cambio di Impostazioni fatturazione: lo vede solo MVitalia.</text>}</p>
