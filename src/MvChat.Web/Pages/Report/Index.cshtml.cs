@@ -42,8 +42,10 @@ public class IndexModel : PageModel
     public ReportRow Prev { get; private set; } = new();
     public decimal Value => ByOffer.Sum(o => o.Value);
     public decimal PrevValue { get; private set; }
-    /// <summary>Costo del periodo in euro: messaggi Meta stimati + AI convertita in euro.</summary>
-    public decimal CostEur(ReportRow r) => Math.Round(r.MetaCostEur(Meta) + r.AiCostUsd * _config.Current.Billing.UsdToEur, 2);
+    /// <summary>Il costo dell'AI lo vede solo MVitalia: per le attività è compreso nell'abbonamento.</summary>
+    public bool ShowAi => Me.IsSuperAdmin;
+    /// <summary>Costo del periodo in euro: messaggi Meta stimati (+ AI convertita in euro, solo per MVitalia).</summary>
+    public decimal CostEur(ReportRow r) => Math.Round(r.MetaCostEur(Meta) + (ShowAi ? r.AiCostUsd * _config.Current.Billing.UsdToEur : 0), 2);
     /// <summary>Le attività visibili, per scegliere subito quella da guardare (solo se sono più di una).</summary>
     public List<Gym> Gyms { get; private set; } = new();
     /// <summary>Periodi pronti: un clic e i totali si aggiornano.</summary>
@@ -142,10 +144,10 @@ public class IndexModel : PageModel
         var it = CultureInfo.GetCultureInfo("it-IT");
         static string C(string? v) => Csv.Cell(v);
         var sb = new StringBuilder();
-        sb.AppendLine("Nome;Tipo;Primi messaggi;Consegnati;Letti;Conversazioni;Con risposta;Obiettivo raggiunto;Rifiuti;Non contattare più;Solo assistente AI;Con operatore;Costo Meta stimato (€);Costo AI ($)");
+        sb.AppendLine("Nome;Tipo;Primi messaggi;Consegnati;Letti;Conversazioni;Con risposta;Obiettivo raggiunto;Rifiuti;Non contattare più;Solo assistente AI;Con operatore;Costo Meta stimato (€)" + (ShowAi ? ";Costo AI ($)" : ""));
         foreach (var r in Rows.Append(new ReportRow { Name = "Totale", Kind = "" }.Also(t => t.Add(Total))))
             sb.AppendLine(string.Join(";", C(r.Name), C(r.Detail ?? r.Kind), r.Sent, r.Delivered, r.Read, r.Conversations, r.Replied, r.Reached, r.Refused, r.OptOut,
-                r.AiOnly, r.WithOperator, r.MetaCostEur(Meta).ToString("0.00", it), r.AiCostUsd.ToString("0.0000", it)));
+                r.AiOnly, r.WithOperator, r.MetaCostEur(Meta).ToString("0.00", it)) + (ShowAi ? ";" + r.AiCostUsd.ToString("0.0000", it) : ""));
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
         return File(bytes, "text/csv; charset=utf-8", $"report-{From:yyyyMMdd}-{To:yyyyMMdd}.csv");
     }
@@ -204,8 +206,11 @@ public class IndexModel : PageModel
             Line("Dialoghi con operatore", Total.WithOperator, Prev.WithOperator, Change(Total.WithOperator, Prev.WithOperator));
             Line("Valore stimato generato (adesioni × prezzo offerta)", new XEur(Value), new XEur(PrevValue), ChangeD(Value, PrevValue));
             Line("Costo Meta stimato", new XEur(Total.MetaCostEur(Meta)), new XEur(Prev.MetaCostEur(Meta)), ChangeD(Total.MetaCostEur(Meta), Prev.MetaCostEur(Meta)));
-            Line("Consumo AI (in euro)", new XEur(Math.Round(Total.AiCostUsd * _config.Current.Billing.UsdToEur, 2)), new XEur(Math.Round(Prev.AiCostUsd * _config.Current.Billing.UsdToEur, 2)), ChangeD(Total.AiCostUsd, Prev.AiCostUsd));
-            Line("Costo totale (Meta + AI)", new XEur(CostEur(Total)), new XEur(CostEur(Prev)), ChangeD(CostEur(Total), CostEur(Prev)));
+            if (ShowAi)
+            {
+                Line("Consumo AI (in euro)", new XEur(Math.Round(Total.AiCostUsd * _config.Current.Billing.UsdToEur, 2)), new XEur(Math.Round(Prev.AiCostUsd * _config.Current.Billing.UsdToEur, 2)), ChangeD(Total.AiCostUsd, Prev.AiCostUsd));
+                Line("Costo totale (Meta + AI)", new XEur(CostEur(Total)), new XEur(CostEur(Prev)), ChangeD(CostEur(Total), CostEur(Prev)));
+            }
             Line("Costo per obiettivo raggiunto", new XEur(Total.Reached == 0 ? 0 : Math.Round(CostEur(Total) / Total.Reached, 2)), new XEur(Prev.Reached == 0 ? 0 : Math.Round(CostEur(Prev) / Prev.Reached, 2)), "");
             sh.Blank().Note("Il valore stimato conta le adesioni delle campagne con un'offerta che ha un prezzo; non è un incasso registrato.");
         }
@@ -213,8 +218,8 @@ public class IndexModel : PageModel
         {
             var sh = wb.Sheet(Level switch { "clienti" => "Gruppi e attività", "attivita" => "Attività", _ => "Campagne" })
                 .Title((Level switch { "clienti" => "Gruppi e attività singole", "attivita" => "Confronto tra le attività", _ => "Campagne" }) + " · " + Title).Note(period).Blank()
-                .Header(levelName, "Tipo", "Primi messaggi", "Consegnati", "Letti", "% letti", "Contattati", "Con risposta", "% risposta",
-                    "Obiettivo raggiunto", "% obiettivo", "Rifiuti", "Non contattare più", "Solo assistente AI", "Con operatore", "Costo Meta stimato", "Consumo AI ($)");
+                .Header(new[] { levelName, "Tipo", "Primi messaggi", "Consegnati", "Letti", "% letti", "Contattati", "Con risposta", "% risposta",
+                    "Obiettivo raggiunto", "% obiettivo", "Rifiuti", "Non contattare più", "Solo assistente AI", "Con operatore", "Costo Meta stimato" }.Concat(ShowAi ? new[] { "Consumo AI ($)" } : Array.Empty<string>()).ToArray());
             foreach (var r in Rows) DetailRow(sh.Row, r, r.Name, r.Detail ?? r.Kind);
             DetailRow(sh.Total, Total, "Totale", "");
         }
@@ -252,7 +257,7 @@ public class IndexModel : PageModel
 
     private void DetailRow(Func<object?[], XlsxSheet> add, ReportRow r, string name, string kind) =>
         add(new object?[] { name, kind, r.Sent, r.Delivered, r.Read, XPct.Of(r.Read, r.Sent), r.Conversations, r.Replied, XPct.Of(r.Replied, r.Conversations),
-            r.Reached, XPct.Of(r.Reached, r.Conversations), r.Refused, r.OptOut, r.AiOnly, r.WithOperator, new XEur(r.MetaCostEur(Meta)), Math.Round(r.AiCostUsd, 4) });
+            r.Reached, XPct.Of(r.Reached, r.Conversations), r.Refused, r.OptOut, r.AiOnly, r.WithOperator, new XEur(r.MetaCostEur(Meta)) }.Concat(ShowAi ? new object?[] { Math.Round(r.AiCostUsd, 4) } : Array.Empty<object?>()).ToArray());
 
     private void BreakdownSheet(Xlsx wb, string sheet, string first, List<BreakdownRow> rows, string period, bool withGym, bool withValue)
     {

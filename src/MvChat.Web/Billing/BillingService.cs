@@ -156,17 +156,12 @@ public sealed class BillingService
             }
             foreach (var g in grp)
             {
-                // Canone: attività attiva e abbonamento valido in almeno un giorno del mese. Il consumo AI si fattura comunque.
+                // Canone: attività attiva e abbonamento valido in almeno un giorno del mese.
+                // L'assistente AI è compreso nel canone (deciso da Maurizio, ottobre 2026): non si rifattura a parte.
                 var subscribed = g.Active && g.From is DateTime from && from.Date <= last && (g.To is null || g.To.Value.Date >= first);
                 var fee = g.Fee ?? b.DefaultMonthlyFeeEur;
                 if (subscribed && fee > 0)
                     st.Lines.Add(new(g.Id, g.Name, "canone", $"Abbonamento mvchat · {MonthName(month)}", Math.Round(fee, 2, MidpointRounding.AwayFromZero)));
-                if (g.AiUsd > 0)
-                {
-                    var eur = Math.Round(g.AiUsd * b.UsdToEur * (1 + b.AiMarkupPct / 100m), 2, MidpointRounding.AwayFromZero);
-                    if (eur > 0)
-                        st.Lines.Add(new(g.Id, g.Name, "ai", $"Assistente AI · {g.AiCalls} risposte", eur, g.AiCalls, Math.Round(g.AiUsd, 4)));
-                }
             }
             if (st.Lines.Count == 0) continue;
             Totals(st);

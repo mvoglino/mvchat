@@ -26,7 +26,7 @@
         <div class="field"><label asp-for="Input.Phone">Telefono</label><input asp-for="Input.Phone" type="tel"></div>
         @if (Model.Me.IsSuperAdmin)
         {
-            <div class="field full" style="border-top:1px solid var(--line);padding-top:12px"><b>Abbonamento a mvchat</b> <small>Il consumo AI si aggiunge a parte, con il ricarico delle impostazioni di fatturazione. I messaggi WhatsApp li paga l'attività direttamente a Meta.</small></div>
+            <div class="field full" style="border-top:1px solid var(--line);padding-top:12px"><b>Abbonamento a mvchat</b> <small>Canone mensile MVitalia, con l'assistente AI compreso: l'attività e il suo gruppo lo vedono in «Abbonamento e costi». I messaggi WhatsApp li paga l'attività direttamente a Meta.</small></div>
             @if (Model.Existing?.InGroup == true || (Model.IsNew && Model.Input.OrganizationId is not null) || Model.IsNew)
             {
                 <div class="field full" id="billToField" hidden="@(Model.Existing is not null && !Model.Existing.InGroup)"><label>Rendiconto intestato a</label>

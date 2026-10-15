@@ -42,16 +42,16 @@ public class ConsumiModel : PageModel
     {
         await LoadAsync(anno, mese, vista);
         var wb = new Xlsx();
-        var note = $"{FilterLabel} · costo calcolato da mvchat con i prezzi di Impostazioni AI · cambio 1 $ = {UsdToEur:0.####} € · da rifatturare = + {MarkupPct:0.##}%";
+        var note = $"{FilterLabel} · costo calcolato da mvchat con i prezzi di Impostazioni AI · cambio 1 $ = {UsdToEur:0.####} €";
         var m = wb.Sheet("Mese per mese").Title($"Consumi AI {Year}").Note(note).Blank()
-            .Header("Mese", "Anthropic $", "OpenAI $", "Totale $", "Totale €", "Da rifatturare €");
+            .Header("Mese", "Anthropic $", "OpenAI $", "Totale $", "Totale €");
         var tot = Cell.Zero;
         foreach (var mm in Months)
         {
             var c = ByMonth.GetValueOrDefault(mm, Cell.Zero); tot += c;
-            m.Row(MonthName(mm), c.Anthropic, c.OpenAi, c.Total, new XEur(Eur(c.Total)), new XEur(Rebill(c.Total)));
+            m.Row(MonthName(mm), c.Anthropic, c.OpenAi, c.Total, new XEur(Eur(c.Total)));
         }
-        m.Total("Totale", tot.Anthropic, tot.OpenAi, tot.Total, new XEur(Eur(tot.Total)), new XEur(Rebill(tot.Total)));
+        m.Total("Totale", tot.Anthropic, tot.OpenAi, tot.Total, new XEur(Eur(tot.Total)));
         var a = wb.Sheet("Per attività").Title($"Consumi AI {Year} per gruppo e attività").Note(note).Blank()
             .Header("Mese", "Gruppo", "Attività", "Anthropic $", "OpenAI $", "Totale $", "Totale €");
         foreach (var r in Rows.OrderBy(r => r.Month).ThenBy(r => r.OrgName).ThenBy(r => r.GymName))

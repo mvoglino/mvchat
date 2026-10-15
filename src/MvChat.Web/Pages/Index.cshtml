@@ -14,7 +14,11 @@
     @if (me.CanManageUsers) { <a class="kpi" href="/Campagne"><span>Campagne in invio</span><b>@p.CampaignsRunning</b></a> }
     <a class="kpi" href="/Conversazioni?view=tutte"><span>Conversazioni aperte</span><b>@p.OpenConversations</b></a>
     <div class="kpi"><span>Obiettivi raggiunti in 30 giorni</span><b>@p.Reached30</b></div>
-    @if (me.CanManageUsers) { <div class="kpi"><span>Consumo AI del mese</span><b>$ @p.AiMonthUsd.ToString("0.00", it)</b></div> }
+    @if (me.IsSuperAdmin) { <a class="kpi" href="/Impostazioni/Consumi"><span>Costo AI del mese</span><b>$ @p.AiMonthUsd.ToString("0.00", it)</b></a> }
+    @if (Model.Costs is { } cs) {
+        <a class="kpi" href="/Abbonamento" title="Abbonamento mensile a MVitalia, assistente AI compreso"><span>Abbonamento mvchat del mese</span><b>@cs.Fee.ToString("#,0.00", it) €</b></a>
+        <a class="kpi" href="/Abbonamento" title="Stima dei messaggi WhatsApp del mese: Meta li fattura direttamente"><span>Spesa Meta del mese (stima)</span><b>@cs.Meta.ToString("#,0.00", it) €</b></a>
+    }
 </div>
 
 <section class="panel">

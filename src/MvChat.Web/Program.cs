@@ -48,6 +48,7 @@ builder.Services.AddScoped<MvChat.Web.Privacy.RetentionService>();
 builder.Services.AddScoped<MvChat.Web.Privacy.SubjectRequests>();
 builder.Services.AddHostedService<MvChat.Web.Privacy.RetentionWorker>();
 builder.Services.AddScoped<MvChat.Web.Billing.BillingService>();
+builder.Services.AddScoped<MvChat.Web.Billing.SubscriptionRepo>();
 builder.Services.AddScoped<MvChat.Web.Reports.ReportRepo>();
 builder.Services.AddScoped<MvChat.Web.Reports.AlertRepo>();
 builder.Services.AddScoped<QuickReplyRepo>();
@@ -108,6 +109,7 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizeFolder("/Gruppo", "ManageGyms");
     o.Conventions.AuthorizeFolder("/Attivita", "ManageLists");
     o.Conventions.AuthorizeFolder("/Report", "ManageLists");
+    o.Conventions.AuthorizeFolder("/Abbonamento", "ManageLists");
     o.Conventions.AuthorizeFolder("/Privacy", "ManageLists");
 }).AddMvcOptions(o =>
 {

@@ -1,0 +1,76 @@
+@page
+@model MvChat.Web.Pages.Abbonamento.IndexModel
+@using MvChat.Web.Pages.Abbonamento
+@{
+    ViewData["Title"] = "Abbonamento e costi";
+    var it = System.Globalization.CultureInfo.GetCultureInfo("it-IT");
+    string E(decimal v) => v.ToString("#,0.00", it) + " €";
+    var year = Model.Rows;
+    var cur = Model.Rows.Where(r => r.Month == Model.Month).ToList();
+    var feeNow = cur.Sum(r => r.Fee); var metaNow = cur.Sum(r => r.MetaEur);
+    var many = Model.Gyms.Count > 1;
+}
+@section Actions { <a class="btn primary" href="@Model.Url(handler: "Excel")">Scarica Excel</a> }
+<p class="muted" style="margin:0">Quanto costa mvchat, mese per mese: l'<b>abbonamento</b> mensile a MVitalia (l'assistente AI è compreso) e la <b>spesa Meta</b> per i messaggi WhatsApp, che Meta fattura direttamente all'attività. La spesa Meta è una stima: primi messaggi e promemoria × listino Meta (@E(Model.MarketingPrice) marketing, @E(Model.UtilityPrice) servizio); le risposte entro 24 ore sono gratuite. L'importo esatto è nella fattura di Meta.</p>
+
+<form method="get" class="form" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:12px 0">
+    <div class="field"><label for="anno">Anno</label><select id="anno" name="anno">@foreach (var y in Model.Years) {<option value="@y" selected="@(y == Model.Year)">@y</option>}</select></div>
+    @if (Model.Choices.Count > 0)
+    {
+        <div class="field" style="min-width:260px"><label for="vista">Cosa vedere</label>
+            <select id="vista" name="vista"><option value="">@(Model.Me.IsSuperAdmin ? "Tutte le attività" : Model.Me.IsOrgAdmin ? "Tutto il gruppo" : "Tutte le mie attività")</option>
+                @foreach (var c in Model.Choices) {<option value="@c.Value" selected="@(c.Value == Model.Filter)">@c.Label</option>}</select></div>
+    }
+    <input type="hidden" name="mese" value="@Model.Month">
+    <button class="btn" type="submit">Mostra</button>
+</form>
+
+<div class="stats">
+    <div class="stat"><b>@E(feeNow)</b><span>abbonamento mvchat · @IndexModel.MonthName(Model.Month) @Model.Year@(many ? $" · {cur.Count(r => r.Fee > 0)} attività" : "")</span></div>
+    <div class="stat"><b>@E(metaNow)</b><span>spesa Meta stimata · @cur.Sum(r => r.Marketing + r.Utility) messaggi</span></div>
+    <div class="stat"><b>@E(feeNow + metaNow)</b><span>totale del mese</span></div>
+    <div class="stat"><b>@E(year.Sum(r => r.Total))</b><span>totale @Model.Year · @Model.Title</span></div>
+</div>
+
+<section class="panel">
+    <div class="panel-h"><h2>Mese per mese · @Model.Year</h2><span class="muted">@Model.Title@(many ? " · clicca un mese per il dettaglio per attività" : "")</span></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Mese</th><th class="num">Abbonamento mvchat</th><th class="num">Messaggi Meta</th><th class="num">Spesa Meta stimata</th><th class="num">Totale</th></tr></thead>
+        <tbody>
+        @foreach (var m in Model.Months)
+        {
+            var r = Model.Rows.Where(x => x.Month == m).ToList();
+            <tr style="@(m == Model.Month ? "background:var(--soft, rgba(0,0,0,.04))" : "")"><td><a href="@Model.Url(mese: m)">@IndexModel.MonthName(m)</a></td><td class="num">@E(r.Sum(x => x.Fee))</td><td class="num">@r.Sum(x => x.Marketing + x.Utility)</td><td class="num">@E(r.Sum(x => x.MetaEur))</td><td class="num"><b>@E(r.Sum(x => x.Total))</b></td></tr>
+        }
+        <tr><td><b>Totale</b></td><td class="num"><b>@E(year.Sum(x => x.Fee))</b></td><td class="num"><b>@year.Sum(x => x.Marketing + x.Utility)</b></td><td class="num"><b>@E(year.Sum(x => x.MetaEur))</b></td><td class="num"><b>@E(year.Sum(x => x.Total))</b></td></tr>
+        </tbody>
+    </table></div>
+</section>
+
+@if (many)
+{
+<section class="panel">
+    <div class="panel-h"><h2>@IndexModel.MonthName(Model.Month) @Model.Year per attività</h2></div>
+    <div class="tbl"><table>
+        <thead><tr><th>Attività</th><th class="num">Abbonamento mvchat</th><th class="num">Messaggi Meta</th><th class="num">Spesa Meta stimata</th><th class="num">Totale</th></tr></thead>
+        <tbody>
+        @foreach (var grp in cur.GroupBy(r => Model.Gyms.First(g => g.Id == r.GymId)).GroupBy(x => (x.Key.OrgId, x.Key.OrgName, x.Key.InGroup)).OrderBy(o => o.Key.OrgName))
+        {
+            if (Model.Me.IsSuperAdmin && grp.Key.InGroup)
+            {
+                var all = grp.SelectMany(x => x).ToList();
+                <tr><td><b>@grp.Key.OrgName</b> <span class="muted">· gruppo</span></td><td class="num"><b>@E(all.Sum(x => x.Fee))</b></td><td class="num"><b>@all.Sum(x => x.Marketing + x.Utility)</b></td><td class="num"><b>@E(all.Sum(x => x.MetaEur))</b></td><td class="num"><b>@E(all.Sum(x => x.Total))</b></td></tr>
+            }
+            foreach (var g in grp.OrderBy(x => x.Key.Name))
+            {
+                var r = g.First();
+                <tr><td style="@(Model.Me.IsSuperAdmin && grp.Key.InGroup ? "padding-left:28px" : "")">@g.Key.Name@if (!g.Key.Active) {<span class="chip" style="margin-left:6px">disattivata</span>} else if (r.Fee == 0) {<span class="chip" style="margin-left:6px">abbonamento non attivo</span>}</td>
+                    <td class="num">@E(r.Fee)</td><td class="num">@(r.Marketing + r.Utility)</td><td class="num">@E(r.MetaEur)</td><td class="num"><b>@E(r.Total)</b></td></tr>
+            }
+        }
+        </tbody>
+        <tfoot><tr><td><b>Totale</b></td><td class="num"><b>@E(feeNow)</b></td><td class="num"><b>@cur.Sum(r => r.Marketing + r.Utility)</b></td><td class="num"><b>@E(metaNow)</b></td><td class="num"><b>@E(feeNow + metaNow)</b></td></tr></tfoot>
+    </table></div>
+</section>
+}
+<p class="muted" style="font-size:12.5px">L'abbonamento lo fattura MVitalia (vedi @(Model.Me.IsSuperAdmin ? "Fatturazione" : "Rendiconti")); comprende l'assistente AI e la trascrizione dei vocali. I messaggi WhatsApp li paga l'attività direttamente a Meta con il proprio metodo di pagamento.</p>

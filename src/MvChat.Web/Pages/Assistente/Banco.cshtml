@@ -40,7 +40,7 @@
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
             .then(function (x) {
                 if (!x.ok) { res.innerHTML = '<span class="chip bad">' + esc(x.j.error || 'errore') + '</span>'; return false; }
-                var j = x.j, h = '<span class="chip ' + (j.passed ? 'good' : 'bad') + '">' + (j.passed ? 'Superato' : 'Da rivedere') + '</span> <span class="muted">' + esc(j.outcome) + ' · $' + j.cost + '</span><ul style="margin:6px 0 0;padding-left:18px">';
+                var j = x.j, h = '<span class="chip ' + (j.passed ? 'good' : 'bad') + '">' + (j.passed ? 'Superato' : 'Da rivedere') + '</span> <span class="muted">' + esc(j.outcome) + (j.cost != null ? ' · $' + j.cost : '') + '</span><ul style="margin:6px 0 0;padding-left:18px">';
                 j.checks.forEach(function (c) { h += '<li class="' + (c.level === 'ko' ? 'msg-e' : c.level === 'warn' ? 'muted' : '') + '">' + esc(c.text) + '</li>'; });
                 h += '</ul><details><summary class="muted">Dialogo</summary><div class="transcript">';
                 j.transcript.forEach(function (t) { h += '<div class="msg ' + (t.role === 'user' ? 'in' : 'ai') + '"><div class="msg-b">' + esc(t.text) + '</div></div>'; });

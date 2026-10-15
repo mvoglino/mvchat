@@ -57,7 +57,7 @@ public class BancoModel : PageModel
         var r = await Bench.RunAsync(s, system, offer, profile, _ai, (res, cost) => _convs.LogUsageAsync(g.OrganizationId, g.Id, null, "banco", res, cost));
         return new JsonResult(new
         {
-            key = r.Key, passed = r.Passed, outcome = Outcomes.Label(r.Outcome), cost = Math.Round(r.CostUsd, 5),
+            key = r.Key, passed = r.Passed, outcome = Outcomes.Label(r.Outcome), cost = User.Scope().IsSuperAdmin ? Math.Round(r.CostUsd, 5) : (decimal?)null, // il costo AI lo vede solo MVitalia
             transcript = r.Transcript.Select(t => new { role = t.Role, text = t.Text }),
             checks = r.Checks.Select(c => new { level = c.Level, text = c.Text })
         });

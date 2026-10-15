@@ -665,13 +665,13 @@ s,html,_ = d.post(f"/Gyms/Edit/{gym['FitActive Alba']}", {"Input.Id":gym["FitAct
 _,html,_ = sa.req(f"/Gyms/Edit/{gym['FitActive Alba']}"); check("l'amministratore di gruppo non cambia l'abbonamento", 'name="FeeFrom" type="date" value="2026-01-01"' in html)
 _,html,_ = sa.req(f"/Fatturazione?mese={prev_m}")
 row = re.search(r"<b>FitActive</b>.*?</tr>", html, re.S); cells = re.findall(r'<td class="num">(.*?)</td>', row.group(0), re.S) if row else []
-check("rendiconto del mese scorso intestato al gruppo: canoni delle sue attività", row is not None and cells[:2] == ["2", "88,90 €"] and "108,46 €" in cells[4] and "Centro Benessere Aurora" not in html, str(cells))
+check("rendiconto del mese scorso intestato al gruppo: canoni delle sue attività", row is not None and cells[:2] == ["2", "88,90 €"] and "108,46 €" in cells[3] and "Centro Benessere Aurora" not in html, str(cells))
 _,html,_ = sa.req(f"/Fatturazione?mese={cur_m}")
 row = re.search(r"<b>FitActive</b>.*?</tr>", html, re.S); cells = re.findall(r'<td class="num">(.*?)</td>', row.group(0), re.S) if row else []
-check("mese in corso: canone e consumo AI con ricarico", row is not None and cells[1] == "49,90 €" and cells[2] != "0,00 €" and "Mese in corso" in html, str(cells))
+check("mese in corso: solo il canone, l'assistente AI è compreso (nessuna riga AI)", row is not None and cells[1] == "49,90 €" and "49,90 €" in cells[2] and "Mese in corso" in html and "Assistente AI</th>" not in html, str(cells))
 check("attività singola: rendiconto intestato all'attività", re.search(r"<b>Centro Benessere Aurora</b><div class=\"muted\">attività singola", html) is not None and "29,00 €" in html and "mancano ragione sociale o P.IVA" in html)
 _,html,_ = sa.req(f"/Fatturazione/Dettaglio?mese={cur_m}&org={org['FitActive']}")
-check("dettaglio stampabile con calcolo del consumo AI", "Intestato a" in html and "FitActive S.r.l." in html and "P.IVA 01234567890" in html and "ricarico 20%" in html and "× cambio 0,9" in html and "Stampa o salva PDF" in html)
+check("dettaglio stampabile: abbonamento, niente consumo AI", "Intestato a" in html and "FitActive S.r.l." in html and "P.IVA 01234567890" in html and "Abbonamento mvchat" in html and "Assistente AI ·" not in html and "Stampa o salva PDF" in html)
 s,_,_ = sa.post(f"/Fatturazione?mese={cur_m}&handler=Close", {}, form_path=f"/Fatturazione?mese={cur_m}")
 _,html,_ = sa.req(f"/Fatturazione?mese={cur_m}"); check("il mese in corso non si chiude", "Chiuso" not in html)
 sa.post(f"/Fatturazione?mese={prev_m}&handler=Close", {}, form_path=f"/Fatturazione?mese={prev_m}")
@@ -691,7 +691,25 @@ check("l'attività singola vede il suo rendiconto", "Centro Benessere Aurora" in
 _,html,_ = m.req(f"/Fatturazione?mese={cur_m}"); _,menu,_ = m.req("/")
 check("le attività di un gruppo intestate al gruppo non hanno rendiconti propri", "Niente da fatturare" in html)
 s,csv,_ = sa.req(f"/Fatturazione?mese={cur_m}&handler=Csv")
-check("rendiconti scaricabili per la contabilità", s == 200 and "Intestatario;Ragione sociale;Partita IVA" in csv and "Consumo AI" in csv and "Abbonamento" in csv, csv[:150])
+check("rendiconti scaricabili per la contabilità", s == 200 and "Intestatario;Ragione sociale;Partita IVA" in csv and "Consumo AI" not in csv and "Abbonamento" in csv, csv[:150])
+
+# Abbonamento e costi: canone + spesa Meta stimata, mai il costo AI (compreso nell'abbonamento)
+_,html,_ = d.req("/Abbonamento")
+check("abbonamento e costi del gruppo: canone e spesa Meta per attività", "Abbonamento e costi" in html and "Mese per mese" in html and "per attività" in html
+      and "FitActive Alba" in html and "FitActive Bra" in html and "Centro Benessere Aurora" not in html and "Spesa Meta stimata" in html, html[html.find('class="stats"'):][:300])
+check("abbonamento e costi: niente costo AI per i clienti", "Anthropic" not in html and "OpenAI" not in html and "Consumo AI" not in html and "$ " not in html)
+_,html,_ = m.req("/Abbonamento")
+check("abbonamento e costi dell'attività: solo la sua", "FitActive Alba" in html and "FitActive Bra" not in html and "per attività" not in html)
+_,html,_ = aurc.req("/Abbonamento")
+check("attività singola: il suo abbonamento (29 €)", "29,00 €" in html and "FitActive" not in html)
+s,_,_ = o.req("/Abbonamento"); check("l'operatore non vede abbonamento e costi", s in (302, 403), str(s))
+_,html,_ = d.req("/")
+check("panoramica del gruppo: abbonamento e spesa Meta del mese, niente AI", "Abbonamento mvchat del mese" in html and "Spesa Meta del mese" in html and "Costo AI" not in html and "Consumo AI" not in html)
+_,html,_ = d.req("/Report")
+check("report del gruppo: costo Meta senza AI", "costo Meta stimato" in html and "costo Meta + AI" not in html and "<th class=\"num\">AI</th>" not in html)
+_,html,_ = sa.req("/Report"); check("report di MVitalia: anche il costo AI", "costo Meta + AI" in html)
+xa = xlsx(d, "/Abbonamento?handler=Excel")
+check("abbonamento e costi in Excel", xa is not None and xa[0] == ["Mese per mese", "Per attività"] and "FitActive Alba" in xa[1]["Per attività"], str(xa[0] if xa else None))
 
 # 5j. Passo 10: privacy e sicurezza
 import urllib.request as _ur

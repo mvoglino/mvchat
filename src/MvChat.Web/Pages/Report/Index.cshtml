@@ -55,10 +55,10 @@
     <div class="stat"><b>@ReportRow.Pct(t.Replied, t.Conversations)%</b><span>hanno risposto · @t.Replied.ToString("N0", it) clienti</span>@Html.Raw(D(ReportRow.Pct(t.Replied, t.Conversations), ReportRow.Pct(tp.Replied, tp.Conversations)))</div>
     <div class="stat ok"><b>@t.Reached.ToString("N0", it)</b><span>obiettivi raggiunti · @ReportRow.Pct(t.Reached, t.Conversations)% dei contattati</span>@Html.Raw(D(t.Reached, tp.Reached))</div>
     <div class="stat ok"><b>@Eur(Model.Value)</b><span>valore stimato generato · adesioni × prezzo dell'offerta</span>@Html.Raw(D(Model.Value, Model.PrevValue))</div>
-    <div class="stat"><b>@Eur(costNow)</b><span>costo Meta + AI · @(t.Reached > 0 ? Eur(Math.Round(costNow / t.Reached, 2)) + " per obiettivo" : "nessun obiettivo")@(costNow > 0 && Model.Value > 0 ? $" · ogni € ne ha generati {(Model.Value / costNow).ToString("0.#", it)}" : "")</span>@Html.Raw(D(costNow, costPrev, true))</div>
+    <div class="stat"><b>@Eur(costNow)</b><span>@(Model.ShowAi ? "costo Meta + AI" : "costo Meta stimato") · @(t.Reached > 0 ? Eur(Math.Round(costNow / t.Reached, 2)) + " per obiettivo" : "nessun obiettivo")@(costNow > 0 && Model.Value > 0 ? $" · ogni € ne ha generati {(Model.Value / costNow).ToString("0.#", it)}" : "")</span>@Html.Raw(D(costNow, costPrev, true))</div>
     <div class="stat"><b>@ReportRow.Pct(t.AiOnly, t.Replied)%</b><span>dialoghi gestiti solo dall'assistente · @t.WithOperator con operatore</span>@Html.Raw(D(ReportRow.Pct(t.AiOnly, t.Replied), ReportRow.Pct(tp.AiOnly, tp.Replied)))</div>
 </div>
-<p class="muted" style="margin:0;font-size:12.5px">Le frecce confrontano con lo stesso numero di giorni subito prima (@prevLabel). Costo Meta stimato dal listino (lo paga ogni attività a Meta); consumo AI convertito in euro con il cambio dei rendiconti.</p>
+<p class="muted" style="margin:0;font-size:12.5px">Le frecce confrontano con lo stesso numero di giorni subito prima (@prevLabel). Costo Meta stimato dal listino (lo paga ogni attività a Meta)@(Model.ShowAi ? "; consumo AI convertito in euro con il cambio dei rendiconti" : "; l'assistente AI è compreso nell'abbonamento").</p>
 
 <section class="panel">
     <div class="panel-h"><h2>Andamento giorno per giorno</h2><span class="muted">passa sopra le barre per i numeri · <a href="@Model.ExcelUrl("giorni")">scarica Excel</a></span></div>
@@ -192,7 +192,7 @@
 <section class="panel">
     <div class="panel-h"><h2>@(Model.Level switch { "clienti" => "Gruppi e attività singole", "attivita" => "Confronto tra le attività", _ => "Campagne nel periodo" })</h2><span class="muted"><a href="@Model.ExcelUrl("dettaglio")">scarica Excel</a></span></div>
     <div class="tbl"><table class="report-table">
-        <thead><tr><th>@levelName</th><th class="num">Inviati</th><th class="num">Risposte</th><th class="num">Obiettivi</th><th class="num">Rifiuti / stop</th><th class="num">Solo AI / operatore</th><th class="num">Meta</th><th class="num">AI</th></tr></thead>
+        <thead><tr><th>@levelName</th><th class="num">Inviati</th><th class="num">Risposte</th><th class="num">Obiettivi</th><th class="num">Rifiuti / stop</th><th class="num">Solo AI / operatore</th><th class="num">Meta</th>@if (Model.ShowAi) {<th class="num">AI</th>}</tr></thead>
         <tbody>
         @foreach (var r in Model.Rows)
         {
@@ -204,15 +204,15 @@
                 <td class="num">@r.Refused / @r.OptOut</td>
                 <td class="num">@r.AiOnly / @r.WithOperator</td>
                 <td class="num">@Eur(r.MetaCostEur(meta))</td>
-                <td class="num">@Usd(r.AiCostUsd)</td>
+                @if (Model.ShowAi) {<td class="num">@Usd(r.AiCostUsd)</td>}
             </tr>
         }
         @if (Model.Rows.Count == 0) { <tr><td colspan="8" class="muted">Nessun dato nel periodo scelto.</td></tr> }
         </tbody>
         @if (Model.Rows.Count > 1 || Model.Level == "campagne")
         {
-            <tfoot><tr><td><b>@(Model.Level == "campagne" ? "Totale attività (anche fuori campagna)" : "Totale")</b></td><td class="num">@t.Sent <span class="muted">· @ReportRow.Pct(t.Read, t.Sent)% letti</span></td><td class="num">@t.Replied</td><td class="num"><b>@t.Reached</b></td><td class="num">@t.Refused / @t.OptOut</td><td class="num">@t.AiOnly / @t.WithOperator</td><td class="num">@Eur(t.MetaCostEur(meta))</td><td class="num">@Usd(t.AiCostUsd)</td></tr></tfoot>
+            <tfoot><tr><td><b>@(Model.Level == "campagne" ? "Totale attività (anche fuori campagna)" : "Totale")</b></td><td class="num">@t.Sent <span class="muted">· @ReportRow.Pct(t.Read, t.Sent)% letti</span></td><td class="num">@t.Replied</td><td class="num"><b>@t.Reached</b></td><td class="num">@t.Refused / @t.OptOut</td><td class="num">@t.AiOnly / @t.WithOperator</td><td class="num">@Eur(t.MetaCostEur(meta))</td>@if (Model.ShowAi) {<td class="num">@Usd(t.AiCostUsd)</td>}</tr></tfoot>
         }
     </table></div>
-    <div class="panel-b muted" style="font-size:12.5px">Costo Meta: stima con il listino in Impostazioni Meta (@Eur(meta.MarketingPriceEur) marketing, @Eur(meta.UtilityPriceEur) servizio); lo paga ogni attività direttamente a Meta. Consumo AI: costo del fornitore AI in dollari, comprese prove e banco di prova; l'importo rifatturato (con cambio e ricarico) è nei Rendiconti.</div>
+    <div class="panel-b muted" style="font-size:12.5px">Costo Meta: stima con il listino in Impostazioni Meta (@Eur(meta.MarketingPriceEur) marketing, @Eur(meta.UtilityPriceEur) servizio); lo paga ogni attività direttamente a Meta.@if (Model.ShowAi) {<text> Consumo AI: costo del fornitore AI in dollari, comprese prove e banco di prova; è compreso nell'abbonamento delle attività (non si rifattura).</text>} else {<text> L'assistente AI è compreso nell'abbonamento mvchat.</text>}</div>
 </section>
